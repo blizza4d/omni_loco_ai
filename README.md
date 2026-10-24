@@ -141,3 +141,6 @@ npm run start
 ## 7. License
 
 MIT License. Designed and engineered for 100% on-device private multimodal intelligence.
+# omni_loco_ai
+# omni_loco_ai
+# omni_loco_ai
