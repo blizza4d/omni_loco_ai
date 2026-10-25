@@ -5,6 +5,7 @@ export interface RoadSceneController {
   resize: (width: number, height: number) => void;
   dispose: () => void;
   setLighting: (mode: 'day' | 'night') => void;
+  setAfterburner: (enabled: boolean) => void;
 }
 
 export function initRoadScene(canvas: HTMLCanvasElement): RoadSceneController {
@@ -234,7 +235,33 @@ export function initRoadScene(canvas: HTMLCanvasElement): RoadSceneController {
     renderer.setSize(newWidth, newHeight);
   };
 
+  let isAfterburnerActive = false;
+
+  const setAfterburner = (enabled: boolean) => {
+    isAfterburnerActive = enabled;
+    if (enabled) {
+      scene.background = new THREE.Color(0x0b0014);
+      scene.fog = new THREE.FogExp2(0x19002e, 0.015);
+      lineMat.color.set(0xff007f);
+      curbMatGreen.color.set(0x00f5d4);
+      curbMatRed.color.set(0xf72585);
+      dirLight.color.set(0x9d4edd);
+      headlight.color.set(0x00f5d4);
+      camera.fov = 68;
+      camera.updateProjectionMatrix();
+    } else {
+      lineMat.color.set(0x06b6d4);
+      curbMatGreen.color.set(0x00e599);
+      curbMatRed.color.set(0xff3b30);
+      headlight.color.set(0xffffff);
+      camera.fov = 55;
+      camera.updateProjectionMatrix();
+      setLighting('night');
+    }
+  };
+
   const setLighting = (mode: 'day' | 'night') => {
+    if (isAfterburnerActive) return;
     if (mode === 'day') {
       scene.background = new THREE.Color(0xf4eedc);
       scene.fog = new THREE.FogExp2(0xf4eedc, 0.012);
@@ -277,5 +304,5 @@ export function initRoadScene(canvas: HTMLCanvasElement): RoadSceneController {
     renderer.dispose();
   };
 
-  return { update, resize, dispose, setLighting };
+  return { update, resize, dispose, setLighting, setAfterburner };
 }

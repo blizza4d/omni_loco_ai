@@ -13,7 +13,8 @@ import { renderVUMeter, renderOscilloscope, renderSpectrogram } from '@/modules/
 import { SpeechScorecard } from '@/modules/speech/components/SpeechScorecard';
 import { AcousticFeatures, SpeechSessionReport } from '@/modules/speech/types';
 import { useSystemStore } from '@/core/store';
-import { Mic, MicOff, Circle, AlertTriangle } from 'lucide-react';
+import { Mic, MicOff, Circle, AlertTriangle, Radio, Sparkles } from 'lucide-react';
+import { unlockAchievement } from '@/modules/easter-eggs/achievements';
 
 export default function SpeechPage() {
   const [isCapturing, setIsCapturing] = useState(false);
@@ -21,6 +22,11 @@ export default function SpeechPage() {
   const [noiseSuppression] = useState(true);
   const [isRecording, setIsRecording] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [alienMode, setAlienMode] = useState(false);
+  const alienModeRef = useRef(false);
+  useEffect(() => {
+    alienModeRef.current = alienMode;
+  }, [alienMode]);
 
   // Canvas visualizer refs
   const vuCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -214,6 +220,22 @@ export default function SpeechPage() {
           if (ctx) renderSpectrogram(ctx, freqData, specCanvasRef.current.width, specCanvasRef.current.height);
         }
 
+        // Alien Transmission CRT Phosphor Mode Overlay
+        if (alienModeRef.current && specCanvasRef.current) {
+          const ctx = specCanvasRef.current.getContext('2d');
+          if (ctx) {
+            ctx.save();
+            ctx.font = '9px monospace';
+            ctx.fillStyle = '#22c55e';
+            ctx.fillText('📡 SETI // CARRIER: 1420.405 MHz', 8, 16);
+            ctx.fillText(`SIG: ${Math.round(feat.rms * 1000)} µV [CARRIER LOCKED]`, 8, 28);
+            ctx.strokeStyle = 'rgba(34, 197, 94, 0.4)';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(4, 4, specCanvasRef.current.width - 8, specCanvasRef.current.height - 8);
+            ctx.restore();
+          }
+        }
+
         // Throttle UI text updates to 4 Hz (every 250ms) to preserve 60fps main thread
         if (now - lastUiUpdateRef.current >= 250) {
           lastUiUpdateRef.current = now;
@@ -303,6 +325,22 @@ export default function SpeechPage() {
           </div>
 
           <div className="flex items-center gap-2 shrink-0">
+            <Button
+              variant={alienMode ? 'brick' : 'outline'}
+              size="sm"
+              onClick={() => {
+                setAlienMode((prev) => {
+                  const next = !prev;
+                  if (next) unlockAchievement('ALIEN_SIGNALS');
+                  return next;
+                });
+              }}
+              className="gap-1.5"
+            >
+              <Radio className="w-3.5 h-3.5 text-sage-green" />
+              <span>{alienMode ? 'ALIEN DSP: ACTIVE' : 'ALIEN DSP'}</span>
+            </Button>
+
             {isCapturing && (
               <Button
                 variant={isRecording ? 'brick' : 'outline'}

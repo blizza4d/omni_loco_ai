@@ -18,7 +18,15 @@ import { MediaPipeTaskRunner } from '@/core/mediapipe/task-runner';
 import { FaceMetricsAnalyzer } from '@/modules/face/blendshapes';
 import { OneEuroFilter } from '@/core/filters';
 import { useSystemStore } from '@/core/store';
-import { Download, Target } from 'lucide-react';
+import { Download, Target, Flame } from 'lucide-react';
+import {
+  HeatVisionRenderer,
+  HeatVisionConfig,
+  DEFAULT_HEAT_VISION_CONFIG,
+} from '@/modules/easter-eggs/heat-vision-renderer';
+import { HeatVisionAudioSynthesizer } from '@/modules/easter-eggs/heat-vision-audio';
+import { HeatVisionControls } from '@/components/easter-eggs/HeatVisionControls';
+import { unlockAchievement } from '@/modules/easter-eggs/achievements';
 
 const INITIAL_AOIS: AreaOfInterest[] = [
   {
@@ -63,6 +71,60 @@ export default function GazePage() {
   const aoisRef = useRef<AreaOfInterest[]>(INITIAL_AOIS.map((a) => ({ ...a })));
   const currentGazeRef = useRef<{ x: number; y: number }>({ x: 320, y: 240 });
   const lastUiUpdateRef = useRef<number>(0);
+
+  // Heat Vision Apex Override State & Audio Synthesizer
+  const [heatVisionConfig, setHeatVisionConfig] = useState<HeatVisionConfig>(DEFAULT_HEAT_VISION_CONFIG);
+  const heatVisionConfigRef = useRef<HeatVisionConfig>(DEFAULT_HEAT_VISION_CONFIG);
+  useEffect(() => {
+    heatVisionConfigRef.current = heatVisionConfig;
+  }, [heatVisionConfig]);
+
+  const heatVisionRendererRef = useRef<HeatVisionRenderer>(new HeatVisionRenderer());
+  const heatVisionAudioRef = useRef<HeatVisionAudioSynthesizer>(new HeatVisionAudioSynthesizer());
+  const blinkHistoryRef = useRef<number[]>([]);
+  const lastFaceLandmarksRef = useRef<any>(null);
+
+  // Synchronize procedural laser sound
+  useEffect(() => {
+    if (heatVisionConfig.enabled && heatVisionConfig.soundEnabled) {
+      heatVisionAudioRef.current.setMuted(false);
+      heatVisionAudioRef.current.start();
+      heatVisionAudioRef.current.updateIntensity(heatVisionConfig.intensity);
+    } else {
+      heatVisionAudioRef.current.stop();
+    }
+  }, [heatVisionConfig.enabled, heatVisionConfig.soundEnabled, heatVisionConfig.intensity]);
+
+  useEffect(() => {
+    return () => {
+      heatVisionAudioRef.current.dispose();
+    };
+  }, []);
+
+  // 'V' key shortcut listener for Heat Vision
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (e.key === 'v' || e.key === 'V') {
+        e.preventDefault();
+        setHeatVisionConfig((prev) => {
+          const next = !prev.enabled;
+          if (next) unlockAchievement('HEAT_SIGNATURE');
+          return { ...prev, enabled: next };
+        });
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // Throttled UI state (4 Hz) for the AOI table
   const [aois, setAois] = useState<AreaOfInterest[]>(INITIAL_AOIS);
@@ -137,6 +199,32 @@ export default function GazePage() {
         const faceResult = taskRunnerRef.current.detectFace(videoRef.current, now);
         if (faceResult && faceResult.faceLandmarks && faceResult.faceLandmarks[0]) {
           const lms = faceResult.faceLandmarks[0];
+          lastFaceLandmarksRef.current = lms;
+
+          // Double blink detection for secret ocular gesture
+          if (lms[159] && lms[145] && lms[386] && lms[374]) {
+            const leftGap = Math.abs(lms[159].y - lms[145].y);
+            const rightGap = Math.abs(lms[386].y - lms[374].y);
+            if (leftGap < 0.016 && rightGap < 0.016) {
+              const hist = blinkHistoryRef.current;
+              const lastBlink = hist[hist.length - 1] || 0;
+              if (now - lastBlink > 220) {
+                hist.push(now);
+                if (hist.length >= 2) {
+                  if (now - hist[hist.length - 2] < 650) {
+                    unlockAchievement('DOUBLE_TAKE');
+                    setHeatVisionConfig((prev) => {
+                      const next = !prev.enabled;
+                      if (next) unlockAchievement('HEAT_SIGNATURE');
+                      return { ...prev, enabled: next };
+                    });
+                    blinkHistoryRef.current = [];
+                  }
+                }
+              }
+            }
+          }
+
           const leftIris = lms[468];
           const leftInner = lms[133];
           const leftOuter = lms[33];
@@ -174,6 +262,7 @@ export default function GazePage() {
         }
       } else {
         const syn = generateSyntheticFace(now);
+        lastFaceLandmarksRef.current = syn.landmarks;
         const leftIris = syn.landmarks[468];
         const rightIris = syn.landmarks[473];
         if (leftIris && rightIris) {
@@ -248,6 +337,27 @@ export default function GazePage() {
           ctx.fillStyle = '#B5443A';
           ctx.fill();
           ctx.restore();
+
+          // Render Homelander-inspired Heat Vision dual lasers
+          if (heatVisionConfigRef.current.enabled && lastFaceLandmarksRef.current) {
+            const lms = lastFaceLandmarksRef.current;
+            const leftIris = lms[468];
+            const rightIris = lms[473];
+            if (leftIris && rightIris) {
+              const leftPos = { x: (1 - leftIris.x) * width, y: leftIris.y * height };
+              const rightPos = { x: (1 - rightIris.x) * width, y: rightIris.y * height };
+              heatVisionRendererRef.current.render(
+                ctx,
+                width,
+                height,
+                leftPos,
+                rightPos,
+                gaze,
+                heatVisionConfigRef.current,
+                now
+              );
+            }
+          }
         }
       }
 
@@ -429,6 +539,25 @@ export default function GazePage() {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setHeatVisionConfig((prev) => {
+                  const next = !prev.enabled;
+                  if (next) unlockAchievement('HEAT_SIGNATURE');
+                  return { ...prev, enabled: next };
+                });
+              }}
+              className={`px-3 py-1 font-bold uppercase border rounded-tactile flex items-center gap-1.5 transition-all ${
+                heatVisionConfig.enabled
+                  ? 'border-brick-red bg-brick-red text-white shadow-[0_0_15px_rgba(255,42,16,0.4)]'
+                  : 'border-brick-red text-brick-red hover:bg-brick-red/10'
+              }`}
+              title="Toggle Homelander Heat Vision [V]"
+            >
+              <Flame className="w-3.5 h-3.5" />
+              <span>HEAT VISION [V]</span>
+            </button>
+
             <Button
               variant="outline"
               size="sm"
@@ -525,6 +654,15 @@ export default function GazePage() {
                   <div className="w-2 h-2 bg-brick-red rounded-full" />
                 </div>
               )}
+
+              {/* Heat Vision Apex Controls Drawer */}
+              <HeatVisionControls
+                config={heatVisionConfig}
+                onChange={setHeatVisionConfig}
+                onDisengage={() =>
+                  setHeatVisionConfig((prev) => ({ ...prev, enabled: false }))
+                }
+              />
             </div>
 
             {/* Calibration Status Banner */}

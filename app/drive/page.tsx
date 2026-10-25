@@ -14,8 +14,9 @@ import { DrivingHUD } from '@/modules/drive/components/DrivingHUD';
 import { SimulatorDiagnostics } from '@/modules/drive/components/SimulatorDiagnostics';
 import { VehicleState } from '@/modules/drive/types';
 import { Landmark3D } from '@/modules/hand/types';
-import { RefreshCw, Sun, Moon, Radio } from 'lucide-react';
+import { RefreshCw, Sun, Moon, Radio, Flame } from 'lucide-react';
 import { useSettingsStore, useSystemStore } from '@/core/store';
+import { unlockAchievement } from '@/modules/easter-eggs/achievements';
 
 export default function DrivePage() {
   const { theme } = useSettingsStore();
@@ -26,6 +27,14 @@ export default function DrivePage() {
   );
   const [isCalibrating, setIsCalibrating] = useState(false);
   const [calibrationProgress, setCalibrationProgress] = useState(0);
+  const [afterburner, setAfterburner] = useState(false);
+  const afterburnerRef = useRef(false);
+  useEffect(() => {
+    afterburnerRef.current = afterburner;
+    if (roadControllerRef.current) {
+      roadControllerRef.current.setAfterburner(afterburner);
+    }
+  }, [afterburner]);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const roadControllerRef = useRef<RoadSceneController | null>(null);
@@ -91,6 +100,14 @@ export default function DrivePage() {
       if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keysPressedRef.current.right = true;
       if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') keysPressedRef.current.up = true;
       if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') keysPressedRef.current.down = true;
+      if (e.key === 'n' || e.key === 'N') {
+        e.preventDefault();
+        setAfterburner((prev) => {
+          const next = !prev;
+          if (next) unlockAchievement('NEON_PILOT');
+          return next;
+        });
+      }
     }
     function handleKeyUp(e: KeyboardEvent) {
       if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keysPressedRef.current.left = false;
@@ -303,6 +320,21 @@ export default function DrivePage() {
 
           <div className="flex flex-wrap items-center gap-2">
             <Button
+              variant={afterburner ? 'brick' : 'outline'}
+              size="sm"
+              onClick={() => {
+                setAfterburner((prev) => {
+                  const next = !prev;
+                  if (next) unlockAchievement('NEON_PILOT');
+                  return next;
+                });
+              }}
+              className="gap-1.5"
+            >
+              <Flame className="w-3.5 h-3.5 text-amber-500" />
+              <span>{afterburner ? 'AFTERBURNER ON [N]' : 'AFTERBURNER [N]'}</span>
+            </Button>
+            <Button
               variant="outline"
               size="sm"
               onClick={() => setDiagnosticsOpen(true)}
@@ -340,6 +372,16 @@ export default function DrivePage() {
             isCalibrating={isCalibrating}
             calibrationProgress={calibrationProgress}
           />
+
+          {/* Neon Afterburner Active Badge */}
+          {afterburner && (
+            <div className="absolute top-4 right-4 z-20 flex items-center gap-2 px-3 py-1.5 border-2 border-magenta-500 bg-black/85 text-pink-500 rounded-tactile shadow-[0_0_20px_rgba(247,37,133,0.5)] font-mono animate-pulse">
+              <Flame className="w-4 h-4 text-pink-500" />
+              <span className="text-xs font-bold tracking-widest uppercase">
+                NEON AFTERBURNER // 180 KM/H LIMIT [N]
+              </span>
+            </div>
+          )}
 
           {/* Hidden camera preview for hand tracking */}
           <video ref={videoRef} autoPlay playsInline muted className="hidden" />

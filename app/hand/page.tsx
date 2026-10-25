@@ -15,7 +15,21 @@ import { MouseFreeDemoBoard } from '@/modules/hand/components/MouseFreeDemoBoard
 import { JOINT_NAMES, Landmark3D } from '@/modules/hand/types';
 import { syncCanvasToVideo } from '@/core/camera/coordinates';
 import { useSystemStore } from '@/core/store';
-import { Video, VideoOff, RefreshCw, Sparkles, Cpu } from 'lucide-react';
+import { Video, VideoOff, RefreshCw, Sparkles, Cpu, Wand2 } from 'lucide-react';
+import { unlockAchievement } from '@/modules/easter-eggs/achievements';
+
+interface GeoParticle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  size: number;
+  angle: number;
+  vRot: number;
+  life: number;
+  maxLife: number;
+  color: string;
+}
 
 export default function HandModulePage() {
   const [showJointLabels, setShowJointLabels] = useState(false);
@@ -25,6 +39,37 @@ export default function HandModulePage() {
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const lastRawCoordsUpdateRef = useRef<number>(0);
+  const particlesRef = useRef<GeoParticle[]>([]);
+  const wasPinchingRef = useRef<boolean>(false);
+  const [burstsCount, setBurstsCount] = useState(0);
+
+  const spawnBurst = useCallback((cx: number, cy: number) => {
+    const colors = ['#22c55e', '#06b6d4', '#f59e0b', '#ec4899', '#ffffff'];
+    const count = 18;
+    const newParticles: GeoParticle[] = [];
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.4;
+      const speed = 2.5 + Math.random() * 4.5;
+      newParticles.push({
+        x: cx,
+        y: cy,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        size: 5 + Math.random() * 8,
+        angle: Math.random() * Math.PI,
+        vRot: (Math.random() - 0.5) * 0.18,
+        life: 0,
+        maxLife: 28 + Math.random() * 16,
+        color: colors[i % colors.length]!,
+      });
+    }
+    particlesRef.current.push(...newParticles);
+    if (particlesRef.current.length > 70) {
+      particlesRef.current = particlesRef.current.slice(-70);
+    }
+    unlockAchievement('FINGER_WIZARD');
+    setBurstsCount((prev) => prev + 1);
+  }, []);
 
   const {
     videoRef,
@@ -64,6 +109,40 @@ export default function HandModulePage() {
         isMirrored,
       });
 
+      // Detect trigger on pinch transition
+      if (cursor.isPinching && !wasPinchingRef.current) {
+        spawnBurst(cursor.x, cursor.y);
+      }
+      wasPinchingRef.current = cursor.isPinching;
+
+      // Render & update geometric particle burst
+      if (particlesRef.current.length > 0) {
+        ctx.save();
+        for (let i = particlesRef.current.length - 1; i >= 0; i--) {
+          const p = particlesRef.current[i]!;
+          p.x += p.vx;
+          p.y += p.vy;
+          p.angle += p.vRot;
+          p.life += 1;
+
+          if (p.life >= p.maxLife) {
+            particlesRef.current.splice(i, 1);
+            continue;
+          }
+
+          const alpha = 1 - p.life / p.maxLife;
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.angle);
+          ctx.globalAlpha = alpha;
+          ctx.strokeStyle = p.color;
+          ctx.lineWidth = 1.8;
+          ctx.strokeRect(-p.size / 2, -p.size / 2, p.size, p.size);
+          ctx.restore();
+        }
+        ctx.restore();
+      }
+
       // Throttle raw coordinates table to 4 Hz
       if (showRawCoords && landmarks) {
         const now = performance.now();
@@ -73,7 +152,7 @@ export default function HandModulePage() {
         }
       }
     },
-    [showJointLabels, isMirrored, showRawCoords, videoRef]
+    [showJointLabels, isMirrored, showRawCoords, videoRef, spawnBurst]
   );
 
   const {

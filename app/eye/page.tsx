@@ -24,7 +24,16 @@ import {
   Sparkles,
   Gauge,
   Sliders,
+  Flame,
 } from 'lucide-react';
+import {
+  HeatVisionRenderer,
+  HeatVisionConfig,
+  DEFAULT_HEAT_VISION_CONFIG,
+} from '@/modules/easter-eggs/heat-vision-renderer';
+import { HeatVisionAudioSynthesizer } from '@/modules/easter-eggs/heat-vision-audio';
+import { HeatVisionControls } from '@/components/easter-eggs/HeatVisionControls';
+import { unlockAchievement } from '@/modules/easter-eggs/achievements';
 
 export default function EyeTrackingPage() {
   const [syntheticMode, setSyntheticMode] = useState(false);
@@ -58,6 +67,59 @@ export default function EyeTrackingPage() {
   const rendererRef = useRef<EyeRenderer>(new EyeRenderer());
   const animFrameRef = useRef<number | null>(null);
   const lastUiUpdateRef = useRef<number>(0);
+
+  // Heat Vision Apex Override State & Audio Synthesizer
+  const [heatVisionConfig, setHeatVisionConfig] = useState<HeatVisionConfig>(DEFAULT_HEAT_VISION_CONFIG);
+  const heatVisionConfigRef = useRef<HeatVisionConfig>(DEFAULT_HEAT_VISION_CONFIG);
+  useEffect(() => {
+    heatVisionConfigRef.current = heatVisionConfig;
+  }, [heatVisionConfig]);
+
+  const heatVisionRendererRef = useRef<HeatVisionRenderer>(new HeatVisionRenderer());
+  const heatVisionAudioRef = useRef<HeatVisionAudioSynthesizer>(new HeatVisionAudioSynthesizer());
+  const blinkHistoryRef = useRef<number[]>([]);
+
+  // Synchronize procedural laser sound
+  useEffect(() => {
+    if (heatVisionConfig.enabled && heatVisionConfig.soundEnabled) {
+      heatVisionAudioRef.current.setMuted(false);
+      heatVisionAudioRef.current.start();
+      heatVisionAudioRef.current.updateIntensity(heatVisionConfig.intensity);
+    } else {
+      heatVisionAudioRef.current.stop();
+    }
+  }, [heatVisionConfig.enabled, heatVisionConfig.soundEnabled, heatVisionConfig.intensity]);
+
+  useEffect(() => {
+    return () => {
+      heatVisionAudioRef.current.dispose();
+    };
+  }, []);
+
+  // 'V' key shortcut listener for Heat Vision
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      if (e.key === 'v' || e.key === 'V') {
+        e.preventDefault();
+        setHeatVisionConfig((prev) => {
+          const next = !prev.enabled;
+          if (next) unlockAchievement('HEAT_SIGNATURE');
+          return { ...prev, enabled: next };
+        });
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   const { videoRef, isStreaming, startCamera, stopCamera, errorMessage } = useCamera({ autoStart: true });
 
@@ -121,9 +183,53 @@ export default function EyeTrackingPage() {
         const currentMetrics = analyzerRef.current.process(landmarks, now);
         const pupilHistory = analyzerRef.current.getPupilHistory();
 
+        // Double blink detection for secret ocular gesture
+        if (landmarks[159] && landmarks[145] && landmarks[386] && landmarks[374]) {
+          const leftGap = Math.abs(landmarks[159].y - landmarks[145].y);
+          const rightGap = Math.abs(landmarks[386].y - landmarks[374].y);
+          if (leftGap < 0.016 && rightGap < 0.016) {
+            const hist = blinkHistoryRef.current;
+            const lastBlink = hist[hist.length - 1] || 0;
+            if (now - lastBlink > 220) {
+              hist.push(now);
+              if (hist.length >= 2) {
+                if (now - hist[hist.length - 2] < 650) {
+                  unlockAchievement('DOUBLE_TAKE');
+                  setHeatVisionConfig((prev) => {
+                    const next = !prev.enabled;
+                    if (next) unlockAchievement('HEAT_SIGNATURE');
+                    return { ...prev, enabled: next };
+                  });
+                  blinkHistoryRef.current = [];
+                }
+              }
+            }
+          }
+        }
+
         // Render directly to Canvas at 60 FPS
         if (ctx) {
           rendererRef.current.render(ctx, width, height, landmarks, currentMetrics, pupilHistory, config);
+
+          // Render Homelander Heat Vision dual lasers
+          if (heatVisionConfigRef.current.enabled) {
+            const leftIris = landmarks[468];
+            const rightIris = landmarks[473];
+            if (leftIris && rightIris) {
+              const leftPos = { x: (1 - leftIris.x) * width, y: leftIris.y * height };
+              const rightPos = { x: (1 - rightIris.x) * width, y: rightIris.y * height };
+              heatVisionRendererRef.current.render(
+                ctx,
+                width,
+                height,
+                leftPos,
+                rightPos,
+                null,
+                heatVisionConfigRef.current,
+                now
+              );
+            }
+          }
         }
 
         // Throttle React state update to 10 Hz (every 100ms)
@@ -190,6 +296,25 @@ export default function EyeTrackingPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <button
+              onClick={() => {
+                setHeatVisionConfig((prev) => {
+                  const next = !prev.enabled;
+                  if (next) unlockAchievement('HEAT_SIGNATURE');
+                  return { ...prev, enabled: next };
+                });
+              }}
+              className={`px-3 py-1 text-xs font-bold font-mono uppercase border-2 rounded-tactile flex items-center gap-1.5 transition-all ${
+                heatVisionConfig.enabled
+                  ? 'border-brick-red bg-brick-red text-white shadow-[0_0_15px_rgba(255,42,16,0.4)]'
+                  : 'border-brick-red text-brick-red hover:bg-brick-red/10'
+              }`}
+              title="Toggle Homelander Heat Vision [V]"
+            >
+              <Flame className="w-3.5 h-3.5" />
+              <span>HEAT VISION [V]</span>
+            </button>
+
             <Link href="/gaze">
               <Button variant="outline" size="sm" className="gap-1.5">
                 <Activity className="w-3.5 h-3.5 text-sage-green" />
@@ -260,6 +385,15 @@ export default function EyeTrackingPage() {
                   CANONICAL REF: 11.7 MM
                 </span>
               </div>
+
+              {/* Heat Vision Controls Drawer */}
+              <HeatVisionControls
+                config={heatVisionConfig}
+                onChange={setHeatVisionConfig}
+                onDisengage={() =>
+                  setHeatVisionConfig((prev) => ({ ...prev, enabled: false }))
+                }
+              />
             </div>
 
             {/* Quick Display Controls */}

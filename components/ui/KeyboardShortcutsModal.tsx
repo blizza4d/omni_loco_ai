@@ -29,6 +29,10 @@ const SHORTCUTS: ShortcutItem[] = [
   { keys: ['P'], action: 'Export High-Resolution Canvas Snapshot (PNG)', scope: 'SESSION' },
   { keys: ['J'], action: 'Download Structured Telemetry Ledger (JSON)', scope: 'SESSION' },
   { keys: ['W', 'A', 'S', 'D'], action: 'Manual Keyboard Steering & Throttle Overrides', scope: 'DRIVE SIM' },
+  { keys: ['V'], action: 'Toggle Heat Vision // Apex Laser Override', scope: 'GAZE & EYE' },
+  { keys: ['N'], action: 'Toggle Cyberpunk Neon Afterburner Mode', scope: 'DRIVE SIM' },
+  { keys: ['`'], action: 'Launch Classified Laboratory Shell (CLI)', scope: 'GLOBAL' },
+  { keys: ['↑', '↑', '↓', '↓', '←', '→', '←', '→', 'B', 'A'], action: 'Apex Override Neural Defense Bypass', scope: 'GLOBAL' },
 ];
 
 export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsModalProps) {

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { StampBadge } from './StampBadge';
@@ -17,9 +17,18 @@ import {
   Sun,
   Moon,
   Keyboard,
+  Trophy,
+  Terminal,
 } from 'lucide-react';
 import { detectCapabilities } from '@/core/capabilities';
 import { useSettingsStore, useSystemStore } from '@/core/store';
+import { AchievementToast } from '@/components/easter-eggs/AchievementToast';
+import { AchievementsModal } from '@/components/easter-eggs/AchievementsModal';
+import { KonamiOverrideModal } from '@/components/easter-eggs/KonamiOverrideModal';
+import { ClassifiedExperimentModal } from '@/components/easter-eggs/ClassifiedExperimentModal';
+import { SecretTerminalModal } from '@/components/easter-eggs/SecretTerminalModal';
+import { unlockAchievement, trackVisitedModule } from '@/modules/easter-eggs/achievements';
+import { initTabWatcherAndConsoleEasterEgg } from '@/modules/easter-eggs/tab-watcher';
 
 export interface GlobalNavProps {
   gestureNavEnabled?: boolean;
@@ -41,8 +50,15 @@ export function GlobalNav({
   const [networkModalOpen, setNetworkModalOpen] = useState(false);
   const [systemModalOpen, setSystemModalOpen] = useState(false);
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
+  const [konamiModalOpen, setKonamiModalOpen] = useState(false);
+  const [specimenModalOpen, setSpecimenModalOpen] = useState(false);
+  const [terminalModalOpen, setTerminalModalOpen] = useState(false);
+  const [achievementsModalOpen, setAchievementsModalOpen] = useState(false);
   const [activeBackend, setActiveBackend] = useState<string>('DETECTING');
   const [mounted, setMounted] = useState(false);
+
+  const konamiIndexRef = useRef(0);
+  const logoClicksRef = useRef<{ count: number; lastTime: number }>({ count: 0, lastTime: 0 });
 
   const { theme, toggleTheme } = useSettingsStore();
   const { togglePerfHud: storeTogglePerfHud, perfHudVisible, activeBackend: storeBackend, activeModule } = useSystemStore();
@@ -52,10 +68,17 @@ export function GlobalNav({
 
   useEffect(() => {
     setMounted(true);
+    initTabWatcherAndConsoleEasterEgg();
     detectCapabilities().then((caps) => {
       setActiveBackend(caps.recommendedBackend.toUpperCase());
     });
   }, []);
+
+  useEffect(() => {
+    if (pathname) {
+      trackVisitedModule(pathname);
+    }
+  }, [pathname]);
 
   // Display actual running backend if inside active module, otherwise detected recommendation
   const displayedBackend =
@@ -63,7 +86,21 @@ export function GlobalNav({
       ? storeBackend.toUpperCase()
       : activeBackend;
 
-  // Global Tactical Keyboard Shortcuts Listener
+  // Konami code sequence
+  const KONAMI_SEQUENCE = [
+    'ArrowUp',
+    'ArrowUp',
+    'ArrowDown',
+    'ArrowDown',
+    'ArrowLeft',
+    'ArrowRight',
+    'ArrowLeft',
+    'ArrowRight',
+    'b',
+    'a',
+  ];
+
+  // Global Tactical Keyboard Shortcuts Listener & Easter Egg triggers
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Ignore if user is inside an input, textarea, or contentEditable
@@ -77,6 +114,28 @@ export function GlobalNav({
         return;
       }
 
+      // Check Konami Code
+      const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+      const expectedKey = KONAMI_SEQUENCE[konamiIndexRef.current].toLowerCase();
+
+      if (key === expectedKey) {
+        konamiIndexRef.current += 1;
+        if (konamiIndexRef.current === KONAMI_SEQUENCE.length) {
+          konamiIndexRef.current = 0;
+          unlockAchievement('THE_OVERRIDE');
+          setKonamiModalOpen(true);
+        }
+      } else {
+        konamiIndexRef.current = 0;
+      }
+
+      // Secret Terminal toggle via backquote
+      if (e.key === '`' || e.key === '~') {
+        e.preventDefault();
+        setTerminalModalOpen((prev) => !prev);
+        return;
+      }
+
       if (e.key === '?' || (e.key === '/' && e.shiftKey)) {
         e.preventDefault();
         setShortcutsModalOpen((prev) => !prev);
@@ -87,7 +146,15 @@ export function GlobalNav({
         e.preventDefault();
         handleToggleHud();
       } else if (e.key === 'Escape') {
-        if (shortcutsModalOpen) {
+        if (terminalModalOpen) {
+          setTerminalModalOpen(false);
+        } else if (konamiModalOpen) {
+          setKonamiModalOpen(false);
+        } else if (specimenModalOpen) {
+          setSpecimenModalOpen(false);
+        } else if (achievementsModalOpen) {
+          setAchievementsModalOpen(false);
+        } else if (shortcutsModalOpen) {
           setShortcutsModalOpen(false);
         } else if (networkModalOpen) {
           setNetworkModalOpen(false);
@@ -101,7 +168,36 @@ export function GlobalNav({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [shortcutsModalOpen, networkModalOpen, systemModalOpen, isHub, router, toggleTheme, handleToggleHud]);
+  }, [
+    shortcutsModalOpen,
+    networkModalOpen,
+    systemModalOpen,
+    terminalModalOpen,
+    konamiModalOpen,
+    specimenModalOpen,
+    achievementsModalOpen,
+    isHub,
+    router,
+    toggleTheme,
+    handleToggleHud,
+  ]);
+
+  const handleLogoClick = (e: React.MouseEvent) => {
+    const now = Date.now();
+    if (now - logoClicksRef.current.lastTime < 2000) {
+      logoClicksRef.current.count += 1;
+    } else {
+      logoClicksRef.current.count = 1;
+    }
+    logoClicksRef.current.lastTime = now;
+
+    if (logoClicksRef.current.count >= 5) {
+      e.preventDefault();
+      logoClicksRef.current.count = 0;
+      unlockAchievement('SPECIMEN_EXAMINED');
+      setSpecimenModalOpen(true);
+    }
+  };
 
   return (
     <>
@@ -119,7 +215,7 @@ export function GlobalNav({
               </Link>
             )}
 
-            <Link href="/" className="flex flex-col">
+            <div onClick={handleLogoClick} className="flex flex-col cursor-pointer select-none">
               <span className="font-mono text-base font-bold uppercase tracking-technical text-charcoal-soft flex items-center gap-2">
                 OMNI LOCO AI
                 <span className="text-[10px] text-sage-green border border-sage-green px-1 rounded-[2px] hidden sm:inline-block">
@@ -129,7 +225,7 @@ export function GlobalNav({
               <span className="font-mono text-[9px] uppercase tracking-wider text-ink-muted hidden md:block">
                 MULTIMODAL ON-DEVICE INTELLIGENCE LAB // ZERO CLOUD PIPELINE
               </span>
-            </Link>
+            </div>
           </div>
 
           {/* Right status & control badges */}
@@ -177,6 +273,28 @@ export function GlobalNav({
                 <span>SPATIAL CURSOR</span>
               </button>
             )}
+
+            {/* Classified Discoveries / Achievements Button */}
+            <button
+              onClick={() => setAchievementsModalOpen(true)}
+              className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-mono font-bold uppercase border-2 border-charcoal-soft text-charcoal-soft hover:bg-paper-dark rounded-tactile transition-all"
+              title="View Classified Discoveries & Achievements Dossier"
+              aria-label="View Discoveries Dossier"
+            >
+              <Trophy className="w-3 h-3 text-amber-500" />
+              <span className="hidden xl:inline">DOSSIER</span>
+            </button>
+
+            {/* Secret Terminal Trigger Button */}
+            <button
+              onClick={() => setTerminalModalOpen(true)}
+              className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-mono font-bold uppercase border-2 border-charcoal-soft text-charcoal-soft hover:bg-paper-dark rounded-tactile transition-all"
+              title="Open Classified Laboratory Shell [`]"
+              aria-label="Open Classified Terminal"
+            >
+              <Terminal className="w-3 h-3 text-sage-green" />
+              <span className="hidden xl:inline">CLI [`]</span>
+            </button>
 
             {/* Performance HUD Toggle */}
             <button
@@ -241,6 +359,31 @@ export function GlobalNav({
       <KeyboardShortcutsModal
         isOpen={shortcutsModalOpen}
         onClose={() => setShortcutsModalOpen(false)}
+      />
+
+      {/* Easter Egg & Discovery Modals */}
+      <AchievementToast />
+
+      <KonamiOverrideModal
+        isOpen={konamiModalOpen}
+        onClose={() => setKonamiModalOpen(false)}
+        onOpenTerminal={() => setTerminalModalOpen(true)}
+        onOpenSpecimen={() => setSpecimenModalOpen(true)}
+      />
+
+      <ClassifiedExperimentModal
+        isOpen={specimenModalOpen}
+        onClose={() => setSpecimenModalOpen(false)}
+      />
+
+      <SecretTerminalModal
+        isOpen={terminalModalOpen}
+        onClose={() => setTerminalModalOpen(false)}
+      />
+
+      <AchievementsModal
+        isOpen={achievementsModalOpen}
+        onClose={() => setAchievementsModalOpen(false)}
       />
     </>
   );

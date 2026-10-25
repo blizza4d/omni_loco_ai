@@ -26,6 +26,11 @@ export default function FaceModulePage() {
   const [rollingEAR, setRollingEAR] = useState<number[]>([]);
   const [backendInUse, setBackendInUse] = useState('INITIALIZING');
   const [fps, setFps] = useState(0);
+  const [cyberHud, setCyberHud] = useState(false);
+  const cyberHudRef = useRef(false);
+  useEffect(() => {
+    cyberHudRef.current = cyberHud;
+  }, [cyberHud]);
 
   // Toggleable visualization layers
   const [layers, setLayers] = useState<FaceMeshLayers>({
@@ -185,6 +190,30 @@ export default function FaceModulePage() {
             headPose: computed.headPose,
             isMirrored: isMirroredRef.current,
           });
+
+          // Cybernetic HUD Reticle
+          if (cyberHudRef.current && currentLandmarks[1]) {
+            const nose = currentLandmarks[1];
+            const nx = isMirroredRef.current ? (1 - nose.x) * canvas.width : nose.x * canvas.width;
+            const ny = nose.y * canvas.height;
+
+            ctx.save();
+            ctx.strokeStyle = '#00f5d4';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(nx, ny, 16, 0, Math.PI * 2);
+            ctx.moveTo(nx - 24, ny);
+            ctx.lineTo(nx + 24, ny);
+            ctx.moveTo(nx, ny - 24);
+            ctx.lineTo(nx, ny + 24);
+            ctx.stroke();
+
+            ctx.font = 'bold 9px monospace';
+            ctx.fillStyle = '#00f5d4';
+            ctx.fillText(`TARGET LOCKED // YAW: ${computed.headPose.yaw}°`, nx + 22, ny - 10);
+            ctx.fillText(`SUB-01 // BIOMETRICS AIRGAP VERIFIED`, nx + 22, ny + 4);
+            ctx.restore();
+          }
         }
       }
 
@@ -366,6 +395,11 @@ export default function FaceModulePage() {
                       label="3D GIZMO"
                       checked={layers.headPoseGizmo}
                       onChange={(v) => setLayers((l) => ({ ...l, headPoseGizmo: v }))}
+                    />
+                    <MechanicalToggle
+                      label="CYBER HUD"
+                      checked={cyberHud}
+                      onChange={setCyberHud}
                     />
                     <MechanicalToggle
                       label="MIRROR"
