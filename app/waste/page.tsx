@@ -11,6 +11,7 @@ import { useCamera } from '@/core/camera/useCamera';
 import { WasteClassifier } from '@/modules/waste/classifier';
 import { SessionTally } from '@/modules/waste/components/SessionTally';
 import { WasteCategory, WASTE_CLASSES, ClassificationResult } from '@/modules/waste/types';
+import { useSystemStore } from '@/core/store';
 import { Video, VideoOff, Upload, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 
 export default function WastePage() {
@@ -63,6 +64,20 @@ export default function WastePage() {
       classifierRef.current.dispose();
     };
   }, []);
+
+  const { setPerfStats } = useSystemStore();
+
+  useEffect(() => {
+    setPerfStats({
+      activeModule: 'WASTE CLASSIFIER',
+      activeModel: 'classifier.tflite',
+      fps: 30,
+      p50Ms: classification.inferenceDurationMs || 15,
+      p95Ms: Math.round((classification.inferenceDurationMs || 15) * 1.25),
+      trackingStatus: classification.lockedCategory ? 'TRACKING_ACTIVE' : 'SEARCHING',
+      streamStatus: isStreaming ? 'STREAMING' : 'STANDBY',
+    });
+  }, [classification.inferenceDurationMs, classification.lockedCategory, isStreaming, setPerfStats]);
 
   // Continuous Inference & Adaptive Loop
   useEffect(() => {

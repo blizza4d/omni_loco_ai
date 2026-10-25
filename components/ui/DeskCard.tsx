@@ -25,7 +25,7 @@ export function DeskCard({
 }: DeskCardProps) {
   return (
     <div
-      className={`relative border-2 border-charcoal-soft rounded-tactile p-4 transition-all duration-150 ${
+      className={`relative border-2 border-charcoal-soft rounded-tactile p-4 transition-all duration-150 flex flex-col ${
         inset ? 'bg-paper-dark' : 'bg-paper-cream'
       } ${
         highlight
@@ -49,7 +49,7 @@ export function DeskCard({
 
       {/* Header bar if figure or title provided */}
       {(figure || title || headerAction) && (
-        <div className="flex items-start justify-between border-b border-charcoal-soft/20 pb-2 mb-3 gap-2">
+        <div className="flex items-start justify-between border-b border-charcoal-soft/20 pb-2 mb-3 gap-2 min-h-[46px]">
           <div>
             {figure && (
               <span className="block font-mono text-[10px] font-bold uppercase tracking-technical text-ink-muted">
@@ -57,7 +57,7 @@ export function DeskCard({
               </span>
             )}
             {title && (
-              <h3 className="font-mono text-sm font-bold uppercase tracking-technical text-charcoal-soft">
+              <h3 className="font-mono text-sm font-bold uppercase tracking-technical text-charcoal-soft leading-snug">
                 {title}
               </h3>
             )}
@@ -69,7 +69,7 @@ export function DeskCard({
         </div>
       )}
 
-      {children}
+      <div className="flex-1 flex flex-col">{children}</div>
     </div>
   );
 }

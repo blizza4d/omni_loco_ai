@@ -17,6 +17,9 @@ interface ShortcutItem {
 
 const SHORTCUTS: ShortcutItem[] = [
   { keys: ['ESC'], action: 'Return to Hub / Dismiss Active Modal', scope: 'GLOBAL' },
+  { keys: ['/'], action: 'Open Tactical Command Palette & Fast Search', scope: 'HUB' },
+  { keys: ['\u2190', '\u2192', '\u2191', '\u2193'], action: 'Navigate Sandboxed Module Grid', scope: 'HUB' },
+  { keys: ['ENTER'], action: 'Launch Selected Neural Sandbox', scope: 'HUB' },
   { keys: ['?'], action: 'Open Tactical Keyboard Shortcuts', scope: 'GLOBAL' },
   { keys: ['T'], action: 'Toggle Telemetry Dark / Analog Light Theme', scope: 'GLOBAL' },
   { keys: ['H'], action: 'Toggle Real-Time Diagnostics & Performance HUD', scope: 'GLOBAL' },
@@ -32,7 +35,12 @@ export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsMod
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-charcoal-soft/50 backdrop-blur-[2px]">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Tactical Keyboard Shortcuts Matrix"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-charcoal-soft/50 backdrop-blur-[2px]"
+    >
       <div className="relative w-full max-w-2xl bg-paper-cream border-2 border-charcoal-soft rounded-tactile shadow-tactile-lg p-6 max-h-[90vh] flex flex-col font-mono">
         {/* Header */}
         <div className="flex items-center justify-between border-b-2 border-charcoal-soft pb-3 mb-4">
@@ -89,7 +97,7 @@ export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsMod
           <div className="p-2.5 bg-paper-dark/40 border border-charcoal-soft/40 rounded-tactile text-[10px] text-ink-muted flex items-center justify-between">
             <span className="flex items-center gap-1.5">
               <Zap className="w-3.5 h-3.5 text-sage-green" />
-              Direct operator bindings active across all seven sandboxed experiences.
+              Direct operator bindings active across all eleven sandboxed experiences.
             </span>
             <span className="text-charcoal-soft font-bold">[ESC TO CLOSE]</span>
           </div>

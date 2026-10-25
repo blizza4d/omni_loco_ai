@@ -10,6 +10,7 @@ import { useCamera } from '@/core/camera/useCamera';
 import { ObjectDetectorEngine } from '@/modules/objects/detector';
 import { ObjectOverlayRenderer } from '@/modules/objects/overlay-renderer';
 import { DetectedObject, DetectionConfig, COCO_CLASSES } from '@/modules/objects/types';
+import { useSystemStore } from '@/core/store';
 import {
   Boxes,
   Activity,
@@ -67,6 +68,20 @@ export default function ObjectsPage() {
       detectorRef.current.reset();
     };
   }, []);
+
+  const { setPerfStats } = useSystemStore();
+
+  useEffect(() => {
+    setPerfStats({
+      activeModule: 'OBJECT DETECTION',
+      activeModel: 'ort-wasm-simd-threaded.wasm',
+      fps,
+      p50Ms: inferenceLatency || 25,
+      p95Ms: Math.round((inferenceLatency || 25) * 1.3),
+      trackingStatus: detections.length > 0 ? 'TRACKING_ACTIVE' : 'SEARCHING',
+      streamStatus: isStreaming ? 'STREAMING' : 'STANDBY',
+    });
+  }, [fps, inferenceLatency, detections.length, isStreaming, setPerfStats]);
 
   // Main Detection Loop
   useEffect(() => {

@@ -15,6 +15,7 @@ import {
   SegmentationResult,
   TELEMETRY_COLORS,
 } from '@/modules/segment/types';
+import { useSystemStore } from '@/core/store';
 import {
   Scissors,
   Upload,
@@ -65,6 +66,20 @@ export default function SegmentationPage() {
       setBackend(b);
     });
   }, []);
+
+  const { setPerfStats } = useSystemStore();
+
+  useEffect(() => {
+    setPerfStats({
+      activeModule: 'SEGMENTATION LAB',
+      activeModel: 'ort-wasm-simd-threaded.wasm',
+      fps: 30,
+      p50Ms: segResult.inferenceDurationMs || 45,
+      p95Ms: Math.round((segResult.inferenceDurationMs || 45) * 1.2),
+      trackingStatus: points.length > 0 ? 'TRACKING_ACTIVE' : 'STANDBY',
+      streamStatus: isStreaming ? 'STREAMING' : 'STANDBY',
+    });
+  }, [segResult.inferenceDurationMs, points.length, isStreaming, setPerfStats]);
 
   // Run segmentation whenever prompts or image changes
   useEffect(() => {

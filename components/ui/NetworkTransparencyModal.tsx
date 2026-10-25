@@ -63,8 +63,13 @@ export function NetworkTransparencyModal({ isOpen, onClose }: NetworkTransparenc
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-charcoal-soft/50 backdrop-blur-[2px]">
-      <div className="relative w-full max-w-2xl bg-paper-cream border-2 border-charcoal-soft rounded-tactile shadow-tactile-lg p-6 max-h-[90vh] flex flex-col">
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Network Transparency Auditor"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-charcoal-soft/50 backdrop-blur-[2px]"
+    >
+      <div className="relative w-full max-w-2xl bg-paper-cream border-2 border-charcoal-soft rounded-tactile shadow-tactile-lg p-6 max-h-[90vh] flex flex-col font-mono">
         {/* Header */}
         <div className="flex items-center justify-between border-b-2 border-charcoal-soft pb-3 mb-4">
           <div className="flex items-center gap-2">

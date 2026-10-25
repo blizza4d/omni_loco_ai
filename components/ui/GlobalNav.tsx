@@ -42,18 +42,26 @@ export function GlobalNav({
   const [systemModalOpen, setSystemModalOpen] = useState(false);
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
   const [activeBackend, setActiveBackend] = useState<string>('DETECTING');
+  const [mounted, setMounted] = useState(false);
 
   const { theme, toggleTheme } = useSettingsStore();
-  const { togglePerfHud: storeTogglePerfHud, perfHudVisible } = useSystemStore();
+  const { togglePerfHud: storeTogglePerfHud, perfHudVisible, activeBackend: storeBackend, activeModule } = useSystemStore();
 
   const isHudActive = perfHudOpen !== undefined ? perfHudOpen : perfHudVisible;
   const handleToggleHud = onTogglePerfHud || storeTogglePerfHud;
 
   useEffect(() => {
+    setMounted(true);
     detectCapabilities().then((caps) => {
       setActiveBackend(caps.recommendedBackend.toUpperCase());
     });
   }, []);
+
+  // Display actual running backend if inside active module, otherwise detected recommendation
+  const displayedBackend =
+    !isHub && activeModule !== 'STANDBY' && storeBackend
+      ? storeBackend.toUpperCase()
+      : activeBackend;
 
   // Global Tactical Keyboard Shortcuts Listener
   useEffect(() => {
@@ -144,9 +152,10 @@ export function GlobalNav({
               onClick={() => setSystemModalOpen(true)}
               className="group hidden sm:flex items-center gap-1.5 focus:outline-none"
               title="Click to view Hardware Acceleration Status"
+              aria-label="Hardware Acceleration Status"
             >
               <StampBadge
-                label={`ACCEL: ${activeBackend}`}
+                label={`ACCEL: ${displayedBackend}`}
                 variant="charcoal"
                 icon={<Cpu className="w-3 h-3 text-charcoal-soft group-hover:scale-110 transition-transform" />}
               />
@@ -162,6 +171,7 @@ export function GlobalNav({
                     : 'border-charcoal-soft text-charcoal-soft hover:bg-paper-dark'
                 }`}
                 title="Toggle Spatial Hand-Gesture Cursor Navigation"
+                aria-label="Toggle Spatial Hand-Gesture Cursor Navigation"
               >
                 <Hand className="w-3 h-3" />
                 <span>SPATIAL CURSOR</span>
@@ -177,6 +187,7 @@ export function GlobalNav({
                   : 'border-charcoal-soft text-charcoal-soft hover:bg-paper-dark'
               }`}
               title="Toggle Real-Time Telemetry HUD [H]"
+              aria-label="Toggle Real-Time Telemetry HUD"
             >
               <SlidersHorizontal className="w-3 h-3" />
               <span className="hidden md:inline">HUD</span>
@@ -187,6 +198,7 @@ export function GlobalNav({
               onClick={() => setShortcutsModalOpen(true)}
               className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-mono font-bold uppercase border-2 border-charcoal-soft text-charcoal-soft hover:bg-paper-dark rounded-tactile transition-all"
               title="Tactical Keyboard Shortcuts Matrix [?]"
+              aria-label="Tactical Keyboard Shortcuts Matrix"
             >
               <Keyboard className="w-3 h-3" />
               <span className="hidden lg:inline">[?] KEYS</span>
@@ -196,17 +208,18 @@ export function GlobalNav({
             <button
               onClick={toggleTheme}
               className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-mono font-bold uppercase border-2 border-charcoal-soft text-charcoal-soft hover:bg-paper-dark rounded-tactile transition-all"
-              title={`Switch to ${theme === 'dark' ? 'Analog Drafting Light' : 'Motorsport Telemetry Dark'} [T]`}
+              title={`Switch to ${mounted && theme === 'dark' ? 'Analog Drafting Light' : 'Motorsport Telemetry Dark'} [T]`}
+              aria-label="Toggle Theme"
             >
-              {theme === 'dark' ? (
-                <>
-                  <Sun className="w-3 h-3 text-amber-400" />
-                  <span className="hidden xl:inline">LIGHT</span>
-                </>
-              ) : (
+              {mounted && theme === 'light' ? (
                 <>
                   <Moon className="w-3 h-3 text-indigo-400" />
                   <span className="hidden xl:inline">APEX DARK</span>
+                </>
+              ) : (
+                <>
+                  <Sun className="w-3 h-3 text-amber-400" />
+                  <span className="hidden xl:inline">LIGHT</span>
                 </>
               )}
             </button>

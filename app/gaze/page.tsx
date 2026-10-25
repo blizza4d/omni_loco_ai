@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { GlobalNav } from '@/components/ui/GlobalNav';
 import { DeskCard } from '@/components/ui/DeskCard';
 import { Button } from '@/components/ui/Button';
@@ -16,6 +17,7 @@ import { generateSyntheticFace } from '@/modules/face/synthetic-face';
 import { MediaPipeTaskRunner } from '@/core/mediapipe/task-runner';
 import { FaceMetricsAnalyzer } from '@/modules/face/blendshapes';
 import { OneEuroFilter } from '@/core/filters';
+import { useSystemStore } from '@/core/store';
 import { Download, Target } from 'lucide-react';
 
 const INITIAL_AOIS: AreaOfInterest[] = [
@@ -97,6 +99,20 @@ export default function GazePage() {
       taskRunnerRef.current.dispose();
     };
   }, []);
+
+  const { setPerfStats } = useSystemStore();
+
+  useEffect(() => {
+    setPerfStats({
+      activeModule: 'GAZE HEATMAP',
+      activeModel: 'face_landmarker.task',
+      fps: 30,
+      p50Ms: 16,
+      p95Ms: 22,
+      trackingStatus: isCalibrating ? 'INITIALIZING' : isStreaming ? 'TRACKING_ACTIVE' : 'STANDBY',
+      streamStatus: isStreaming ? 'STREAMING' : 'STANDBY',
+    });
+  }, [isCalibrating, isStreaming, setPerfStats]);
 
   // Main 60 FPS Tracking & Rendering Loop (Decoupled from React State)
   useEffect(() => {
@@ -327,6 +343,13 @@ export default function GazePage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <Link href="/eye">
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <Target className="w-3.5 h-3.5 text-sage-green" />
+                <span>PUPILLOMETRY LAB &rarr;</span>
+              </Button>
+            </Link>
+
             <Button
               variant="outline"
               size="sm"

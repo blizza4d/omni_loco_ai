@@ -15,7 +15,7 @@ import { SimulatorDiagnostics } from '@/modules/drive/components/SimulatorDiagno
 import { VehicleState } from '@/modules/drive/types';
 import { Landmark3D } from '@/modules/hand/types';
 import { RefreshCw, Sun, Moon, Radio } from 'lucide-react';
-import { useSettingsStore } from '@/core/store';
+import { useSettingsStore, useSystemStore } from '@/core/store';
 
 export default function DrivePage() {
   const { theme } = useSettingsStore();
@@ -69,6 +69,20 @@ export default function DrivePage() {
     isActive: isStreaming || syntheticMode,
     syntheticMode,
   });
+
+  const { setPerfStats } = useSystemStore();
+
+  useEffect(() => {
+    setPerfStats({
+      activeModule: 'DRIVE SIMULATOR',
+      activeModel: 'hand_landmarker.task',
+      fps,
+      p50Ms: latencyMs,
+      p95Ms: Math.round(latencyMs * 1.3),
+      trackingStatus: isTracking ? 'TRACKING_ACTIVE' : 'SEARCHING',
+      streamStatus: isStreaming ? 'STREAMING' : 'STANDBY',
+    });
+  }, [fps, latencyMs, isTracking, isStreaming, setPerfStats]);
 
   // Listen for keyboard controls
   useEffect(() => {

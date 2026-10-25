@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
+import Link from 'next/link';
 import { GlobalNav } from '@/components/ui/GlobalNav';
 import { DeskCard } from '@/components/ui/DeskCard';
 import { Button } from '@/components/ui/Button';
@@ -12,6 +13,7 @@ import { PupillometryAnalyzer } from '@/modules/eye/pupillometry';
 import { EyeRenderer } from '@/modules/eye/eye-renderer';
 import { generateSyntheticEyeLandmarks } from '@/modules/eye/synthetic-eye';
 import { PupilMetrics, EyeTrackingConfig } from '@/modules/eye/types';
+import { useSystemStore } from '@/core/store';
 import {
   Eye,
   Activity,
@@ -75,6 +77,20 @@ export default function EyeTrackingPage() {
       taskRunnerRef.current.dispose();
     };
   }, []);
+
+  const { setPerfStats } = useSystemStore();
+
+  useEffect(() => {
+    setPerfStats({
+      activeModule: 'PUPILLOMETRY LAB',
+      activeModel: 'face_landmarker.task',
+      fps: 30,
+      p50Ms: 16,
+      p95Ms: 22,
+      trackingStatus: isStreaming ? 'TRACKING_ACTIVE' : 'SEARCHING',
+      streamStatus: isStreaming ? 'STREAMING' : 'STANDBY',
+    });
+  }, [isStreaming, setPerfStats]);
 
   // Main 60 FPS Tracking & Rendering Loop
   useEffect(() => {
@@ -174,6 +190,12 @@ export default function EyeTrackingPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <Link href="/gaze">
+              <Button variant="outline" size="sm" className="gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-sage-green" />
+                <span>GAZE HEATMAP &rarr;</span>
+              </Button>
+            </Link>
             <Button variant="outline" size="sm" onClick={exportSessionJSON} className="gap-1.5">
               <Download className="w-3.5 h-3.5" />
               <span>EXPORT TELEMETRY</span>

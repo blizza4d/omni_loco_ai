@@ -1,0 +1,271 @@
+import React from 'react';
+import {
+  Hand,
+  Smile,
+  Activity,
+  Car,
+  Mic,
+  Trash2,
+  Eye,
+  Scan,
+  Scissors,
+  SplitSquareVertical,
+} from 'lucide-react';
+
+export type ModuleCategory = 'VISION' | 'SIMULATION' | 'AUDIO' | 'CLASSIFICATION';
+
+export interface ModuleDefinition {
+  id: string;
+  figure: string;
+  route: string;
+  title: string;
+  shortTitle: string;
+  description: string;
+  category: ModuleCategory;
+  categoryLabel: string;
+  icon: React.ComponentType<{ className?: string }>;
+  permissions: ('CAM' | 'MIC')[];
+  modelUrl: string;
+  modelSize: string;
+  badge: string;
+  accent: 'sage' | 'brick' | 'charcoal';
+  backend: string;
+  features: string[];
+}
+
+export const MODULE_REGISTRY: ModuleDefinition[] = [
+  {
+    id: 'hand',
+    figure: 'FIG. 01',
+    route: '/hand',
+    title: 'HAND GESTURE RECOGNITION',
+    shortTitle: 'Hand Gestures',
+    description: '21 3D landmarks, dual-hand tracking, pinch/swipe gesture engine & spatial mouse-free UI.',
+    category: 'VISION',
+    categoryLabel: 'VISION & KINEMATICS',
+    icon: Hand,
+    permissions: ['CAM'],
+    modelUrl: '/models/hand_landmarker.task',
+    modelSize: '7.8 MB',
+    badge: 'WEBGPU / WASM',
+    accent: 'sage',
+    backend: 'WebGPU / WASM',
+    features: ['21 3D Landmarks', 'Spatial Cursor', 'Pinch Detection'],
+  },
+  {
+    id: 'face',
+    figure: 'FIG. 02',
+    route: '/face',
+    title: 'BIOMETRIC FACE MESH',
+    shortTitle: 'Face Mesh',
+    description: '478 dense facial landmarks, 52 ARKit blendshapes, PERCLOS drowsiness & 3D head pose gizmo.',
+    category: 'VISION',
+    categoryLabel: 'VISION & KINEMATICS',
+    icon: Smile,
+    permissions: ['CAM'],
+    modelUrl: '/models/face_landmarker.task',
+    modelSize: '3.7 MB',
+    badge: 'WEBGPU / WASM',
+    accent: 'sage',
+    backend: 'WebGPU / WASM',
+    features: ['478 Landmarks', '52 Blendshapes', 'PERCLOS Score'],
+  },
+  {
+    id: 'pose',
+    figure: 'FIG. 03',
+    route: '/pose',
+    title: 'KINEMATIC POSE ESTIMATION',
+    shortTitle: 'Pose Tracking',
+    description: '33 full-body world landmarks, 3D joint angle trigonometry, rep-counting state machine & ergonomics.',
+    category: 'VISION',
+    categoryLabel: 'VISION & KINEMATICS',
+    icon: Activity,
+    permissions: ['CAM'],
+    modelUrl: '/models/pose_landmarker_full.task',
+    modelSize: '9.4 MB',
+    badge: 'WEBGPU / WASM',
+    accent: 'sage',
+    backend: 'WebGPU / WASM',
+    features: ['33 Body Joints', 'Trigonometry Engine', 'Rep Counter'],
+  },
+  {
+    id: 'drive',
+    figure: 'FIG. 04',
+    route: '/drive',
+    title: 'GESTURE-STEERED SIMULATOR',
+    shortTitle: 'Drive Sim',
+    description: 'Procedural WebGL endless road, two-hand steering matrix with deadzone & bicycle physics model.',
+    category: 'SIMULATION',
+    categoryLabel: 'SPATIAL SIMULATION',
+    icon: Car,
+    permissions: ['CAM'],
+    modelUrl: '/models/hand_landmarker.task',
+    modelSize: '7.8 MB',
+    badge: 'THREE.JS 3D',
+    accent: 'charcoal',
+    backend: 'Three.js / WebGL',
+    features: ['Bicycle Kinematics', 'Procedural Road', 'Gesture Steering'],
+  },
+  {
+    id: 'speech',
+    figure: 'FIG. 05',
+    route: '/speech',
+    title: 'ACOUSTIC & SPEECH ANALYTICS',
+    shortTitle: 'Speech DSP',
+    description: 'AudioWorklet DSP, real-time WPM pacing, voice activity detection, pitch contour & flaw audit.',
+    category: 'AUDIO',
+    categoryLabel: 'ACOUSTIC DSP',
+    icon: Mic,
+    permissions: ['MIC'],
+    modelUrl: '/wasm/acoustic_dsp.wasm',
+    modelSize: '1.8 MB',
+    badge: 'AUDIO WORKLET',
+    accent: 'brick',
+    backend: 'AudioWorklet / WASM',
+    features: ['Zero Latency DSP', 'Pitch Tracking', 'WPM Cadence'],
+  },
+  {
+    id: 'waste',
+    figure: 'FIG. 06',
+    route: '/waste',
+    title: 'SMART WASTE SEGREGATOR',
+    shortTitle: 'Waste Segregator',
+    description: '10-class visual segregation with MediaPipe / TF.js WebGPU, temporal voting & municipal recycling tips.',
+    category: 'CLASSIFICATION',
+    categoryLabel: 'CLASSIFICATION & LABS',
+    icon: Trash2,
+    permissions: ['CAM'],
+    modelUrl: '/models/classifier.tflite',
+    modelSize: '18.5 MB',
+    badge: 'MEDIAPIPE GPU',
+    accent: 'sage',
+    backend: 'MediaPipe / TF.js',
+    features: ['10-Class Neural Net', 'Temporal Voting', 'Recycling Matrix'],
+  },
+  {
+    id: 'gaze',
+    figure: 'FIG. 07',
+    route: '/gaze',
+    title: 'GAZE-TRACKING HEATMAP',
+    shortTitle: 'Gaze Heatmap',
+    description: 'Real-time iris tracking, 9-point ridge regression calibration, I-DT fixation parser & cumulative dwell heatmap.',
+    category: 'VISION',
+    categoryLabel: 'VISION & KINEMATICS',
+    icon: Eye,
+    permissions: ['CAM'],
+    modelUrl: '/models/face_landmarker.task',
+    modelSize: '3.7 MB',
+    badge: 'IRIS TELEMETRY',
+    accent: 'charcoal',
+    backend: 'WebGPU / WASM',
+    features: ['Iris Vectors', '9-Pt Calibration', 'Fixation Heatmap'],
+  },
+  {
+    id: 'objects',
+    figure: 'FIG. 08',
+    route: '/objects',
+    title: 'ADVANCED OBJECT INTELLIGENCE',
+    shortTitle: 'Object Detection',
+    description: 'YOLO multi-object detection, spatial IoU bounding box tracking, confidence thresholds & COCO-80 filtering.',
+    category: 'VISION',
+    categoryLabel: 'VISION & KINEMATICS',
+    icon: Scan,
+    permissions: ['CAM'],
+    modelUrl: '/wasm/ort-wasm-simd-threaded.wasm',
+    modelSize: '14.2 MB',
+    badge: 'ONNX WEBGPU / WASM',
+    accent: 'sage',
+    backend: 'ONNX Runtime Web',
+    features: ['COCO-80 Detection', 'IoU Tracker', 'Spatial Filtering'],
+  },
+  {
+    id: 'segment',
+    figure: 'FIG. 09',
+    route: '/segment',
+    title: 'PROMPTABLE SEGMENTATION LAB',
+    shortTitle: 'Segmentation Lab',
+    description: 'Point-and-click promptable segmentation decoder, geodesic mask extraction, boundary contours & PNG cutout export.',
+    category: 'CLASSIFICATION',
+    categoryLabel: 'CLASSIFICATION & LABS',
+    icon: Scissors,
+    permissions: ['CAM'],
+    modelUrl: '/wasm/ort-wasm-simd-threaded.wasm',
+    modelSize: '12.5 MB',
+    badge: 'FEATURE MASK DECODER',
+    accent: 'brick',
+    backend: 'ONNX Runtime Web',
+    features: ['Click-to-Segment', 'Boundary Contours', 'PNG Cutout Export'],
+  },
+  {
+    id: 'depth',
+    figure: 'FIG. 10',
+    route: '/depth',
+    title: 'MONOCULAR DEPTH ESTIMATION',
+    shortTitle: 'Depth Estimation',
+    description: 'Relative depth geometry, side-by-side & split-screen scrubber, Turbo/Inferno/Viridis palettes & 3D surface normal probe.',
+    category: 'VISION',
+    categoryLabel: 'VISION & KINEMATICS',
+    icon: SplitSquareVertical,
+    permissions: ['CAM'],
+    modelUrl: '/wasm/ort-wasm-simd-threaded.wasm',
+    modelSize: '9.6 MB',
+    badge: 'SCENE GEOMETRY',
+    accent: 'charcoal',
+    backend: 'ONNX Runtime Web',
+    features: ['Relative Depth Map', 'Interactive Scrubber', 'Surface Normal Probe'],
+  },
+  {
+    id: 'fingers',
+    figure: 'FIG. 11',
+    route: '/fingers',
+    title: 'FINGER COUNTING & GESTURE OUTPUT',
+    shortTitle: 'Finger Counting',
+    description: 'Real-time open/folded finger detection (0-5 per hand, 0-10 combined), hysteresis voting stabilization, action triggers & TTS.',
+    category: 'VISION',
+    categoryLabel: 'VISION & KINEMATICS',
+    icon: Hand,
+    permissions: ['CAM'],
+    modelUrl: '/models/hand_landmarker.task',
+    modelSize: '7.8 MB',
+    badge: 'WEBGPU / KINEMATICS',
+    accent: 'sage',
+    backend: 'WebGPU / WASM',
+    features: ['0-10 Dual Hand Count', 'Hysteresis Voting', 'TTS Audio Feedback'],
+  },
+];
+
+export interface CategorySummary {
+  id: 'ALL' | ModuleCategory;
+  label: string;
+  count: number;
+}
+
+export function getCategorySummaries(): CategorySummary[] {
+  return [
+    {
+      id: 'ALL',
+      label: 'ALL',
+      count: MODULE_REGISTRY.length,
+    },
+    {
+      id: 'VISION',
+      label: 'VISION & KINEMATICS',
+      count: MODULE_REGISTRY.filter((m) => m.category === 'VISION').length,
+    },
+    {
+      id: 'SIMULATION',
+      label: 'SPATIAL SIM',
+      count: MODULE_REGISTRY.filter((m) => m.category === 'SIMULATION').length,
+    },
+    {
+      id: 'AUDIO',
+      label: 'ACOUSTIC DSP',
+      count: MODULE_REGISTRY.filter((m) => m.category === 'AUDIO').length,
+    },
+    {
+      id: 'CLASSIFICATION',
+      label: 'CLASSIFICATION & LABS',
+      count: MODULE_REGISTRY.filter((m) => m.category === 'CLASSIFICATION').length,
+    },
+  ];
+}
