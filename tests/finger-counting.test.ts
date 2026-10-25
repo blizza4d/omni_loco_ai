@@ -328,4 +328,89 @@ describe('Module 11: FingerCountingEngine', () => {
     expect(lostResult.totalStableCount).toBe(0);
     expect(lostResult.combinedTextOutput).toContain('Hand not detected');
   });
+
+  it('accurately classifies Thumbs Up gesture with fist folded', () => {
+    // Thumb straight up, other fingers in a tight fist
+    const hand = createSyntheticHand({
+      thumb: true,
+      index: false,
+      middle: false,
+      ring: false,
+      pinky: false,
+    });
+
+    const result = engine.classifySingleHand(hand, 'Right', 1000);
+    expect(result.rawCount).toBe(1);
+    expect(result.fingers.thumb.isOpen).toBe(true);
+    expect(result.fingers.index.isOpen).toBe(false);
+    expect(result.fingers.middle.isOpen).toBe(false);
+    expect(result.fingers.ring.isOpen).toBe(false);
+    expect(result.fingers.pinky.isOpen).toBe(false);
+    expect(result.gestureName).toBe('Thumbs Up');
+  });
+
+  it('accurately classifies Four Fingers gesture with thumb tucked into palm', () => {
+    const hand = createSyntheticHand({
+      thumb: false,
+      index: true,
+      middle: true,
+      ring: true,
+      pinky: true,
+    });
+
+    const result = engine.classifySingleHand(hand, 'Right', 1000);
+    expect(result.rawCount).toBe(4);
+    expect(result.fingers.thumb.isOpen).toBe(false);
+    expect(result.fingers.index.isOpen).toBe(true);
+    expect(result.fingers.middle.isOpen).toBe(true);
+    expect(result.fingers.ring.isOpen).toBe(true);
+    expect(result.fingers.pinky.isOpen).toBe(true);
+    expect(result.gestureName).toContain('Four Fingers');
+  });
+
+  it('accurately classifies Shaka / Hang Loose (Thumb + Pinky)', () => {
+    const hand = createSyntheticHand({
+      thumb: true,
+      index: false,
+      middle: false,
+      ring: false,
+      pinky: true,
+    });
+
+    const result = engine.classifySingleHand(hand, 'Right', 1000);
+    expect(result.rawCount).toBe(2);
+    expect(result.fingers.thumb.isOpen).toBe(true);
+    expect(result.fingers.pinky.isOpen).toBe(true);
+    expect(result.fingers.index.isOpen).toBe(false);
+    expect(result.gestureName).toBe('Shaka / Hang Loose');
+  });
+
+  it('handles foreshortened fingers tilted 35 degrees toward camera', () => {
+    // 3 fingers (Index, Middle, Ring) tilted towards camera
+    const canonicalHand = createSyntheticHand({
+      thumb: false,
+      index: true,
+      middle: true,
+      ring: true,
+      pinky: false,
+    });
+
+    // Foreshortening: compress y-axis by cos(35 deg) ~= 0.82 and add z-displacement
+    const tiltedHand = canonicalHand.map((pt, idx) => {
+      if (idx === 0) return pt; // Wrist anchor
+      const dy = pt.y - 0.8;
+      return {
+        x: pt.x,
+        y: 0.8 + dy * 0.82,
+        z: pt.z + Math.abs(dy) * 0.57,
+      };
+    });
+
+    const result = engine.classifySingleHand(tiltedHand, 'Right', 1000);
+    expect(result.rawCount).toBe(3);
+    expect(result.fingers.index.isOpen).toBe(true);
+    expect(result.fingers.middle.isOpen).toBe(true);
+    expect(result.fingers.ring.isOpen).toBe(true);
+    expect(result.fingers.pinky.isOpen).toBe(false);
+  });
 });

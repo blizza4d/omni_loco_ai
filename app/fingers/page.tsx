@@ -79,74 +79,33 @@ export default function FingerCountingPage() {
     errorMessage,
   } = useCamera({ autoStart: true });
 
-  // Direct 60 FPS Render Callback from Hand Gesture Pipeline
+  // Direct 60 FPS Render Callback from Hand Gesture Pipeline (Synchronized inference & rendering)
   const handleFrameRender = useCallback(
-    () => {
-      // Direct rendering is driven inside main loop
-    },
-    []
-  );
-
-  const {
-    landmarksRef,
-    multiHandsRef,
-    handedness,
-    isTracking,
-    fps,
-    latencyMs,
-    backendInUse,
-  } = useHandGestures({
-    videoRef,
-    isActive: isStreaming || syntheticMode,
-    isMirrored,
-    syntheticMode,
-    onFrameRender: handleFrameRender,
-  });
-
-  // Check speech synthesis support on mount
-  useEffect(() => {
-    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
-      setSpeechSupported(true);
-    }
-  }, []);
-
-  // Update Global Telemetry Diagnostics Store
-  useEffect(() => {
-    setPerfStats({
-      activeModule: 'FINGER COUNTING',
-      activeModel: 'hand_landmarker.task',
-      fps,
-      p50Ms: latencyMs,
-      p95Ms: Math.round(latencyMs * 1.3),
-      trackingStatus: isTracking ? 'TRACKING_ACTIVE' : 'SEARCHING',
-      streamStatus: isStreaming ? 'STREAMING' : 'STANDBY',
-    });
-  }, [fps, latencyMs, isTracking, isStreaming, setPerfStats]);
-
-  // Main 60 FPS Evaluation & Canvas Overlay Loop
-  useEffect(() => {
-    let active = true;
-    let animId: number;
-
-    const tick = () => {
-      if (!active) return;
+    (
+      _primaryLandmarks: any,
+      _cursor: any,
+      multiHands?: any[],
+      multiHandednesses?: ('Left' | 'Right')[]
+    ) => {
       const now = performance.now();
-
       const canvas = canvasRef.current;
       const video = videoRef.current;
-      const hands = multiHandsRef.current;
+      if (!canvas) return;
 
       // Ensure canvas backing buffer matches video
-      if (canvas && video && video.readyState >= 2) {
+      if (video && video.readyState >= 2) {
         syncCanvasToVideo(canvas, video);
       }
 
-      const ctx = canvas?.getContext('2d');
-      const width = canvas?.width || 640;
-      const height = canvas?.height || 480;
+      const ctx = canvas.getContext('2d');
+      const width = canvas.width || 640;
+      const height = canvas.height || 480;
+
+      const hands = multiHands || [];
+      const handednessList = multiHandednesses || [];
 
       // 1. Process finger classification via invariant mathematical engine
-      const fingerResult = engineRef.current.processHands(hands, [handedness], now);
+      const fingerResult = engineRef.current.processHands(hands, handednessList, now);
       resultRef.current = fingerResult;
 
       // 2. Render overlays directly to canvas (ZERO React overhead!)
@@ -233,29 +192,51 @@ export default function FingerCountingPage() {
         lastUiUpdateRef.current = now;
         setUiResult({ ...fingerResult });
       }
+    },
+    [actionMappings, isMirrored, showSkeleton, showFingerLabels, speechEnabled, videoRef]
+  );
 
-      animId = requestAnimationFrame(tick);
-    };
+  const {
+    landmarksRef,
+    multiHandsRef,
+    multiHandednessesRef,
+    handedness,
+    isTracking,
+    fps,
+    latencyMs,
+    backendInUse,
+  } = useHandGestures({
+    videoRef,
+    isActive: isStreaming || syntheticMode,
+    isMirrored,
+    syntheticMode,
+    onFrameRender: handleFrameRender,
+  });
 
-    animId = requestAnimationFrame(tick);
-
+  // Check speech synthesis support on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
+      setSpeechSupported(true);
+    }
     return () => {
-      active = false;
-      cancelAnimationFrame(animId);
       if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
         window.speechSynthesis.cancel();
       }
     };
-  }, [
-    multiHandsRef,
-    handedness,
-    isMirrored,
-    showSkeleton,
-    showFingerLabels,
-    actionMappings,
-    speechEnabled,
-    videoRef,
-  ]);
+  }, []);
+
+  // Update Global Telemetry Diagnostics Store
+  useEffect(() => {
+    setPerfStats({
+      activeModule: 'FINGER COUNTING',
+      activeModel: 'hand_landmarker.task',
+      fps,
+      p50Ms: latencyMs,
+      p95Ms: Math.round(latencyMs * 1.3),
+      trackingStatus: isTracking ? 'TRACKING_ACTIVE' : 'SEARCHING',
+      streamStatus: isStreaming ? 'STREAMING' : 'STANDBY',
+    });
+  }, [fps, latencyMs, isTracking, isStreaming, setPerfStats]);
 
   // Handle action mapping edit
   const handleActionLabelChange = (count: number, newLabel: string) => {

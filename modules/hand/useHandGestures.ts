@@ -18,7 +18,9 @@ export interface UseHandGesturesOptions {
   onClick?: (cursor: { x: number; y: number }) => void;
   onFrameRender?: (
     landmarks: Landmark3D[] | null,
-    cursor: { x: number; y: number; isPinching: boolean; dwellProgress: number }
+    cursor: { x: number; y: number; isPinching: boolean; dwellProgress: number },
+    multiHands?: Landmark3D[][],
+    multiHandednesses?: ('Left' | 'Right')[]
   ) => void;
 }
 
@@ -46,6 +48,7 @@ export function useHandGestures(options: UseHandGesturesOptions = {}) {
   // Real-time mutable references (zero React re-renders per frame)
   const landmarksRef = useRef<Landmark3D[] | null>(null);
   const multiHandsRef = useRef<Landmark3D[][]>([]);
+  const multiHandednessesRef = useRef<('Left' | 'Right')[]>([]);
   const gesturesRef = useRef<RecognizedGesture[]>([]);
   const cursorRef = useRef<{
     x: number;
@@ -135,6 +138,7 @@ export function useHandGestures(options: UseHandGesturesOptions = {}) {
       currentLandmarks = generateSyntheticHand(now);
       const synth2 = currentLandmarks.map((pt) => ({ x: Math.min(1, pt.x + 0.35), y: pt.y, z: pt.z }));
       multiHandsRef.current = [currentLandmarks, synth2];
+      multiHandednessesRef.current = ['Right', 'Left'];
     } else if (activeVideo && activeVideo.readyState >= 2) {
       // Live MediaPipe Task detection on playable video
       const mpResult = runnerRef.current.detectHands(activeVideo, now);
@@ -143,14 +147,16 @@ export function useHandGestures(options: UseHandGesturesOptions = {}) {
         multiHandsRef.current = mpResult.landmarks.map((hand) =>
           hand.map((pt) => ({ x: pt.x, y: pt.y, z: pt.z }))
         );
+        const detectedHands = (mpResult.handednesses || []).map((h) =>
+          h && h[0] ? (h[0].categoryName as 'Left' | 'Right') : 'Right'
+        );
+        multiHandednessesRef.current = detectedHands;
+
         if (mpResult.landmarks[0]) {
           currentLandmarks = multiHandsRef.current[0]!;
         }
-        if (mpResult.handednesses && mpResult.handednesses[0] && mpResult.handednesses[0][0]) {
-          const detectedHand = mpResult.handednesses[0][0].categoryName as 'Left' | 'Right';
-          if (detectedHand !== handedness) {
-            setHandedness(detectedHand);
-          }
+        if (detectedHands[0] && detectedHands[0] !== handedness) {
+          setHandedness(detectedHands[0]);
         }
       } else {
         // Drop tracking if no hands detected for more than 120ms
@@ -158,6 +164,7 @@ export function useHandGestures(options: UseHandGesturesOptions = {}) {
           currentLandmarks = null;
           landmarksRef.current = null;
           multiHandsRef.current = [];
+          multiHandednessesRef.current = [];
           gesturesRef.current = [];
         } else {
           currentLandmarks = landmarksRef.current;
@@ -232,12 +239,17 @@ export function useHandGestures(options: UseHandGesturesOptions = {}) {
 
       // Direct canvas rendering callback (ZERO React overhead!)
       if (onFrameRenderRef.current) {
-        onFrameRenderRef.current(currentLandmarks, cursorRef.current);
+        onFrameRenderRef.current(
+          currentLandmarks,
+          cursorRef.current,
+          multiHandsRef.current,
+          multiHandednessesRef.current
+        );
       }
     } else {
       // Clear overlay when no hands detected
       if (onFrameRenderRef.current) {
-        onFrameRenderRef.current(null, cursorRef.current);
+        onFrameRenderRef.current(null, cursorRef.current, [], []);
       }
     }
 
@@ -274,6 +286,7 @@ export function useHandGestures(options: UseHandGesturesOptions = {}) {
   return {
     landmarksRef,
     multiHandsRef,
+    multiHandednessesRef,
     cursorRef,
     gestures,
     handedness,
