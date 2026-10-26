@@ -208,7 +208,7 @@ export default function ObjectsPage() {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="font-bold text-xs uppercase tracking-technical text-ink-muted">
-                NEURAL PERCEPTION // FIG. 08
+                NEURAL PERCEPTION // FIG. 09
               </span>
               <StampBadge label="YOLO26 / ONNX WEB" variant="sage" />
               <StampBadge label={`ACCEL: ${backend}`} variant="charcoal" />
@@ -418,7 +418,7 @@ export default function ObjectsPage() {
 
           {/* Right Sidebar: Telemetry & Inventory */}
           <div className="space-y-4">
-            <DeskCard figure="FIG. 08-A" title="OBJECT INVENTORY TELEMETRY">
+            <DeskCard figure="FIG. 09-A" title="OBJECT INVENTORY TELEMETRY">
               <div className="space-y-4">
                 {/* Scoreboard */}
                 <div className="p-3 border border-charcoal-soft bg-paper-dark rounded-tactile space-y-2">

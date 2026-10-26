@@ -9,6 +9,22 @@ export interface Point3D {
   z: number;
 }
 
+export type EyeTrackingState = 'TRACKING' | 'BLINKING' | 'OCCLUDED' | 'NOT_DETECTED';
+
+export interface SingleEyeTelemetry {
+  anatomicalSide: 'LEFT' | 'RIGHT'; // Anatomical side (OS = Left, OD = Right)
+  medicalAbbr: 'OS' | 'OD'; // OS = Oculus Sinister, OD = Oculus Dexter
+  state: EyeTrackingState;
+  irisDetected: boolean;
+  pupilDiameterMm: number;
+  apertureMm: number;
+  ear: number; // Eye Aspect Ratio
+  irisCenter: Point3D | null;
+  irisSpanPx: number;
+  gazeVector: Point3D | null;
+  confidence: number;
+}
+
 export interface PupilMetrics {
   leftPupilDiameterMm: number;
   rightPupilDiameterMm: number;
@@ -22,6 +38,13 @@ export interface PupilMetrics {
   isFixating: boolean;
   eyeOpeningRatioLeft: number;
   eyeOpeningRatioRight: number;
+}
+
+export interface BilateralMetrics extends PupilMetrics {
+  leftEye: SingleEyeTelemetry;
+  rightEye: SingleEyeTelemetry;
+  bothEyesTracked: boolean;
+  overallStatus: 'BILATERAL_LOCKED' | 'UNILATERAL_LEFT' | 'UNILATERAL_RIGHT' | 'OCCLUDED' | 'SEARCHING';
 }
 
 export interface OcularGazeVector {
@@ -46,6 +69,9 @@ export interface EyeTrackingConfig {
   showPupilWaveform: boolean;
   smoothingBeta: number;
   canonicalIrisDiameterMm: number; // Reference standard is 11.7mm
+  isMirrored: boolean;
+  aimMode: 'GAZE_VECTOR' | 'MANUAL_RETICLE';
+  manualTarget: Point2D;
 }
 
 export const CANONICAL_IRIS_MM = 11.7;

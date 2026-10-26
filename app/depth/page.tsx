@@ -424,7 +424,7 @@ export default function DepthEstimationPage() {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="font-bold text-xs uppercase tracking-technical text-ink-muted">
-                SCENE GEOMETRY // FIG. 10
+                SCENE GEOMETRY // FIG. 11
               </span>
               <StampBadge label="ONNX / WEBGPU ACCELERATED" variant="sage" />
               <StampBadge label={`BACKEND: ${backend}`} variant="charcoal" />
@@ -446,7 +446,7 @@ export default function DepthEstimationPage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Left / Center Viewport Canvas (8 cols) */}
           <div className="lg:col-span-8 space-y-4">
-            <DeskCard figure="FIG. 10-A" title="SPATIAL GEOMETRY VIEWPORT" subtitle="INTERACTIVE SCRUBBER">
+            <DeskCard figure="FIG. 11-A" title="SPATIAL GEOMETRY VIEWPORT" subtitle="INTERACTIVE SCRUBBER">
               <div
                 ref={containerRef}
                 className="relative aspect-[4/3] w-full bg-[#05070A] rounded-tactile border-2 border-charcoal-soft overflow-hidden flex items-center justify-center cursor-crosshair shadow-tactile"
@@ -591,7 +591,7 @@ export default function DepthEstimationPage() {
           {/* Right Sidebar: Palette, Calibration & Surface Normal Inspector (4 cols) */}
           <div className="lg:col-span-4 space-y-4">
             {/* Color Map Palette Selector */}
-            <DeskCard figure="FIG. 10-B" title="DEPTH COLORMAPS" subtitle="SPECTRAL ENCODING">
+            <DeskCard figure="FIG. 11-B" title="DEPTH COLORMAPS" subtitle="SPECTRAL ENCODING">
               <div className="space-y-2">
                 {PALETTES.map((p) => {
                   const isSelected = config.palette === p.id;
@@ -625,7 +625,7 @@ export default function DepthEstimationPage() {
             </DeskCard>
 
             {/* Depth Clipping Calibration */}
-            <DeskCard figure="FIG. 10-C" title="RANGE CALIBRATION" subtitle="NEAR / FAR CLIP">
+            <DeskCard figure="FIG. 11-C" title="RANGE CALIBRATION" subtitle="NEAR / FAR CLIP">
               <div className="space-y-4">
                 <div>
                   <div className="flex justify-between text-xs font-mono text-ink-muted mb-1">
@@ -680,7 +680,7 @@ export default function DepthEstimationPage() {
             </DeskCard>
 
             {/* 3D Surface Normal Probe Telemetry */}
-            <DeskCard figure="FIG. 10-D" title="3D SURFACE NORMAL PROBE" subtitle="RETICLE TELEMETRY">
+            <DeskCard figure="FIG. 11-D" title="3D SURFACE NORMAL PROBE" subtitle="RETICLE TELEMETRY">
               <div className="space-y-3 font-mono text-xs">
                 <div className="p-3 bg-paper-dark rounded-[2px] border border-charcoal-soft space-y-2">
                   <div className="flex justify-between items-center text-ink-muted">

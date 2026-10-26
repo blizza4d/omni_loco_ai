@@ -235,7 +235,7 @@ export default function SegmentationPage() {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="font-bold text-xs uppercase tracking-technical text-ink-muted">
-                INTERACTIVE CV // FIG. 09
+                INTERACTIVE CV // FIG. 10
               </span>
               <StampBadge label="SAM / ONNX EMBEDDING" variant="sage" />
               <StampBadge label={`ACCEL: ${backend}`} variant="charcoal" />
@@ -431,7 +431,7 @@ export default function SegmentationPage() {
 
           {/* Right Sidebar: Cutout Inspector & Telemetry */}
           <div className="space-y-4">
-            <DeskCard figure="FIG. 09-A" title="ISOLATED CUTOUT TELEMETRY">
+            <DeskCard figure="FIG. 10-A" title="ISOLATED CUTOUT TELEMETRY">
               <div className="space-y-4">
                 {/* Cutout Preview (with alpha checkerboard background) */}
                 <div className="border border-charcoal-soft rounded-tactile overflow-hidden bg-[repeating-conic-gradient(#3a3a3a_0%_25%,#262626_0%_50%)] bg-[length:16px_16px] aspect-video flex items-center justify-center relative">

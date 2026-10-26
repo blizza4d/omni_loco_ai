@@ -69,7 +69,7 @@ export function ClassifiedExperimentModal({
               </div>
               <div className="flex justify-between pt-1">
                 <span className="text-ink-muted">NEURAL WORKLOAD:</span>
-                <span className="font-bold">11 MULTIMODAL INFERENCE MODELS</span>
+                <span className="font-bold">MULTIMODAL INFERENCE SUITE (100% LOCAL)</span>
               </div>
               <div className="flex justify-between pt-1">
                 <span className="text-ink-muted">DATA TRANSMISSION:</span>

@@ -266,7 +266,7 @@ export default function FingerCountingPage() {
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="font-bold text-xs uppercase tracking-technical text-ink-muted">
-                VISION & KINEMATICS // FIG. 11
+                VISION & KINEMATICS // FIG. 12
               </span>
               <StampBadge label="21-LANDMARK CLASSIFIER" variant="sage" />
               <StampBadge label={`ACCEL: ${backendInUse}`} variant="charcoal" />
@@ -345,7 +345,7 @@ export default function FingerCountingPage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
           {/* Viewport Canvas (8 cols) */}
           <div className="lg:col-span-8 space-y-4">
-            <DeskCard figure="FIG. 11-A" title="OPTICAL SENSOR VIEWPORT" subtitle="SKELETON & FINGER HUD">
+            <DeskCard figure="FIG. 12-A" title="OPTICAL SENSOR VIEWPORT" subtitle="SKELETON & FINGER HUD">
               <div className="relative aspect-[4/3] w-full bg-[#05070A] rounded-tactile border-2 border-charcoal-soft overflow-hidden flex items-center justify-center shadow-tactile">
                 {/* Background Video Stream */}
                 <video
@@ -442,7 +442,7 @@ export default function FingerCountingPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Right Hand Card */}
               <DeskCard
-                figure="FIG. 11-B"
+                figure="FIG. 12-B"
                 title="RIGHT HAND TELEMETRY"
                 subtitle={uiResult.rightHand ? `${uiResult.rightHand.stableCount} OPEN` : 'NO DETECT'}
               >
@@ -488,7 +488,7 @@ export default function FingerCountingPage() {
 
               {/* Left Hand Card */}
               <DeskCard
-                figure="FIG. 11-C"
+                figure="FIG. 12-C"
                 title="LEFT HAND TELEMETRY"
                 subtitle={uiResult.leftHand ? `${uiResult.leftHand.stableCount} OPEN` : 'NO DETECT'}
               >
@@ -538,7 +538,7 @@ export default function FingerCountingPage() {
           <div className="lg:col-span-4 space-y-4">
             {/* Configurable Action Mapping Panel */}
             <DeskCard
-              figure="FIG. 11-D"
+              figure="FIG. 12-D"
               title="CONFIGURABLE ACTION MAPPING"
               subtitle="COUNTS 0 THROUGH 5"
             >
@@ -599,7 +599,7 @@ export default function FingerCountingPage() {
 
             {/* Stable Count Change History Ledger */}
             <DeskCard
-              figure="FIG. 11-E"
+              figure="FIG. 12-E"
               title="COUNT TRANSITION LEDGER"
               subtitle="EVENT CHRONOLOGY"
             >

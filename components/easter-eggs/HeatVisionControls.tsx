@@ -4,13 +4,15 @@ import React from 'react';
 import {
   HeatVisionConfig,
   HeatVisionColor,
+  DEFAULT_HEAT_VISION_CONFIG,
 } from '@/modules/easter-eggs/heat-vision-renderer';
-import { Flame, Volume2, VolumeX, Sparkles, ZapOff, Sliders } from 'lucide-react';
+import { Flame, Volume2, VolumeX, Sparkles, ZapOff, RotateCcw, Crosshair, Eye } from 'lucide-react';
 
 interface HeatVisionControlsProps {
   config: HeatVisionConfig;
   onChange: (config: HeatVisionConfig) => void;
   onDisengage: () => void;
+  onReset?: () => void;
 }
 
 const COLOR_OPTIONS: { id: HeatVisionColor; label: string; preview: string }[] = [
@@ -24,6 +26,7 @@ export function HeatVisionControls({
   config,
   onChange,
   onDisengage,
+  onReset,
 }: HeatVisionControlsProps) {
   if (!config.enabled) return null;
 
@@ -72,6 +75,37 @@ export function HeatVisionControls({
           </div>
         </div>
 
+        {/* Aiming Mode Selector */}
+        <div>
+          <span className="text-[10px] text-paper-cream/70 uppercase font-bold block mb-1.5">
+            AIMING TARGET VECTOR:
+          </span>
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              onClick={() => onChange({ ...config, aimMode: 'GAZE_VECTOR' })}
+              className={`flex items-center justify-center gap-1 py-1 px-2 border rounded-[2px] text-[10px] transition-all ${
+                config.aimMode !== 'MANUAL_RETICLE'
+                  ? 'border-brick-red bg-brick-red/20 text-brick-red font-bold'
+                  : 'border-white/20 text-paper-cream/70 hover:text-white'
+              }`}
+            >
+              <Eye className="w-3 h-3" />
+              <span>3D GAZE VECTOR</span>
+            </button>
+            <button
+              onClick={() => onChange({ ...config, aimMode: 'MANUAL_RETICLE' })}
+              className={`flex items-center justify-center gap-1 py-1 px-2 border rounded-[2px] text-[10px] transition-all ${
+                config.aimMode === 'MANUAL_RETICLE'
+                  ? 'border-brick-red bg-brick-red/20 text-brick-red font-bold'
+                  : 'border-white/20 text-paper-cream/70 hover:text-white'
+              }`}
+            >
+              <Crosshair className="w-3 h-3" />
+              <span>MANUAL RETICLE</span>
+            </button>
+          </div>
+        </div>
+
         {/* Beam Intensity Slider */}
         <div>
           <div className="flex justify-between items-center mb-1">
@@ -95,7 +129,7 @@ export function HeatVisionControls({
           />
         </div>
 
-        {/* Toggle options: Sound, Sparks, Mode */}
+        {/* Toggle options: Sound, Sparks */}
         <div className="grid grid-cols-2 gap-2 pt-1 border-t border-white/10">
           {/* Sound Toggle */}
           <button
@@ -128,14 +162,31 @@ export function HeatVisionControls({
           </button>
         </div>
 
-        {/* Big Disengage Button */}
-        <button
-          onClick={onDisengage}
-          className="w-full mt-2 py-1.5 px-3 border-2 border-brick-red bg-brick-red text-white font-bold rounded-[2px] hover:bg-brick-red/90 active:scale-98 transition-all flex items-center justify-center gap-1.5 text-xs shadow-md"
-        >
-          <ZapOff className="w-4 h-4" />
-          <span>DISENGAGE HEAT VISION [V]</span>
-        </button>
+        {/* Actions: Reset & Disengage */}
+        <div className="flex items-center gap-2 pt-1">
+          <button
+            onClick={() => {
+              if (onReset) {
+                onReset();
+              } else {
+                onChange({ ...DEFAULT_HEAT_VISION_CONFIG, enabled: true });
+              }
+            }}
+            className="py-1.5 px-2 border border-white/20 rounded-[2px] hover:border-white/60 text-paper-cream/70 hover:text-white text-[10px] flex items-center justify-center gap-1 transition-all"
+            title="Reset Heat Vision parameters to defaults"
+          >
+            <RotateCcw className="w-3 h-3" />
+            <span>RESET</span>
+          </button>
+
+          <button
+            onClick={onDisengage}
+            className="flex-1 py-1.5 px-3 border-2 border-brick-red bg-brick-red text-white font-bold rounded-[2px] hover:bg-brick-red/90 active:scale-98 transition-all flex items-center justify-center gap-1.5 text-xs shadow-md"
+          >
+            <ZapOff className="w-3.5 h-3.5" />
+            <span>DISENGAGE [V]</span>
+          </button>
+        </div>
       </div>
     </aside>
   );

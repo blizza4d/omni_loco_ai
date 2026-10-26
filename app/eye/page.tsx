@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { GlobalNav } from '@/components/ui/GlobalNav';
 import { DeskCard } from '@/components/ui/DeskCard';
@@ -12,7 +12,7 @@ import { MediaPipeTaskRunner } from '@/core/mediapipe/task-runner';
 import { PupillometryAnalyzer } from '@/modules/eye/pupillometry';
 import { EyeRenderer } from '@/modules/eye/eye-renderer';
 import { generateSyntheticEyeLandmarks } from '@/modules/eye/synthetic-eye';
-import { PupilMetrics, EyeTrackingConfig } from '@/modules/eye/types';
+import { BilateralMetrics, EyeTrackingConfig, Point3D } from '@/modules/eye/types';
 import { useSystemStore } from '@/core/store';
 import {
   Eye,
@@ -22,9 +22,12 @@ import {
   Video,
   VideoOff,
   Sparkles,
-  Gauge,
   Sliders,
   Flame,
+  ShieldAlert,
+  Crosshair,
+  FlipHorizontal,
+  CheckCircle2,
 } from 'lucide-react';
 import {
   HeatVisionRenderer,
@@ -38,46 +41,80 @@ import { unlockAchievement } from '@/modules/easter-eggs/achievements';
 export default function EyeTrackingPage() {
   const [syntheticMode, setSyntheticMode] = useState(false);
   const [modelBackend, setModelBackend] = useState('INITIALIZING...');
+  const [discoveredHeatVision, setDiscoveredHeatVision] = useState(false);
+
   const [config, setConfig] = useState<EyeTrackingConfig>({
     showIrisContours: true,
     showGazeVectors: true,
     showPupilWaveform: true,
     smoothingBeta: 0.01,
     canonicalIrisDiameterMm: 11.7,
+    isMirrored: true,
+    aimMode: 'GAZE_VECTOR',
+    manualTarget: { x: 320, y: 240 },
   });
 
-  const [metrics, setMetrics] = useState<PupilMetrics>({
-    leftPupilDiameterMm: 3.5,
-    rightPupilDiameterMm: 3.5,
-    meanPupilDiameterMm: 3.5,
-    anisocoriaMm: 0,
-    pupilDilationRatio: 0.35,
-    saccadicVelocityDegSec: 0,
-    blinkFrequencyPerMin: 14,
-    cognitiveLoadIndex: 42,
-    pupillaryUnrestIndex: 1.2,
-    isFixating: true,
-    eyeOpeningRatioLeft: 0.85,
-    eyeOpeningRatioRight: 0.85,
-  });
+  const configRef = useRef<EyeTrackingConfig>(config);
+  useEffect(() => {
+    configRef.current = config;
+  }, [config]);
+
+  const analyzerRef = useRef<PupillometryAnalyzer>(new PupillometryAnalyzer());
+  const [metrics, setMetrics] = useState<BilateralMetrics>(() =>
+    analyzerRef.current.generateIdleMetrics()
+  );
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const viewportContainerRef = useRef<HTMLDivElement | null>(null);
   const taskRunnerRef = useRef<MediaPipeTaskRunner>(new MediaPipeTaskRunner());
-  const analyzerRef = useRef<PupillometryAnalyzer>(new PupillometryAnalyzer());
   const rendererRef = useRef<EyeRenderer>(new EyeRenderer());
-  const animFrameRef = useRef<number | null>(null);
   const lastUiUpdateRef = useRef<number>(0);
 
+  // Status badge multi-click Easter egg trigger
+  const badgeClickCountRef = useRef<number>(0);
+  const lastBadgeClickRef = useRef<number>(0);
+
   // Heat Vision Apex Override State & Audio Synthesizer
-  const [heatVisionConfig, setHeatVisionConfig] = useState<HeatVisionConfig>(DEFAULT_HEAT_VISION_CONFIG);
+  const [heatVisionConfig, setHeatVisionConfig] = useState<HeatVisionConfig>(
+    DEFAULT_HEAT_VISION_CONFIG
+  );
   const heatVisionConfigRef = useRef<HeatVisionConfig>(DEFAULT_HEAT_VISION_CONFIG);
   useEffect(() => {
     heatVisionConfigRef.current = heatVisionConfig;
   }, [heatVisionConfig]);
 
   const heatVisionRendererRef = useRef<HeatVisionRenderer>(new HeatVisionRenderer());
-  const heatVisionAudioRef = useRef<HeatVisionAudioSynthesizer>(new HeatVisionAudioSynthesizer());
+  const heatVisionAudioRef = useRef<HeatVisionAudioSynthesizer>(
+    new HeatVisionAudioSynthesizer()
+  );
+
+  // Double blink detection state
   const blinkHistoryRef = useRef<number[]>([]);
+  const lastDoubleBlinkTriggerRef = useRef<number>(0);
+
+  // Load secret discovery state from localStorage on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('omni-heat-vision-discovered');
+      if (stored === 'true') {
+        setDiscoveredHeatVision(true);
+      }
+    }
+  }, []);
+
+  const triggerHeatVisionToggle = useCallback((source: string) => {
+    setHeatVisionConfig((prev) => {
+      const next = !prev.enabled;
+      if (next) {
+        unlockAchievement('HEAT_SIGNATURE');
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('omni-heat-vision-discovered', 'true');
+          setDiscoveredHeatVision(true);
+        }
+      }
+      return { ...prev, enabled: next };
+    });
+  }, []);
 
   // Synchronize procedural laser sound
   useEffect(() => {
@@ -110,18 +147,16 @@ export default function EyeTrackingPage() {
       }
       if (e.key === 'v' || e.key === 'V') {
         e.preventDefault();
-        setHeatVisionConfig((prev) => {
-          const next = !prev.enabled;
-          if (next) unlockAchievement('HEAT_SIGNATURE');
-          return { ...prev, enabled: next };
-        });
+        triggerHeatVisionToggle('KEYBOARD_V');
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [triggerHeatVisionToggle]);
 
-  const { videoRef, isStreaming, startCamera, stopCamera, errorMessage } = useCamera({ autoStart: true });
+  const { videoRef, isStreaming, startCamera, stopCamera, errorMessage } = useCamera({
+    autoStart: true,
+  });
 
   // Initialize MediaPipe FaceLandmarker with cleanup
   useEffect(() => {
@@ -129,7 +164,9 @@ export default function EyeTrackingPage() {
     taskRunnerRef.current.initFaceLandmarker().then((success) => {
       if (!unmounted) {
         setModelBackend(
-          success ? `MEDIAPIPE (${taskRunnerRef.current.getBackend()})` : 'SYNTHETIC FALLBACK'
+          success
+            ? `MEDIAPIPE (${taskRunnerRef.current.getBackend()})`
+            : 'SYNTHETIC FALLBACK'
         );
       }
     });
@@ -144,17 +181,46 @@ export default function EyeTrackingPage() {
 
   useEffect(() => {
     setPerfStats({
-      activeModule: 'PUPILLOMETRY LAB',
+      activeModule: 'FIG. 08 — BILATERAL EYE & IRIS TRACKING',
       activeModel: 'face_landmarker.task',
       fps: 30,
-      p50Ms: 16,
-      p95Ms: 22,
+      p50Ms: 14,
+      p95Ms: 20,
       trackingStatus: isStreaming ? 'TRACKING_ACTIVE' : 'SEARCHING',
       streamStatus: isStreaming ? 'STREAMING' : 'STANDBY',
     });
   }, [isStreaming, setPerfStats]);
 
-  // Main 60 FPS Tracking & Rendering Loop
+  // Handle manual reticle aiming by tracking pointer movements over viewport
+  const handleViewportPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (config.aimMode !== 'MANUAL_RETICLE') return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * canvas.width;
+    const y = ((e.clientY - rect.top) / rect.height) * canvas.height;
+
+    const target = { x: Math.max(0, Math.min(canvas.width, x)), y: Math.max(0, Math.min(canvas.height, y)) };
+    setConfig((prev) => ({ ...prev, manualTarget: target }));
+    setHeatVisionConfig((prev) => ({ ...prev, manualTarget: target }));
+  };
+
+  // Status badge multi-click handler (Easter Egg trigger)
+  const handleStatusBadgeClick = () => {
+    const now = performance.now();
+    if (now - lastBadgeClickRef.current > 1800) {
+      badgeClickCountRef.current = 0;
+    }
+    lastBadgeClickRef.current = now;
+    badgeClickCountRef.current += 1;
+
+    if (badgeClickCountRef.current >= 5) {
+      badgeClickCountRef.current = 0;
+      triggerHeatVisionToggle('BADGE_5_CLICKS');
+    }
+  };
+
+  // Main Tracking & Rendering Loop
   useEffect(() => {
     let active = true;
 
@@ -166,12 +232,12 @@ export default function EyeTrackingPage() {
       const width = canvas?.width || 640;
       const height = canvas?.height || 480;
 
-      let landmarks: any = null;
+      let landmarks: Point3D[] | null = null;
 
       if (!syntheticMode && videoRef.current && videoRef.current.readyState >= 2) {
         const faceResult = taskRunnerRef.current.detectFace(videoRef.current, now);
         if (faceResult && faceResult.faceLandmarks && faceResult.faceLandmarks[0]) {
-          landmarks = faceResult.faceLandmarks[0];
+          landmarks = faceResult.faceLandmarks[0] as Point3D[];
         }
       }
 
@@ -179,56 +245,91 @@ export default function EyeTrackingPage() {
         landmarks = generateSyntheticEyeLandmarks(now);
       }
 
+      const currentConfig = configRef.current;
+      const currentHeatConfig = heatVisionConfigRef.current;
+
       if (landmarks) {
         const currentMetrics = analyzerRef.current.process(landmarks, now);
         const pupilHistory = analyzerRef.current.getPupilHistory();
 
-        // Double blink detection for secret ocular gesture
-        if (landmarks[159] && landmarks[145] && landmarks[386] && landmarks[374]) {
-          const leftGap = Math.abs(landmarks[159].y - landmarks[145].y);
-          const rightGap = Math.abs(landmarks[386].y - landmarks[374].y);
-          if (leftGap < 0.016 && rightGap < 0.016) {
-            const hist = blinkHistoryRef.current;
-            const lastBlink = hist[hist.length - 1] || 0;
-            if (now - lastBlink > 220) {
-              hist.push(now);
-              if (hist.length >= 2) {
-                if (now - hist[hist.length - 2] < 650) {
-                  unlockAchievement('DOUBLE_TAKE');
-                  setHeatVisionConfig((prev) => {
-                    const next = !prev.enabled;
-                    if (next) unlockAchievement('HEAT_SIGNATURE');
-                    return { ...prev, enabled: next };
-                  });
-                  blinkHistoryRef.current = [];
-                }
+        // Secret Easter Egg: Intentional double-blink detection (with 3.5s cooldown)
+        if (
+          currentMetrics.leftEye.state === 'BLINKING' &&
+          currentMetrics.rightEye.state === 'BLINKING'
+        ) {
+          const hist = blinkHistoryRef.current;
+          const lastBlink = hist[hist.length - 1] || 0;
+          if (now - lastBlink > 200) {
+            hist.push(now);
+            if (hist.length >= 2) {
+              const prevBlink = hist[hist.length - 2]!;
+              if (now - prevBlink < 650 && now - lastDoubleBlinkTriggerRef.current > 3500) {
+                lastDoubleBlinkTriggerRef.current = now;
+                unlockAchievement('DOUBLE_TAKE');
+                triggerHeatVisionToggle('DOUBLE_BLINK');
+                blinkHistoryRef.current = [];
               }
             }
           }
         }
 
-        // Render directly to Canvas at 60 FPS
+        // Render Ocular Contours, Irises, Reticle, and Waveform
         if (ctx) {
-          rendererRef.current.render(ctx, width, height, landmarks, currentMetrics, pupilHistory, config);
+          rendererRef.current.render(
+            ctx,
+            width,
+            height,
+            landmarks,
+            currentMetrics,
+            pupilHistory,
+            currentConfig
+          );
 
-          // Render Homelander Heat Vision dual lasers
-          if (heatVisionConfigRef.current.enabled) {
-            const leftIris = landmarks[468];
-            const rightIris = landmarks[473];
-            if (leftIris && rightIris) {
-              const leftPos = { x: (1 - leftIris.x) * width, y: leftIris.y * height };
-              const rightPos = { x: (1 - rightIris.x) * width, y: rightIris.y * height };
-              heatVisionRendererRef.current.render(
-                ctx,
-                width,
-                height,
-                leftPos,
-                rightPos,
-                null,
-                heatVisionConfigRef.current,
-                now
-              );
+          // Render Homelander Heat Vision if engaged
+          if (currentHeatConfig.enabled) {
+            const isMirrored = currentConfig.isMirrored;
+            const toScreenX = (normX: number) =>
+              isMirrored ? (1 - normX) * width : normX * width;
+            const toScreenY = (normY: number) => normY * height;
+
+            // Only track iris center if that specific eye is active (NOT occluded)
+            const leftIris =
+              currentMetrics.leftEye.state === 'TRACKING' && landmarks[473]
+                ? {
+                    x: toScreenX(landmarks[473].x),
+                    y: toScreenY(landmarks[473].y),
+                  }
+                : null;
+
+            const rightIris =
+              currentMetrics.rightEye.state === 'TRACKING' && landmarks[468]
+                ? {
+                    x: toScreenX(landmarks[468].x),
+                    y: toScreenY(landmarks[468].y),
+                  }
+                : null;
+
+            // Compute target point for gaze vector
+            let targetPoint: { x: number; y: number } | null = null;
+            if (currentHeatConfig.aimMode === 'MANUAL_RETICLE' && currentConfig.manualTarget) {
+              targetPoint = currentConfig.manualTarget;
+            } else if (leftIris || rightIris) {
+              // Gaze vector targeting
+              const midX = (leftIris && rightIris) ? (leftIris.x + rightIris.x) / 2 : (leftIris ? leftIris.x : rightIris!.x);
+              const midY = (leftIris && rightIris) ? (leftIris.y + rightIris.y) / 2 : (leftIris ? leftIris.y : rightIris!.y);
+              targetPoint = { x: midX, y: midY + height * 0.45 };
             }
+
+            heatVisionRendererRef.current.render(
+              ctx,
+              width,
+              height,
+              leftIris,
+              rightIris,
+              targetPoint,
+              currentHeatConfig,
+              now
+            );
           }
         }
 
@@ -241,34 +342,48 @@ export default function EyeTrackingPage() {
         ctx.clearRect(0, 0, width, height);
       }
 
-      animFrameRef.current = requestAnimationFrame(tick);
+      requestAnimationFrame(tick);
     };
 
-    animFrameRef.current = requestAnimationFrame(tick);
-
+    const handle = requestAnimationFrame(tick);
     return () => {
       active = false;
-      if (animFrameRef.current) {
-        cancelAnimationFrame(animFrameRef.current);
-      }
+      cancelAnimationFrame(handle);
     };
-  }, [syntheticMode, isStreaming, config, videoRef]);
+  }, [syntheticMode, isStreaming, videoRef, triggerHeatVisionToggle]);
 
-  // Export session metrics (JSON)
   const exportSessionJSON = () => {
     const data = {
       timestamp: new Date().toISOString(),
-      modelBackend,
+      module: 'FIG. 08 — BILATERAL EYE & IRIS TRACKING',
       metrics,
       pupilHistory: analyzerRef.current.getPupilHistory(),
-      recentSaccades: analyzerRef.current.getRecentSaccades(),
+      saccades: analyzerRef.current.getRecentSaccades(),
+      config,
     };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(data, null, 2));
-    a.download = `omni-pupillometry-telemetry-${Date.now()}.json`;
-    document.body.appendChild(a);
+    a.href = url;
+    a.download = `omni-loco-bilateral-eye-${Date.now()}.json`;
     a.click();
     a.remove();
+  };
+
+  const getStatusBadgeVariant = (status: string): 'sage' | 'brick' | 'charcoal' | 'ink' => {
+    switch (status) {
+      case 'BILATERAL_LOCKED':
+      case 'TRACKING':
+        return 'sage';
+      case 'BLINKING':
+      case 'UNILATERAL_LEFT':
+      case 'UNILATERAL_RIGHT':
+        return 'ink';
+      case 'OCCLUDED':
+        return 'brick';
+      default:
+        return 'charcoal';
+    }
   };
 
   return (
@@ -284,35 +399,38 @@ export default function EyeTrackingPage() {
               <span className="font-bold text-xs uppercase tracking-technical text-ink-muted">
                 OCULAR BIOMETRICS // FIG. 08
               </span>
-              <StampBadge label="SUB-MM PUPILLOMETRY" variant="sage" />
+              <StampBadge label="BILATERAL IRIS TRACKING" variant="sage" />
               <StampBadge label={`VISION: ${modelBackend}`} variant="charcoal" />
             </div>
             <h1 className="text-xl md:text-2xl font-bold tracking-technical text-charcoal-soft uppercase">
-              3D OCULAR PUPILLOMETRY & GAZE TELEMETRY RIG
+              FIG. 08 — BILATERAL EYE &amp; IRIS TRACKING
             </h1>
             <p className="text-xs text-ink-muted max-w-2xl mt-1 leading-relaxed">
-              Sub-millimeter pupil diameter measurement, Pupillary Light Reflex (PLR), micro-saccadic velocity dynamics, and 3D optical gaze raycast vectors on client-side WebGPU.
+              Anatomical bilateral tracking of Oculus Sinister (OS) &amp; Oculus Dexter (OD) with independent pupil diameter, occlusion detection, Pupillary Light Reflex (PLR), and 3D optical raycast vectors.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {/* Heat Vision Apex Override Button */}
             <button
-              onClick={() => {
-                setHeatVisionConfig((prev) => {
-                  const next = !prev.enabled;
-                  if (next) unlockAchievement('HEAT_SIGNATURE');
-                  return { ...prev, enabled: next };
-                });
-              }}
+              onClick={() => triggerHeatVisionToggle('HEADER_BUTTON')}
               className={`px-3 py-1 text-xs font-bold font-mono uppercase border-2 rounded-tactile flex items-center gap-1.5 transition-all ${
                 heatVisionConfig.enabled
-                  ? 'border-brick-red bg-brick-red text-white shadow-[0_0_15px_rgba(255,42,16,0.4)]'
-                  : 'border-brick-red text-brick-red hover:bg-brick-red/10'
+                  ? 'border-brick-red bg-brick-red text-white shadow-[0_0_15px_rgba(255,42,16,0.5)] animate-pulse'
+                  : discoveredHeatVision
+                  ? 'border-brick-red text-brick-red hover:bg-brick-red/10'
+                  : 'border-charcoal-soft text-ink-muted hover:border-brick-red hover:text-brick-red opacity-80'
               }`}
-              title="Toggle Homelander Heat Vision [V]"
+              title="Toggle Secret Homelander Heat Vision [Shortcut: V]"
             >
-              <Flame className="w-3.5 h-3.5" />
-              <span>HEAT VISION [V]</span>
+              <Flame className="w-3.5 h-3.5 text-brick-red" />
+              <span>
+                {heatVisionConfig.enabled
+                  ? 'HEAT VISION: ENGAGED [V]'
+                  : discoveredHeatVision
+                  ? 'HEAT VISION [V]'
+                  : 'OVERRIDE [V]'}
+              </span>
             </button>
 
             <Link href="/gaze">
@@ -323,7 +441,7 @@ export default function EyeTrackingPage() {
             </Link>
             <Button variant="outline" size="sm" onClick={exportSessionJSON} className="gap-1.5">
               <Download className="w-3.5 h-3.5" />
-              <span>EXPORT TELEMETRY</span>
+              <span>EXPORT JSON</span>
             </Button>
             <Button
               variant={syntheticMode ? 'brick' : 'outline'}
@@ -347,15 +465,20 @@ export default function EyeTrackingPage() {
         </div>
 
         {errorMessage && (
-          <div className="p-3 border-2 border-brick-red bg-brick-red/10 rounded-tactile text-xs text-brick-red">
-            HARDWARE NOTICE: {errorMessage}
+          <div className="p-3 border-2 border-brick-red bg-brick-red/10 rounded-tactile text-xs text-brick-red flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4 shrink-0" />
+            <span>HARDWARE NOTICE: {errorMessage}</span>
           </div>
         )}
 
-        {/* Primary Viewport & Waveform Card */}
+        {/* Primary Viewport & Instrumentation Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div className="lg:col-span-2 space-y-4">
-            <div className="relative aspect-[4/3] w-full border-2 border-charcoal-soft rounded-tactile overflow-hidden bg-paper-dark shadow-tactile-lg">
+            <div
+              ref={viewportContainerRef}
+              onPointerMove={handleViewportPointerMove}
+              className="relative aspect-[4/3] w-full border-2 border-charcoal-soft rounded-tactile overflow-hidden bg-paper-dark shadow-tactile-lg select-none"
+            >
               {/* Underlying Camera Feed */}
               <video
                 ref={videoRef}
@@ -364,7 +487,7 @@ export default function EyeTrackingPage() {
                 muted
                 className={`absolute inset-0 w-full h-full object-cover ${
                   syntheticMode ? 'hidden' : 'block'
-                }`}
+                } ${config.isMirrored ? 'scale-x-[-1]' : ''}`}
               />
 
               {/* High-Precision Ocular Tracking Canvas */}
@@ -372,17 +495,31 @@ export default function EyeTrackingPage() {
                 ref={canvasRef}
                 width={640}
                 height={480}
-                className="absolute inset-0 w-full h-full object-cover z-10"
+                className="absolute inset-0 w-full h-full object-cover z-10 pointer-events-none"
               />
 
-              {/* Viewport Status Header Stamp */}
-              <div className="absolute top-3 left-3 z-20 flex items-center gap-2">
+              {/* Top Viewport Status Stamps */}
+              <div className="absolute top-3 left-3 z-20 flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleStatusBadgeClick}
+                  className="focus:outline-none transition-transform active:scale-95 cursor-pointer"
+                  title="Tracking State Stamp (Hint: Click 5x for Easter Egg)"
+                >
+                  <StampBadge
+                    label={`SYSTEM: ${metrics.overallStatus}`}
+                    variant={getStatusBadgeVariant(metrics.overallStatus)}
+                  />
+                </button>
                 <StampBadge
                   label={metrics.isFixating ? 'FIXATION LOCKED' : 'SACCADIC BURST'}
                   variant={metrics.isFixating ? 'sage' : 'brick'}
                 />
                 <span className="text-[10px] font-mono px-2 py-0.5 bg-paper-cream/90 border border-charcoal-soft rounded-[2px] text-charcoal-soft">
                   CANONICAL REF: 11.7 MM
+                </span>
+                <span className="text-[10px] font-mono px-2 py-0.5 bg-paper-cream/90 border border-charcoal-soft rounded-[2px] text-ink-muted">
+                  {config.isMirrored ? 'VIEW: MIRRORED (SELFIE)' : 'VIEW: SENSOR RAW'}
                 </span>
               </div>
 
@@ -393,16 +530,29 @@ export default function EyeTrackingPage() {
                 onDisengage={() =>
                   setHeatVisionConfig((prev) => ({ ...prev, enabled: false }))
                 }
+                onReset={() =>
+                  setHeatVisionConfig({ ...DEFAULT_HEAT_VISION_CONFIG, enabled: true })
+                }
               />
             </div>
 
-            {/* Quick Display Controls */}
+            {/* Viewport Display Controls Toolbar */}
             <div className="p-3 border border-charcoal-soft bg-paper-cream-dark/40 rounded-tactile flex flex-wrap items-center justify-between gap-3 text-xs">
               <span className="font-bold text-ink-muted flex items-center gap-1.5">
                 <Sliders className="w-3.5 h-3.5 text-charcoal-soft" />
-                OVERLAY LAYERS:
+                OVERLAY CONTROLS:
               </span>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-4">
+                <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
+                  <input
+                    type="checkbox"
+                    checked={config.isMirrored}
+                    onChange={(e) => setConfig({ ...config, isMirrored: e.target.checked })}
+                    className="accent-charcoal-soft"
+                  />
+                  <FlipHorizontal className="w-3 h-3 text-ink-muted" />
+                  <span>MIRROR FEED</span>
+                </label>
                 <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
                   <input
                     type="checkbox"
@@ -410,7 +560,7 @@ export default function EyeTrackingPage() {
                     onChange={(e) => setConfig({ ...config, showIrisContours: e.target.checked })}
                     className="accent-charcoal-soft"
                   />
-                  <span>IRIS & PUPIL ELLIPSE</span>
+                  <span>IRIS &amp; PUPILS</span>
                 </label>
                 <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
                   <input
@@ -419,7 +569,7 @@ export default function EyeTrackingPage() {
                     onChange={(e) => setConfig({ ...config, showGazeVectors: e.target.checked })}
                     className="accent-charcoal-soft"
                   />
-                  <span>3D OPTICAL GAZE VECTORS</span>
+                  <span>3D GAZE RAYS</span>
                 </label>
                 <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
                   <input
@@ -428,31 +578,91 @@ export default function EyeTrackingPage() {
                     onChange={(e) => setConfig({ ...config, showPupilWaveform: e.target.checked })}
                     className="accent-charcoal-soft"
                   />
-                  <span>PUPILLOMETRY STRIP CHART</span>
+                  <span>WAVEFORM STRIP</span>
                 </label>
+                <button
+                  onClick={() =>
+                    setConfig((prev) => ({
+                      ...prev,
+                      aimMode: prev.aimMode === 'GAZE_VECTOR' ? 'MANUAL_RETICLE' : 'GAZE_VECTOR',
+                    }))
+                  }
+                  className={`flex items-center gap-1 px-2 py-0.5 border rounded-[2px] text-[10px] font-bold transition-all ${
+                    config.aimMode === 'MANUAL_RETICLE'
+                      ? 'border-brick-red bg-brick-red/10 text-brick-red'
+                      : 'border-charcoal-soft/40 text-ink-muted hover:text-charcoal-soft'
+                  }`}
+                >
+                  <Crosshair className="w-3 h-3" />
+                  <span>{config.aimMode === 'MANUAL_RETICLE' ? 'RETICLE ACTIVE' : 'GAZE AIM'}</span>
+                </button>
               </div>
             </div>
           </div>
 
-          {/* Right Instrument Telemetry Cluster */}
+          {/* Right Instrument Telemetry Clusters */}
           <div className="space-y-4">
-            <DeskCard figure="FIG. 08-A" title="PUPILLOMETRIC TELEMETRY">
+            {/* FIG. 08-A — Anatomical Bilateral Telemetry */}
+            <DeskCard figure="FIG. 08-A" title="ANATOMICAL BILATERAL TELEMETRY">
               <div className="space-y-4">
-                {/* Left & Right Pupil Diameter */}
+                {/* Left (OS) vs Right (OD) Individual Eye Cards */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="p-3 border border-charcoal-soft bg-paper-dark rounded-tactile text-center">
-                    <span className="text-[10px] text-ink-muted block">LEFT PUPIL (OS)</span>
-                    <span className="text-2xl font-bold text-charcoal-soft tabular-nums">
-                      {metrics.leftPupilDiameterMm.toFixed(2)}
+                  {/* Left Eye (OS) */}
+                  <div
+                    className={`p-3 border rounded-tactile text-center transition-colors ${
+                      metrics.leftEye.state === 'OCCLUDED'
+                        ? 'border-brick-red/50 bg-brick-red/5'
+                        : 'border-charcoal-soft bg-paper-dark'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-bold text-ink-muted">LEFT (OS)</span>
+                      <StampBadge
+                        label={metrics.leftEye.state}
+                        variant={getStatusBadgeVariant(metrics.leftEye.state)}
+                      />
+                    </div>
+                    <span className="text-2xl font-bold text-charcoal-soft tabular-nums block">
+                      {metrics.leftEye.state === 'OCCLUDED'
+                        ? '---'
+                        : metrics.leftEye.pupilDiameterMm.toFixed(2)}
                     </span>
-                    <span className="text-[10px] text-sage-green block mt-0.5">MM DIAMETER</span>
+                    <span className="text-[10px] text-sage-green block mt-0.5 font-bold">
+                      {metrics.leftEye.state === 'OCCLUDED' ? 'OCCLUDED' : 'MM DIAMETER'}
+                    </span>
+                    <div className="mt-2 pt-2 border-t border-charcoal-soft/20 text-[10px] text-ink-muted flex justify-between">
+                      <span>EAR: {metrics.leftEye.ear.toFixed(2)}</span>
+                      <span>APER: {metrics.leftEye.apertureMm.toFixed(1)}mm</span>
+                    </div>
                   </div>
-                  <div className="p-3 border border-charcoal-soft bg-paper-dark rounded-tactile text-center">
-                    <span className="text-[10px] text-ink-muted block">RIGHT PUPIL (OD)</span>
-                    <span className="text-2xl font-bold text-charcoal-soft tabular-nums">
-                      {metrics.rightPupilDiameterMm.toFixed(2)}
+
+                  {/* Right Eye (OD) */}
+                  <div
+                    className={`p-3 border rounded-tactile text-center transition-colors ${
+                      metrics.rightEye.state === 'OCCLUDED'
+                        ? 'border-brick-red/50 bg-brick-red/5'
+                        : 'border-charcoal-soft bg-paper-dark'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[10px] font-bold text-ink-muted">RIGHT (OD)</span>
+                      <StampBadge
+                        label={metrics.rightEye.state}
+                        variant={getStatusBadgeVariant(metrics.rightEye.state)}
+                      />
+                    </div>
+                    <span className="text-2xl font-bold text-charcoal-soft tabular-nums block">
+                      {metrics.rightEye.state === 'OCCLUDED'
+                        ? '---'
+                        : metrics.rightEye.pupilDiameterMm.toFixed(2)}
                     </span>
-                    <span className="text-[10px] text-cyan-500 block mt-0.5">MM DIAMETER</span>
+                    <span className="text-[10px] text-cyan-600 block mt-0.5 font-bold">
+                      {metrics.rightEye.state === 'OCCLUDED' ? 'OCCLUDED' : 'MM DIAMETER'}
+                    </span>
+                    <div className="mt-2 pt-2 border-t border-charcoal-soft/20 text-[10px] text-ink-muted flex justify-between">
+                      <span>EAR: {metrics.rightEye.ear.toFixed(2)}</span>
+                      <span>APER: {metrics.rightEye.apertureMm.toFixed(1)}mm</span>
+                    </div>
                   </div>
                 </div>
 
@@ -482,7 +692,7 @@ export default function EyeTrackingPage() {
                   </div>
                 </div>
 
-                {/* Cognitive Load & Dilation Index */}
+                {/* Cognitive Load Index */}
                 <div className="p-3 border border-charcoal-soft bg-paper-dark rounded-tactile space-y-1.5">
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-ink-muted flex items-center gap-1">
@@ -510,13 +720,15 @@ export default function EyeTrackingPage() {
                         metrics.anisocoriaMm > 0.4 ? 'text-brick-red' : 'text-charcoal-soft'
                       }`}
                     >
-                      {metrics.anisocoriaMm.toFixed(2)} mm {metrics.anisocoriaMm > 0.4 ? '(DISPARITY)' : '(NORMAL)'}
+                      {metrics.anisocoriaMm.toFixed(2)} mm{' '}
+                      {metrics.anisocoriaMm > 0.4 ? '(CLINICAL ASYMMETRY)' : '(NORMAL)'}
                     </span>
                   </div>
                   <div className="py-2 flex items-center justify-between">
                     <span className="text-ink-muted">PUPILLARY UNREST (PUI):</span>
                     <span className="font-bold tabular-nums text-charcoal-soft">
-                      {metrics.pupillaryUnrestIndex.toFixed(1)} {metrics.pupillaryUnrestIndex > 3.0 ? 'FATIGUE' : 'ALERT'}
+                      {metrics.pupillaryUnrestIndex.toFixed(1)}{' '}
+                      {metrics.pupillaryUnrestIndex > 3.0 ? 'FATIGUE STATE' : 'ALERT'}
                     </span>
                   </div>
                   <div className="py-2 flex items-center justify-between">
@@ -527,7 +739,10 @@ export default function EyeTrackingPage() {
                   </div>
                   <div className="py-2 flex items-center justify-between">
                     <span className="text-ink-muted">INFERENCE PIPELINE:</span>
-                    <span className="font-bold text-sage-green">100% ON-DEVICE</span>
+                    <span className="font-bold text-sage-green flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" />
+                      100% ON-DEVICE
+                    </span>
                   </div>
                 </div>
               </div>

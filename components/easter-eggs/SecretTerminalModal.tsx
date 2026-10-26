@@ -97,7 +97,7 @@ export function SecretTerminalModal({ isOpen, onClose }: SecretTerminalModalProp
           {
             id: `out-${Date.now()}-4`,
             type: 'output',
-            text: '  modules           - List all 11 active on-device AI modules',
+            text: '  modules           - List all active on-device AI modules',
           },
           {
             id: `out-${Date.now()}-5`,

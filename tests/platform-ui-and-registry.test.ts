@@ -7,8 +7,8 @@ import {
 import { REGISTERED_MODELS } from '../core/cache';
 
 describe('Omni Loco AI: Platform Architecture, Registry & UI Validation', () => {
-  it('registers all 11 advertised multimodal neural modules', () => {
-    expect(MODULE_REGISTRY).toHaveLength(11);
+  it('registers all 12 advertised multimodal neural modules', () => {
+    expect(MODULE_REGISTRY).toHaveLength(12);
 
     const expectedFigures = [
       'FIG. 01',
@@ -22,6 +22,7 @@ describe('Omni Loco AI: Platform Architecture, Registry & UI Validation', () => 
       'FIG. 09',
       'FIG. 10',
       'FIG. 11',
+      'FIG. 12',
     ];
 
     const actualFigures = MODULE_REGISTRY.map((m) => m.figure);
@@ -53,14 +54,14 @@ describe('Omni Loco AI: Platform Architecture, Registry & UI Validation', () => 
 
     const allSummary = summaries.find((s) => s.id === 'ALL');
     expect(allSummary).toBeDefined();
-    expect(allSummary?.count).toBe(11);
+    expect(allSummary?.count).toBe(12);
 
     const visionSummary = summaries.find((s) => s.id === 'VISION');
     const simSummary = summaries.find((s) => s.id === 'SIMULATION');
     const audioSummary = summaries.find((s) => s.id === 'AUDIO');
     const classSummary = summaries.find((s) => s.id === 'CLASSIFICATION');
 
-    expect(visionSummary?.count).toBe(7);
+    expect(visionSummary?.count).toBe(8);
     expect(simSummary?.count).toBe(1);
     expect(audioSummary?.count).toBe(1);
     expect(classSummary?.count).toBe(2);
@@ -71,11 +72,11 @@ describe('Omni Loco AI: Platform Architecture, Registry & UI Validation', () => 
       (simSummary?.count || 0) +
       (audioSummary?.count || 0) +
       (classSummary?.count || 0);
-    expect(sum).toBe(11);
+    expect(sum).toBe(12);
   });
 
   it('synchronizes cache registry with active modules', () => {
-    expect(REGISTERED_MODELS).toHaveLength(11);
+    expect(REGISTERED_MODELS).toHaveLength(12);
 
     const cacheModuleIds = REGISTERED_MODELS.map((m) => m.module);
     const registryIds = MODULE_REGISTRY.map((m) => m.id);

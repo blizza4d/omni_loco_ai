@@ -180,13 +180,13 @@ export default function DashboardPage() {
                 LAB DRAFTING STATION // WORKSPACE 01
               </span>
               <StampBadge label="HARDWARE ISOLATED" variant="sage" />
-              <StampBadge label="11 SANDBOXES" variant="charcoal" />
+              <StampBadge label={`${MODULE_REGISTRY.length} SANDBOXES`} variant="charcoal" />
             </div>
             <h1 className="text-xl md:text-2xl font-bold tracking-technical text-charcoal-soft uppercase leading-snug">
               MULTIMODAL NEURAL EXPERIMENT MODULES
             </h1>
             <p className="text-xs text-ink-muted max-w-2xl mt-1.5 leading-relaxed">
-              Eleven sandboxed on-device sensory engines. Zero frames, audio buffers, or biometric vectors are transmitted over any network. Public neural weights are cached locally for zero-latency execution.
+              {MODULE_REGISTRY.length} sandboxed on-device sensory engines. Zero frames, audio buffers, or biometric vectors are transmitted over any network. Public neural weights are cached locally for zero-latency execution.
             </p>
           </div>
 
@@ -267,7 +267,7 @@ export default function DashboardPage() {
 
             <div className="hidden sm:flex items-center gap-2 text-[10px] text-ink-muted shrink-0">
               <span className="w-2 h-2 rounded-full bg-sage-green animate-pulse" />
-              <span className="font-bold text-charcoal-soft">11 SANDBOXES ISOLATED</span>
+              <span className="font-bold text-charcoal-soft">{MODULE_REGISTRY.length} SANDBOXES ISOLATED</span>
             </div>
           </div>
         </div>
@@ -370,7 +370,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* 11-Module Consistent Grid */}
+        {/* 12-Module Consistent Grid */}
         {filteredModules.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {filteredModules.map((module, idx) => {

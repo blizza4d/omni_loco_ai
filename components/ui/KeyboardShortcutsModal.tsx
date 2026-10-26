@@ -101,7 +101,7 @@ export function KeyboardShortcutsModal({ isOpen, onClose }: KeyboardShortcutsMod
           <div className="p-2.5 bg-paper-dark/40 border border-charcoal-soft/40 rounded-tactile text-[10px] text-ink-muted flex items-center justify-between">
             <span className="flex items-center gap-1.5">
               <Zap className="w-3.5 h-3.5 text-sage-green" />
-              Direct operator bindings active across all eleven sandboxed experiences.
+              Direct operator bindings active across all sandboxed experiences.
             </span>
             <span className="text-charcoal-soft font-bold">[ESC TO CLOSE]</span>
           </div>

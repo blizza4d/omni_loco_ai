@@ -132,4 +132,46 @@ describe('8th Module: Ocular Pupillometry & Eye Tracker', () => {
     expect(metrics2.saccadicVelocityDegSec).toBeGreaterThanOrEqual(0);
     expect(analyzer.getPupilHistory().length).toBeGreaterThan(0);
   });
+
+  it('correctly tracks bilateral eyes independently and handles unilateral occlusion', () => {
+    const analyzer = new PupillometryAnalyzer();
+    const lms = generateSyntheticEyeLandmarks(1000);
+
+    // Initial bilateral tracking
+    const metricsNormal = analyzer.process(lms, 1000);
+    expect(metricsNormal.leftEye.state).toBe('TRACKING');
+    expect(metricsNormal.rightEye.state).toBe('TRACKING');
+    expect(metricsNormal.leftEye.medicalAbbr).toBe('OS');
+    expect(metricsNormal.rightEye.medicalAbbr).toBe('OD');
+    expect(metricsNormal.overallStatus).toBe('BILATERAL_LOCKED');
+
+    // Simulate unilateral right eye occlusion (covering OD landmarks 33 & 133 or placing off-screen)
+    const lmsRightOccluded = [...lms];
+    lmsRightOccluded[468] = { x: -1, y: -1, z: 0 }; // Right iris out of bounds
+    lmsRightOccluded[33] = { x: 0, y: 0, z: 0 };
+    lmsRightOccluded[133] = { x: 0.005, y: 0, z: 0 }; // hSpan < 0.018
+
+    const metricsOccluded = analyzer.process(lmsRightOccluded, 1033);
+    expect(metricsOccluded.rightEye.state).toBe('OCCLUDED');
+    expect(metricsOccluded.leftEye.state).toBe('TRACKING');
+    expect(metricsOccluded.overallStatus).toBe('UNILATERAL_LEFT');
+  });
+
+  it('detects bilateral blink state when both eye aspect ratios drop', () => {
+    const analyzer = new PupillometryAnalyzer();
+    const lms = generateSyntheticEyeLandmarks(1000);
+
+    // Close both eyelids (upper and lower canthus almost touching)
+    const lmsBlink = [...lms];
+    // Right eye eyelids close
+    lmsBlink[159] = { x: 0.41, y: 0.45, z: 0 };
+    lmsBlink[145] = { x: 0.41, y: 0.452, z: 0 };
+    // Left eye eyelids close
+    lmsBlink[386] = { x: 0.59, y: 0.45, z: 0 };
+    lmsBlink[374] = { x: 0.59, y: 0.452, z: 0 };
+
+    const metricsBlink = analyzer.process(lmsBlink, 1033);
+    expect(metricsBlink.leftEye.state).toBe('BLINKING');
+    expect(metricsBlink.rightEye.state).toBe('BLINKING');
+  });
 });

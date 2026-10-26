@@ -201,7 +201,7 @@ export function GlobalNav({
 
   return (
     <>
-      <header className="sticky top-0 z-40 bg-paper-cream/95 backdrop-blur-[2px] border-b-2 border-charcoal-soft px-4 py-2.5 transition-colors select-none">
+      <header className="sticky top-0 z-50 bg-paper-cream border-b-2 border-charcoal-soft px-4 py-2.5 transition-colors select-none">
         <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
           {/* Left branding & return button */}
           <div className="flex items-center gap-3">

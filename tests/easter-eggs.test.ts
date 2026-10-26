@@ -176,6 +176,58 @@ describe('Omni Loco Easter Eggs & Classified Discoveries', () => {
       expect(mockCtx.beginPath).toHaveBeenCalled();
       expect(mockCtx.fill).toHaveBeenCalled();
     });
+
+    it('safely handles unilateral eye occlusion (single beam without error)', () => {
+      const renderer = new HeatVisionRenderer();
+      const mockCtx = {
+        save: vi.fn(),
+        restore: vi.fn(),
+        beginPath: vi.fn(),
+        arc: vi.fn(),
+        fill: vi.fn(),
+        stroke: vi.fn(),
+        moveTo: vi.fn(),
+        lineTo: vi.fn(),
+        createRadialGradient: vi.fn().mockReturnValue({ addColorStop: vi.fn() }),
+      } as unknown as CanvasRenderingContext2D;
+
+      const activeConfig: HeatVisionConfig = {
+        ...DEFAULT_HEAT_VISION_CONFIG,
+        enabled: true,
+      };
+
+      // Left eye is occluded (null), right eye is active
+      renderer.render(
+        mockCtx,
+        640,
+        480,
+        null,
+        { x: 340, y: 200 },
+        { x: 320, y: 300 },
+        activeConfig,
+        2000
+      );
+
+      expect(mockCtx.save).toHaveBeenCalled();
+      expect(mockCtx.restore).toHaveBeenCalled();
+    });
+
+    it('does not draw when both eyes are null (fully occluded / lost)', () => {
+      const renderer = new HeatVisionRenderer();
+      const mockCtx = {
+        save: vi.fn(),
+        restore: vi.fn(),
+      } as unknown as CanvasRenderingContext2D;
+
+      const activeConfig: HeatVisionConfig = {
+        ...DEFAULT_HEAT_VISION_CONFIG,
+        enabled: true,
+      };
+
+      renderer.render(mockCtx, 640, 480, null, null, null, activeConfig, 2500);
+
+      expect(mockCtx.save).not.toHaveBeenCalled();
+    });
   });
 
   describe('Heat Vision Audio Synthesizer', () => {

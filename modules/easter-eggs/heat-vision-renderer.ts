@@ -7,6 +7,8 @@ export interface HeatVisionConfig {
   colorScheme: HeatVisionColor;
   intensity: number; // 0.5 to 2.0
   beamLength: 'TARGET' | 'INFINITE';
+  aimMode?: 'GAZE_VECTOR' | 'MANUAL_RETICLE';
+  manualTarget?: { x: number; y: number } | null;
   glowRadius: number; // 15 to 45
   sparksEnabled: boolean;
   soundEnabled: boolean;
@@ -17,6 +19,8 @@ export const DEFAULT_HEAT_VISION_CONFIG: HeatVisionConfig = {
   colorScheme: 'CRIMSON',
   intensity: 1.2,
   beamLength: 'TARGET',
+  aimMode: 'GAZE_VECTOR',
+  manualTarget: null,
   glowRadius: 28,
   sparksEnabled: true,
   soundEnabled: false,
@@ -79,13 +83,15 @@ export class HeatVisionRenderer {
     ctx: CanvasRenderingContext2D,
     width: number,
     height: number,
-    leftEye: { x: number; y: number },
-    rightEye: { x: number; y: number },
+    leftEye: { x: number; y: number } | null,
+    rightEye: { x: number; y: number } | null,
     targetPoint: { x: number; y: number } | null,
     config: HeatVisionConfig,
     now: number
   ): void {
     if (!config.enabled) return;
+    // Both eyes occluded or not detected: do NOT render frozen floating lasers
+    if (!leftEye && !rightEye) return;
 
     this.animTime = now * 0.006;
     const colors = this.getColorPalette(config.colorScheme);
@@ -95,63 +101,103 @@ export class HeatVisionRenderer {
     ctx.save();
     ctx.globalCompositeOperation = 'screen';
 
-    // 1. Draw Ocular Aura & Facial Light Spill on both eyes
-    this.drawOcularSpill(ctx, leftEye.x, leftEye.y, glowRadius, colors);
-    this.drawOcularSpill(ctx, rightEye.x, rightEye.y, glowRadius, colors);
-
-    // 2. Draw Plasma Micro-Arcs around eye sockets
-    if (config.sparksEnabled) {
-      this.drawEyeSocketArcs(ctx, leftEye.x, leftEye.y, glowRadius * 0.7, colors.sheath);
-      this.drawEyeSocketArcs(ctx, rightEye.x, rightEye.y, glowRadius * 0.7, colors.sheath);
-    }
-
-    // 3. Compute Beam Targets
-    const midEyeX = (leftEye.x + rightEye.x) / 2;
-    const midEyeY = (leftEye.y + rightEye.y) / 2;
-
-    let targetLeftX: number;
-    let targetLeftY: number;
-    let targetRightX: number;
-    let targetRightY: number;
-
-    if (targetPoint && config.beamLength === 'TARGET') {
-      // Direct targeting towards user's estimated gaze point on screen
-      targetLeftX = targetPoint.x;
-      targetLeftY = targetPoint.y;
-      targetRightX = targetPoint.x;
-      targetRightY = targetPoint.y;
-    } else {
-      // Forward projection / infinite beam extending across viewport edge
-      const dirX = targetPoint ? targetPoint.x - midEyeX : 0;
-      const dirY = targetPoint ? targetPoint.y - midEyeY : height * 0.6;
-      const len = Math.max(1, Math.hypot(dirX, dirY));
-      const normX = dirX / len;
-      const normY = dirY / len;
-
-      const beamDist = Math.max(width, height) * 1.5;
-      targetLeftX = leftEye.x + normX * beamDist;
-      targetLeftY = leftEye.y + normY * beamDist;
-      targetRightX = rightEye.x + normX * beamDist;
-      targetRightY = rightEye.y + normY * beamDist;
-    }
-
-    // 4. Render Laser Beams
-    this.drawLaserBeam(ctx, leftEye.x, leftEye.y, targetLeftX, targetLeftY, colors, intensity);
-    this.drawLaserBeam(ctx, rightEye.x, rightEye.y, targetRightX, targetRightY, colors, intensity);
-
-    // 5. Blinding White-Hot Iris Cores
-    this.drawIrisCore(ctx, leftEye.x, leftEye.y, 7 * intensity, colors);
-    this.drawIrisCore(ctx, rightEye.x, rightEye.y, 7 * intensity, colors);
-
-    // 6. Impact Thermal Flares & Flying Burning Embers
-    if (targetPoint && config.beamLength === 'TARGET') {
-      this.drawImpactExplosion(ctx, targetPoint.x, targetPoint.y, colors, intensity);
+    // 1. Draw Ocular Aura & Facial Light Spill on visible eyes
+    if (leftEye) {
+      this.drawOcularSpill(ctx, leftEye.x, leftEye.y, glowRadius, colors);
       if (config.sparksEnabled) {
-        this.updateAndDrawEmbers(ctx, targetPoint.x, targetPoint.y, colors.spark, intensity);
+        this.drawEyeSocketArcs(ctx, leftEye.x, leftEye.y, glowRadius * 0.7, colors.sheath);
+      }
+    }
+    if (rightEye) {
+      this.drawOcularSpill(ctx, rightEye.x, rightEye.y, glowRadius, colors);
+      if (config.sparksEnabled) {
+        this.drawEyeSocketArcs(ctx, rightEye.x, rightEye.y, glowRadius * 0.7, colors.sheath);
+      }
+    }
+
+    // 2. Compute Target Point based on Aim Mode
+    const effectiveTarget =
+      config.aimMode === 'MANUAL_RETICLE' && config.manualTarget
+        ? config.manualTarget
+        : targetPoint;
+
+    const midEyeX =
+      leftEye && rightEye
+        ? (leftEye.x + rightEye.x) / 2
+        : leftEye
+        ? leftEye.x
+        : rightEye!.x;
+    const midEyeY =
+      leftEye && rightEye
+        ? (leftEye.y + rightEye.y) / 2
+        : leftEye
+        ? leftEye.y
+        : rightEye!.y;
+
+    // 3. Render Laser Beams for active eyes
+    if (leftEye) {
+      const { tx, ty } = this.calculateBeamTarget(
+        leftEye,
+        midEyeX,
+        midEyeY,
+        effectiveTarget,
+        config.beamLength,
+        width,
+        height
+      );
+      this.drawLaserBeam(ctx, leftEye.x, leftEye.y, tx, ty, colors, intensity);
+      this.drawIrisCore(ctx, leftEye.x, leftEye.y, 7 * intensity, colors);
+    }
+
+    if (rightEye) {
+      const { tx, ty } = this.calculateBeamTarget(
+        rightEye,
+        midEyeX,
+        midEyeY,
+        effectiveTarget,
+        config.beamLength,
+        width,
+        height
+      );
+      this.drawLaserBeam(ctx, rightEye.x, rightEye.y, tx, ty, colors, intensity);
+      this.drawIrisCore(ctx, rightEye.x, rightEye.y, 7 * intensity, colors);
+    }
+
+    // 4. Impact Thermal Flares & Flying Burning Embers
+    if (effectiveTarget && config.beamLength === 'TARGET') {
+      this.drawImpactExplosion(ctx, effectiveTarget.x, effectiveTarget.y, colors, intensity);
+      if (config.sparksEnabled) {
+        this.updateAndDrawEmbers(ctx, effectiveTarget.x, effectiveTarget.y, colors.spark, intensity);
       }
     }
 
     ctx.restore();
+  }
+
+  private calculateBeamTarget(
+    eye: { x: number; y: number },
+    midEyeX: number,
+    midEyeY: number,
+    targetPoint: { x: number; y: number } | null,
+    beamLength: 'TARGET' | 'INFINITE',
+    width: number,
+    height: number
+  ): { tx: number; ty: number } {
+    if (targetPoint && beamLength === 'TARGET') {
+      return { tx: targetPoint.x, ty: targetPoint.y };
+    }
+
+    const dirX = targetPoint ? targetPoint.x - midEyeX : 0;
+    const dirY = targetPoint ? targetPoint.y - midEyeY : height * 0.6;
+    const len = Math.max(1, Math.hypot(dirX, dirY));
+    const normX = dirX / len;
+    const normY = dirY / len;
+
+    const beamDist = Math.max(width, height) * 1.5;
+    return {
+      tx: eye.x + normX * beamDist,
+      ty: eye.y + normY * beamDist,
+    };
   }
 
   private drawOcularSpill(

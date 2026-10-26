@@ -1,10 +1,13 @@
-import { Point3D, PupilMetrics, EyeTrackingConfig } from './types';
+import { Point3D, BilateralMetrics, EyeTrackingConfig } from './types';
 
-// Facial landmark indices for eye contours
-const LEFT_EYE_CONTOUR = [33, 246, 161, 160, 159, 158, 157, 173, 133, 155, 154, 153, 145, 144, 163, 7];
-const RIGHT_EYE_CONTOUR = [362, 398, 384, 385, 386, 387, 388, 466, 263, 249, 390, 373, 374, 380, 381, 382];
-const LEFT_IRIS_RING = [468, 469, 470, 471, 472];
-const RIGHT_IRIS_RING = [473, 474, 475, 476, 477];
+// Facial landmark indices for eye contours & irises
+// Anatomical Right Eye (OD - Oculus Dexter):
+const RIGHT_EYE_CONTOUR = [33, 246, 161, 160, 159, 158, 157, 173, 133, 155, 154, 153, 145, 144, 163, 7];
+const RIGHT_IRIS_RING = [468, 469, 470, 471, 472];
+
+// Anatomical Left Eye (OS - Oculus Sinister):
+const LEFT_EYE_CONTOUR = [362, 398, 384, 385, 386, 387, 388, 466, 263, 249, 390, 373, 374, 380, 381, 382];
+const LEFT_IRIS_RING = [473, 474, 475, 476, 477];
 
 export class EyeRenderer {
   render(
@@ -12,7 +15,7 @@ export class EyeRenderer {
     width: number,
     height: number,
     landmarks: Point3D[] | null,
-    metrics: PupilMetrics,
+    metrics: BilateralMetrics,
     pupilHistory: { time: number; left: number; right: number }[],
     config: EyeTrackingConfig
   ): void {
@@ -22,23 +25,94 @@ export class EyeRenderer {
       return;
     }
 
-    // 1. Draw Eye Contours
-    this.drawContour(ctx, landmarks, LEFT_EYE_CONTOUR, width, height, 'rgba(6, 182, 212, 0.4)', 1.5);
-    this.drawContour(ctx, landmarks, RIGHT_EYE_CONTOUR, width, height, 'rgba(6, 182, 212, 0.4)', 1.5);
+    const isMirrored = config.isMirrored;
+    const toScreenX = (normX: number) => (isMirrored ? (1 - normX) * width : normX * width);
+    const toScreenY = (normY: number) => normY * height;
 
-    // 2. Draw Iris Contours & Pupil Centers
-    if (config.showIrisContours) {
-      this.drawIris(ctx, landmarks, 468, [469, 470, 471, 472], metrics.leftPupilDiameterMm, width, height, 'LEFT');
-      this.drawIris(ctx, landmarks, 473, [474, 475, 476, 477], metrics.rightPupilDiameterMm, width, height, 'RIGHT');
+    // ─────────────────────────────────────────────────────────────
+    // 1. RENDER ANATOMICAL RIGHT EYE (OD)
+    // ─────────────────────────────────────────────────────────────
+    const od = metrics.rightEye;
+    if (od.state === 'OCCLUDED' || od.state === 'NOT_DETECTED') {
+      this.drawOcclusionMarker(ctx, landmarks, RIGHT_EYE_CONTOUR, toScreenX, toScreenY, 'OD (RIGHT EYE): OCCLUDED');
+    } else if (od.state === 'BLINKING') {
+      this.drawContour(ctx, landmarks, RIGHT_EYE_CONTOUR, toScreenX, toScreenY, 'rgba(245, 158, 11, 0.7)', 1.5, true);
+      this.drawStatusTag(ctx, landmarks, 33, 133, toScreenX, toScreenY, 'OD: CLOSED', '#F59E0B');
+    } else {
+      // Normal Tracking
+      this.drawContour(ctx, landmarks, RIGHT_EYE_CONTOUR, toScreenX, toScreenY, 'rgba(6, 182, 212, 0.6)', 1.5);
+      if (config.showIrisContours) {
+        this.drawIris(
+          ctx,
+          landmarks,
+          468,
+          RIGHT_IRIS_RING,
+          od.pupilDiameterMm,
+          toScreenX,
+          toScreenY,
+          'OD (RIGHT)',
+          isMirrored
+        );
+      }
+      if (config.showGazeVectors && landmarks[468] && landmarks[33] && landmarks[133]) {
+        this.drawGazeVector(
+          ctx,
+          landmarks[468],
+          landmarks[33],
+          landmarks[133],
+          toScreenX,
+          toScreenY
+        );
+      }
     }
 
-    // 3. Draw 3D Gaze Vectors
-    if (config.showGazeVectors) {
-      this.drawGazeVector(ctx, landmarks[468]!, landmarks[133]!, landmarks[33]!, width, height);
-      this.drawGazeVector(ctx, landmarks[473]!, landmarks[263]!, landmarks[362]!, width, height);
+    // ─────────────────────────────────────────────────────────────
+    // 2. RENDER ANATOMICAL LEFT EYE (OS)
+    // ─────────────────────────────────────────────────────────────
+    const os = metrics.leftEye;
+    if (os.state === 'OCCLUDED' || os.state === 'NOT_DETECTED') {
+      this.drawOcclusionMarker(ctx, landmarks, LEFT_EYE_CONTOUR, toScreenX, toScreenY, 'OS (LEFT EYE): OCCLUDED');
+    } else if (os.state === 'BLINKING') {
+      this.drawContour(ctx, landmarks, LEFT_EYE_CONTOUR, toScreenX, toScreenY, 'rgba(245, 158, 11, 0.7)', 1.5, true);
+      this.drawStatusTag(ctx, landmarks, 362, 263, toScreenX, toScreenY, 'OS: CLOSED', '#F59E0B');
+    } else {
+      // Normal Tracking
+      this.drawContour(ctx, landmarks, LEFT_EYE_CONTOUR, toScreenX, toScreenY, 'rgba(6, 182, 212, 0.6)', 1.5);
+      if (config.showIrisContours) {
+        this.drawIris(
+          ctx,
+          landmarks,
+          473,
+          LEFT_IRIS_RING,
+          os.pupilDiameterMm,
+          toScreenX,
+          toScreenY,
+          'OS (LEFT)',
+          isMirrored
+        );
+      }
+      if (config.showGazeVectors && landmarks[473] && landmarks[362] && landmarks[263]) {
+        this.drawGazeVector(
+          ctx,
+          landmarks[473],
+          landmarks[362],
+          landmarks[263],
+          toScreenX,
+          toScreenY
+        );
+      }
     }
 
-    // 4. Draw Rolling Pupillometry Strip Chart
+    // ─────────────────────────────────────────────────────────────
+    // 3. MANUAL RETICLE TARGET (If Active)
+    // ─────────────────────────────────────────────────────────────
+    if (config.aimMode === 'MANUAL_RETICLE' && config.manualTarget) {
+      this.drawManualReticle(ctx, config.manualTarget.x, config.manualTarget.y);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // 4. ROLLING PUPILLOMETRY STRIP CHART
+    // ─────────────────────────────────────────────────────────────
     if (config.showPupilWaveform && pupilHistory.length > 2) {
       this.drawWaveform(ctx, width, height, pupilHistory, metrics);
     }
@@ -48,17 +122,22 @@ export class EyeRenderer {
     ctx: CanvasRenderingContext2D,
     landmarks: Point3D[],
     indices: number[],
-    width: number,
-    height: number,
+    toScreenX: (x: number) => number,
+    toScreenY: (y: number) => number,
     color: string,
-    lineWidth: number
+    lineWidth: number,
+    dashed = false
   ) {
+    ctx.save();
     ctx.beginPath();
+    if (dashed) {
+      ctx.setLineDash([3, 3]);
+    }
     indices.forEach((idx, i) => {
       const pt = landmarks[idx];
       if (!pt) return;
-      const x = pt.x * width;
-      const y = pt.y * height;
+      const x = toScreenX(pt.x);
+      const y = toScreenY(pt.y);
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     });
@@ -66,6 +145,7 @@ export class EyeRenderer {
     ctx.strokeStyle = color;
     ctx.lineWidth = lineWidth;
     ctx.stroke();
+    ctx.restore();
   }
 
   private drawIris(
@@ -74,22 +154,23 @@ export class EyeRenderer {
     centerIdx: number,
     contourIndices: number[],
     pupilDiameterMm: number,
-    width: number,
-    height: number,
-    label: string
+    toScreenX: (x: number) => number,
+    toScreenY: (y: number) => number,
+    label: string,
+    isMirrored: boolean
   ) {
     const center = landmarks[centerIdx];
     if (!center) return;
-    const cx = center.x * width;
-    const cy = center.y * height;
+    const cx = toScreenX(center.x);
+    const cy = toScreenY(center.y);
 
     // Outer Iris ring
     ctx.beginPath();
     contourIndices.forEach((idx, i) => {
       const pt = landmarks[idx];
       if (!pt) return;
-      const x = pt.x * width;
-      const y = pt.y * height;
+      const x = toScreenX(pt.x);
+      const y = toScreenY(pt.y);
       if (i === 0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     });
@@ -99,13 +180,13 @@ export class EyeRenderer {
     ctx.stroke();
 
     // Inner Pupil Ellipse (scaled by pupilDiameterMm)
-    const pupilRadiusPx = Math.max(2, (pupilDiameterMm / 11.7) * 12);
+    const pupilRadiusPx = Math.max(2.5, (pupilDiameterMm / 11.7) * 11);
     ctx.beginPath();
     ctx.arc(cx, cy, pupilRadiusPx, 0, 2 * Math.PI);
     ctx.fillStyle = 'rgba(0, 229, 153, 0.35)';
     ctx.fill();
     ctx.strokeStyle = '#00E599';
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = 1.4;
     ctx.stroke();
 
     // Pupil center crosshair
@@ -115,9 +196,19 @@ export class EyeRenderer {
     ctx.fill();
 
     // Micro Telemetry Tag
+    ctx.save();
     ctx.font = '10px monospace';
     ctx.fillStyle = '#00E599';
-    ctx.fillText(`${label} ${pupilDiameterMm.toFixed(1)}mm`, cx - 22, cy - 16);
+    const tag = `${label} ${pupilDiameterMm.toFixed(1)}mm`;
+    const textWidth = ctx.measureText(tag).width;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(cx - textWidth / 2 - 4, cy - 26, textWidth + 8, 14);
+    ctx.strokeStyle = '#00E599';
+    ctx.lineWidth = 0.8;
+    ctx.strokeRect(cx - textWidth / 2 - 4, cy - 26, textWidth + 8, 14);
+    ctx.fillStyle = '#00E599';
+    ctx.fillText(tag, cx - textWidth / 2, cy - 15);
+    ctx.restore();
   }
 
   private drawGazeVector(
@@ -125,15 +216,15 @@ export class EyeRenderer {
     iris: Point3D,
     cornerA: Point3D,
     cornerB: Point3D,
-    width: number,
-    height: number
+    toScreenX: (x: number) => number,
+    toScreenY: (y: number) => number
   ) {
-    const ix = iris.x * width;
-    const iy = iris.y * height;
-    const eyeMidX = ((cornerA.x + cornerB.x) / 2) * width;
-    const eyeMidY = ((cornerA.y + cornerB.y) / 2) * height;
+    const ix = toScreenX(iris.x);
+    const iy = toScreenY(iris.y);
+    const eyeMidX = toScreenX((cornerA.x + cornerB.x) / 2);
+    const eyeMidY = toScreenY((cornerA.y + cornerB.y) / 2);
 
-    // Vector from eyeball center to iris
+    // Vector from eyeball center to iris projected outward
     const vx = (ix - eyeMidX) * 4.5;
     const vy = (iy - eyeMidY) * 4.5;
 
@@ -141,7 +232,7 @@ export class EyeRenderer {
     ctx.moveTo(ix, iy);
     ctx.lineTo(ix + vx, iy + vy);
     ctx.strokeStyle = '#06B6D4'; // Electric cyan
-    ctx.lineWidth = 2.0;
+    ctx.lineWidth = 1.8;
     ctx.stroke();
 
     // Raycast target point
@@ -151,12 +242,111 @@ export class EyeRenderer {
     ctx.fill();
   }
 
+  private drawOcclusionMarker(
+    ctx: CanvasRenderingContext2D,
+    landmarks: Point3D[],
+    indices: number[],
+    toScreenX: (x: number) => number,
+    toScreenY: (y: number) => number,
+    label: string
+  ) {
+    // Find centroid of available points or fallback
+    let sumX = 0;
+    let sumY = 0;
+    let count = 0;
+    for (const idx of indices) {
+      const pt = landmarks[idx];
+      if (pt) {
+        sumX += toScreenX(pt.x);
+        sumY += toScreenY(pt.y);
+        count++;
+      }
+    }
+    if (count === 0) return;
+
+    const cx = sumX / count;
+    const cy = sumY / count;
+
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 59, 48, 0.7)';
+    ctx.lineWidth = 1.2;
+    ctx.setLineDash([4, 4]);
+    ctx.strokeRect(cx - 30, cy - 16, 60, 32);
+
+    ctx.font = '9px monospace';
+    ctx.fillStyle = '#FF3B30';
+    const textWidth = ctx.measureText(label).width;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+    ctx.fillRect(cx - textWidth / 2 - 3, cy - 28, textWidth + 6, 12);
+    ctx.fillStyle = '#FF3B30';
+    ctx.fillText(label, cx - textWidth / 2, cy - 19);
+    ctx.restore();
+  }
+
+  private drawStatusTag(
+    ctx: CanvasRenderingContext2D,
+    landmarks: Point3D[],
+    idxA: number,
+    idxB: number,
+    toScreenX: (x: number) => number,
+    toScreenY: (y: number) => number,
+    label: string,
+    color: string
+  ) {
+    const ptA = landmarks[idxA];
+    const ptB = landmarks[idxB];
+    if (!ptA || !ptB) return;
+    const cx = (toScreenX(ptA.x) + toScreenX(ptB.x)) / 2;
+    const cy = (toScreenY(ptA.y) + toScreenY(ptB.y)) / 2;
+
+    ctx.save();
+    ctx.font = '9px monospace';
+    ctx.fillStyle = color;
+    const textWidth = ctx.measureText(label).width;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+    ctx.fillRect(cx - textWidth / 2 - 3, cy - 22, textWidth + 6, 13);
+    ctx.fillStyle = color;
+    ctx.fillText(label, cx - textWidth / 2, cy - 12);
+    ctx.restore();
+  }
+
+  private drawManualReticle(ctx: CanvasRenderingContext2D, x: number, y: number) {
+    ctx.save();
+    ctx.strokeStyle = '#FF2A10';
+    ctx.lineWidth = 1.5;
+
+    // Crosshair lines
+    ctx.beginPath();
+    ctx.moveTo(x - 14, y);
+    ctx.lineTo(x + 14, y);
+    ctx.moveTo(x, y - 14);
+    ctx.lineTo(x, y + 14);
+    ctx.stroke();
+
+    // Reticle circle
+    ctx.beginPath();
+    ctx.arc(x, y, 9, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Micro corner ticks
+    ctx.beginPath();
+    ctx.arc(x, y, 16, 0, Math.PI * 2);
+    ctx.setLineDash([3, 6]);
+    ctx.stroke();
+
+    // Reticle tag
+    ctx.font = '9px monospace';
+    ctx.fillStyle = '#FF2A10';
+    ctx.fillText('MANUAL RETICLE AIM', x + 18, y - 4);
+    ctx.restore();
+  }
+
   private drawWaveform(
     ctx: CanvasRenderingContext2D,
     width: number,
     height: number,
     history: { time: number; left: number; right: number }[],
-    metrics: PupilMetrics
+    metrics: BilateralMetrics
   ) {
     const chartHeight = 72;
     const chartWidth = Math.min(width - 32, 420);
@@ -164,7 +354,7 @@ export class EyeRenderer {
     const startY = height - chartHeight - 16;
 
     // Card background
-    ctx.fillStyle = 'rgba(13, 15, 18, 0.88)';
+    ctx.fillStyle = 'rgba(13, 15, 18, 0.9)';
     ctx.strokeStyle = 'rgba(42, 48, 60, 0.9)';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
@@ -183,34 +373,42 @@ export class EyeRenderer {
       ctx.stroke();
     }
 
-    // Chart label
+    // Chart label & Legend
     ctx.font = '9px monospace';
     ctx.fillStyle = '#94A3B8';
-    ctx.fillText('PUPILLARY DILATION WAVEFORM (mm)', startX + 10, startY + 12);
-    ctx.fillText(`${metrics.meanPupilDiameterMm.toFixed(2)} mm`, startX + chartWidth - 55, startY + 12);
+    ctx.fillText('BILATERAL PUPILLOMETRY STRIP (mm)', startX + 10, startY + 12);
 
-    // Left Eye Waveform (Neon Green)
-    ctx.beginPath();
-    history.forEach((sample, i) => {
-      const x = startX + 8 + (i / (history.length - 1)) * (chartWidth - 16);
-      const y = startY + chartHeight - ((sample.left - 1.5) / 7.0) * (chartHeight - 20) - 8;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    ctx.strokeStyle = '#00E599';
-    ctx.lineWidth = 1.6;
-    ctx.stroke();
+    ctx.fillStyle = '#00E599';
+    ctx.fillText(`OS(L): ${metrics.leftEye.pupilDiameterMm.toFixed(1)}mm`, startX + chartWidth - 140, startY + 12);
+    ctx.fillStyle = '#06B6D4';
+    ctx.fillText(`OD(R): ${metrics.rightEye.pupilDiameterMm.toFixed(1)}mm`, startX + chartWidth - 70, startY + 12);
 
-    // Right Eye Waveform (Cyan)
-    ctx.beginPath();
-    history.forEach((sample, i) => {
-      const x = startX + 8 + (i / (history.length - 1)) * (chartWidth - 16);
-      const y = startY + chartHeight - ((sample.right - 1.5) / 7.0) * (chartHeight - 20) - 8;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    });
-    ctx.strokeStyle = 'rgba(6, 182, 212, 0.7)';
-    ctx.lineWidth = 1.2;
-    ctx.stroke();
+    // Left Eye OS Waveform (Neon Green)
+    if (metrics.leftEye.state === 'TRACKING') {
+      ctx.beginPath();
+      history.forEach((sample, i) => {
+        const x = startX + 8 + (i / Math.max(1, history.length - 1)) * (chartWidth - 16);
+        const y = startY + chartHeight - ((sample.left - 1.5) / 7.0) * (chartHeight - 20) - 8;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = '#00E599';
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+    }
+
+    // Right Eye OD Waveform (Cyan)
+    if (metrics.rightEye.state === 'TRACKING') {
+      ctx.beginPath();
+      history.forEach((sample, i) => {
+        const x = startX + 8 + (i / Math.max(1, history.length - 1)) * (chartWidth - 16);
+        const y = startY + chartHeight - ((sample.right - 1.5) / 7.0) * (chartHeight - 20) - 8;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = 'rgba(6, 182, 212, 0.7)';
+      ctx.lineWidth = 1.4;
+      ctx.stroke();
+    }
   }
 }

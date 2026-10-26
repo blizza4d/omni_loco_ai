@@ -73,6 +73,14 @@ export const REGISTERED_MODELS: CachedModelMeta[] = [
     module: 'gaze',
   },
   {
+    id: 'eye-tracking',
+    name: 'Bilateral Eye & Iris Tracker',
+    url: '/models/face_landmarker.task',
+    sizeEstimateBytes: 3.7 * 1024 * 1024,
+    isCached: false,
+    module: 'eye',
+  },
+  {
     id: 'objects-yolo',
     name: 'YOLO Multi-Object Detector & Tracker',
     url: '/wasm/ort-wasm-simd-threaded.wasm',
