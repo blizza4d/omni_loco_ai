@@ -18,6 +18,7 @@ import {
   FlaskConical,
   Plus,
   GitBranch,
+  Sliders,
 } from 'lucide-react';
 import {
   duplicateModel,
@@ -35,6 +36,7 @@ export interface ModelLibraryProps {
   onOpenTestBench: (model: LaboratoryModel) => void;
   onOpenPipelineEditor: (model: LaboratoryModel) => void;
   onOpenDataCollector: (model: LaboratoryModel) => void;
+  onOpenConfigEditor: (model: LaboratoryModel) => void;
   onOpenNewWizard: () => void;
 }
 
@@ -44,6 +46,7 @@ export function ModelLibrary({
   onOpenTestBench,
   onOpenPipelineEditor,
   onOpenDataCollector,
+  onOpenConfigEditor,
   onOpenNewWizard,
 }: ModelLibraryProps) {
   const [filter, setFilter] = useState<'ALL' | 'BUILTIN' | 'CUSTOM' | 'PUBLISHED'>('ALL');
@@ -253,25 +256,38 @@ export function ModelLibrary({
 
               {/* Action Buttons */}
               <div className="mt-4 pt-3 border-t border-charcoal-soft/20 space-y-2">
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-3 gap-1.5">
                   <Button
                     variant="default"
                     size="sm"
                     onClick={() => onOpenTestBench(model)}
-                    className="gap-1 text-[11px] py-1.5"
+                    className="gap-1 text-[10px] py-1 px-1"
+                    title="Launch live camera / synthetic test bench"
                   >
-                    <Play className="w-3 h-3 text-sage-green" />
-                    TEST BENCH
+                    <Play className="w-2.5 h-2.5 text-sage-green" />
+                    TEST
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => onOpenConfigEditor(model)}
+                    className="gap-1 text-[10px] py-1 px-1"
+                    title="Configure model hyperparameters & runtime settings"
+                  >
+                    <Sliders className="w-2.5 h-2.5 text-indigo-400" />
+                    CONFIG
                   </Button>
 
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => onOpenPipelineEditor(model)}
-                    className="gap-1 text-[11px] py-1.5"
+                    className="gap-1 text-[10px] py-1 px-1"
+                    title="Edit visual node pipeline"
                   >
-                    <GitBranch className="w-3 h-3 text-indigo-400" />
-                    PIPELINE
+                    <GitBranch className="w-2.5 h-2.5 text-amber-500" />
+                    PIPE
                   </Button>
                 </div>
 

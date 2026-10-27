@@ -60,6 +60,7 @@ export function NewModelWizard({ isOpen, onClose, onModelCreated }: NewModelWiza
       isBuiltIn: false,
       isPublished: false,
       modelType,
+      lifecycleState: 'CONFIGURED',
       classes,
       fxMapping,
       pipelineConfig: modelType === 'pipeline' ? createDefaultPipeline() : undefined,

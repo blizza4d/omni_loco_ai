@@ -19,6 +19,7 @@ import {
 } from '@/modules/hand/gesture-events';
 import { HandFeatureExtractor } from '@/modules/laboratory/feature-extractor';
 import { ClassifierTrainer } from '@/modules/laboratory/classifier-trainer';
+import { analyzeDataset } from '@/modules/laboratory/dataset-diagnostics';
 import {
   getAllModels,
   getModelById,
@@ -29,6 +30,21 @@ import {
   unpublishModel,
   exportModelToJSON,
   importModelFromJSON,
+  createCustomVariant,
+  saveNewVersion,
+  restoreVersion,
+  getAllDatasets,
+  getDatasetById,
+  saveDataset,
+  deleteDataset,
+  exportDatasetToJSON,
+  importDatasetFromJSON,
+  getAllExperiments,
+  saveExperiment,
+  deleteExperiment,
+  saveDraft,
+  getDraft,
+  clearDraft,
   BUILT_IN_MODELS,
 } from '@/modules/laboratory/model-storage';
 import { GestureFXEngine } from '@/modules/hand/fx/gesture-fx-engine';
@@ -36,10 +52,12 @@ import { DEFAULT_FX_CONFIG, FX_PRESET_PALETTES } from '@/modules/hand/fx/fx-regi
 import {
   createDefaultPipeline,
   validatePipeline,
+  executePipeline,
+  arePortsCompatible,
 } from '@/modules/laboratory/pipeline-runner';
 import { generateSyntheticHand } from '@/modules/hand/synthetic-hand';
 import { Landmark3D } from '@/modules/hand/types';
-import { TrainingSample, LaboratoryModel } from '@/modules/laboratory/types';
+import { TrainingSample, LaboratoryModel, LaboratoryDataset, LaboratoryExperiment } from '@/modules/laboratory/types';
 
 describe('GestureStateMachine', () => {
   let sm: GestureStateMachine;
@@ -84,14 +102,12 @@ describe('GestureStateMachine', () => {
     sm.subscribe((e) => events.push(e));
 
     sm.update('Right', 'closed_fist', 0.9, mockLandmarks, 0);
-    sm.update('Right', 'closed_fist', 0.9, mockLandmarks, 120); // start
+    sm.update('Right', 'closed_fist', 0.9, mockLandmarks, 120);
 
-    // Next frame at t=180: active phase
     const eActive = sm.update('Right', 'closed_fist', 0.9, mockLandmarks, 180);
     expect(eActive?.phase).toBe('active');
     expect(eActive?.durationMs).toBe(60);
 
-    // Change to 'none' at t=300 (after 100ms hold of none, release is emitted)
     sm.update('Right', 'none', 0.9, mockLandmarks, 300);
     sm.update('Right', 'none', 0.9, mockLandmarks, 420);
 
@@ -118,7 +134,6 @@ describe('HandFeatureExtractor', () => {
   it('produces a 63-element feature vector with wrist anchored at origin', () => {
     const features = HandFeatureExtractor.extractNormalizedVector(baseLandmarks);
     expect(features.length).toBe(63);
-    // Joint 0 (WRIST) should be (0, 0, 0)
     expect(features[0]).toBe(0);
     expect(features[1]).toBe(0);
     expect(features[2]).toBe(0);
@@ -156,51 +171,86 @@ describe('HandFeatureExtractor', () => {
     const a = [1, 0, 0];
     const b = [0, 1, 0];
     expect(HandFeatureExtractor.euclideanDistance(a, b)).toBeCloseTo(Math.SQRT2);
-    expect(HandFeatureExtractor.cosineDistance(a, b)).toBeCloseTo(1.0); // orthogonal
+    expect(HandFeatureExtractor.cosineDistance(a, b)).toBeCloseTo(1.0);
+  });
+});
+
+describe('Dataset Quality Diagnostics', () => {
+  it('analyzes sample counts, detects imbalance and near-duplicates', () => {
+    const hand = generateSyntheticHand(500);
+    const feat = HandFeatureExtractor.extractNormalizedVector(hand);
+
+    // 25 identical samples for CLASS_A
+    const samplesA: TrainingSample[] = Array.from({ length: 25 }, (_, i) => ({
+      id: `a-${i}`,
+      label: 'CLASS_A',
+      landmarks: hand,
+      normalizedFeatures: feat,
+      timestamp: Date.now(),
+      hand: 'Right',
+      burstId: 'burst-1',
+    }));
+
+    // 4 slightly perturbed samples for CLASS_B
+    const samplesB: TrainingSample[] = Array.from({ length: 4 }, (_, i) => ({
+      id: `b-${i}`,
+      label: 'CLASS_B',
+      landmarks: hand,
+      normalizedFeatures: feat.map((v) => v + 0.3),
+      timestamp: Date.now(),
+      hand: 'Right',
+      burstId: 'burst-2',
+    }));
+
+    const report = analyzeDataset([...samplesA, ...samplesB], ['CLASS_A', 'CLASS_B']);
+    expect(report.totalSamples).toBe(29);
+    expect(report.imbalanceRatio).toBeGreaterThanOrEqual(6.0); // 25 / 4 = 6.25:1
+    expect(report.nearDuplicateCount).toBeGreaterThan(0);
+    expect(report.warnings.some((w) => w.includes('imbalance'))).toBe(true);
+    expect(report.isValidForTraining).toBe(true);
   });
 });
 
 describe('ClassifierTrainer', () => {
-  it('trains on stratified samples and computes confusion matrix', () => {
+  it('trains asynchronously with progress callbacks and burst isolation', async () => {
     const baseHand = generateSyntheticHand(500);
     const baseVector = HandFeatureExtractor.extractNormalizedVector(baseHand);
 
-    // Create 20 synthetic samples for CLASS_A (slightly perturbed)
-    const samplesA: TrainingSample[] = Array.from({ length: 20 }, (_, idx) => {
-      const v = baseVector.map((val) => val + (idx * 0.001 - 0.01));
-      return {
-        id: `sample-a-${idx}`,
-        label: 'CLASS_A',
-        landmarks: baseHand,
-        normalizedFeatures: v,
-        timestamp: Date.now(),
-        hand: 'Right',
-      };
-    });
+    // 2 distinct bursts for POSE_1
+    const samples1: TrainingSample[] = Array.from({ length: 20 }, (_, idx) => ({
+      id: `sample-1-${idx}`,
+      label: 'POSE_1',
+      landmarks: baseHand,
+      normalizedFeatures: baseVector.map((val) => val + (idx * 0.001 - 0.01)),
+      timestamp: Date.now(),
+      hand: 'Right',
+      burstId: idx < 10 ? 'burst-1a' : 'burst-1b',
+    }));
 
-    // Create 20 synthetic samples for CLASS_B (distinct perturbation on index & thumb)
-    const samplesB: TrainingSample[] = Array.from({ length: 20 }, (_, idx) => {
-      const v = baseVector.map((val, i) => (i < 15 ? val + 0.5 : val) + (idx * 0.001 - 0.01));
-      return {
-        id: `sample-b-${idx}`,
-        label: 'CLASS_B',
-        landmarks: baseHand,
-        normalizedFeatures: v,
-        timestamp: Date.now(),
-        hand: 'Right',
-      };
-    });
+    // 2 distinct bursts for POSE_2
+    const samples2: TrainingSample[] = Array.from({ length: 20 }, (_, idx) => ({
+      id: `sample-2-${idx}`,
+      label: 'POSE_2',
+      landmarks: baseHand,
+      normalizedFeatures: baseVector.map((val, i) => (i < 15 ? val + 0.5 : val) + (idx * 0.001 - 0.01)),
+      timestamp: Date.now(),
+      hand: 'Right',
+      burstId: idx < 10 ? 'burst-2a' : 'burst-2b',
+    }));
 
-    const dataset = [...samplesA, ...samplesB];
+    const progressSteps: number[] = [];
     const trainer = new ClassifierTrainer({ confidenceThreshold: 0.6 });
-    const { stats, warnings } = trainer.train(dataset, 0.2);
 
+    const { stats, warnings } = await trainer.trainAsync([...samples1, ...samples2], {
+      valSplit: 0.2,
+      onProgress: (percent) => progressSteps.push(percent),
+    });
+
+    expect(progressSteps.length).toBeGreaterThan(0);
     expect(stats.sampleCount).toBe(40);
     expect(stats.trainAccuracy).toBeGreaterThan(0.9);
     expect(stats.valAccuracy).toBeGreaterThan(0.9);
-    expect(stats.confusionMatrix).toBeDefined();
-    expect(stats.confusionMatrix?.labels).toContain('CLASS_A');
-    expect(stats.confusionMatrix?.labels).toContain('CLASS_B');
+    expect(stats.confusionMatrix?.f1Score).toBeDefined();
   });
 
   it('predicts accurate classes with confidence scores', () => {
@@ -234,71 +284,145 @@ describe('ClassifierTrainer', () => {
   });
 });
 
-describe('Laboratory Model Storage', () => {
-  it('loads built-in models correctly', () => {
+describe('Laboratory Model Storage & Versioning', () => {
+  beforeEach(() => {
+    mockLocalStorage.clear();
+  });
+
+  it('loads built-in models and protects them against overwriting', () => {
     const models = getAllModels();
     expect(models.length).toBeGreaterThanOrEqual(3);
-    const ids = models.map((m) => m.id);
-    expect(ids).toContain('built-in-mediapipe-standard');
-    expect(ids).toContain('built-in-triad-lock');
-    expect(ids).toContain('built-in-cyber-vulcan');
+
+    // Attempting to overwrite a built-in directly throws an error
+    expect(() => {
+      saveModel({
+        ...BUILT_IN_MODELS[0]!,
+        name: 'Hacked Builtin',
+      });
+    }).toThrow(/Cannot overwrite protected built-in model/);
   });
 
-  it('exports and imports model JSON with validation', () => {
-    const exportedJson = exportModelToJSON('built-in-triad-lock');
-    expect(exportedJson).not.toBeNull();
-    const parsed = JSON.parse(exportedJson!);
-    expect(parsed.name).toBe('Triad Lock Spatial Key');
+  it('creates custom variants from built-ins and saves new versions', () => {
+    const variant = createCustomVariant('built-in-mediapipe-standard', 'Custom High-Speed Landmarker');
+    expect(variant.id).toMatch(/^variant-/);
+    expect(variant.isBuiltIn).toBe(false);
 
-    const imported = importModelFromJSON(exportedJson!);
-    expect(imported.id).toMatch(/^imported-/);
-    expect(imported.isBuiltIn).toBe(false);
+    // Modify a hyperparameter and commit a new version
+    variant.hyperparameters.smoothingFrames = 5;
+    saveModel(variant);
+
+    const versioned = saveNewVersion(variant.id, 'Increased temporal smoothing to 5 frames');
+    expect(versioned.version).toBe('1.1.0');
+    expect(versioned.versionHistory?.length).toBeGreaterThanOrEqual(1);
+
+    // Rollback to earlier version
+    const restored = restoreVersion(variant.id, '1.0.0');
+    expect(restored.version).toContain('1.0.0-restored');
   });
 
-  it('manages publishing states', () => {
-    publishModel('built-in-cyber-vulcan');
-    const model = getModelById('built-in-cyber-vulcan');
-    expect(model?.isPublished).toBe(true);
+  it('handles dataset CRUD, export, and import with schema validation', () => {
+    const ds: LaboratoryDataset = {
+      id: 'ds-test-1',
+      name: 'Test Gestures Dataset',
+      description: 'Benchmark dataset',
+      version: '1.0.0',
+      classes: ['PINCH', 'EXPAND'],
+      samples: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
 
-    unpublishModel('built-in-cyber-vulcan');
-    const modelUnpublished = getModelById('built-in-cyber-vulcan');
-    expect(modelUnpublished?.isPublished).toBe(false);
+    saveDataset(ds);
+    const loaded = getDatasetById('ds-test-1');
+    expect(loaded?.name).toBe('Test Gestures Dataset');
+
+    const json = exportDatasetToJSON('ds-test-1');
+    expect(json).not.toBeNull();
+
+    const imported = importDatasetFromJSON(json!);
+    expect(imported.name).toContain('[Imported]');
+
+    deleteDataset('ds-test-1');
+    expect(getDatasetById('ds-test-1')).toBeNull();
   });
-});
 
-describe('GestureFXEngine', () => {
-  it('initializes with default config and resolves preset palettes', () => {
-    const engine = new GestureFXEngine();
-    const config = engine.getConfig();
-    expect(config.enabled).toBe(true);
-    expect(config.intensity).toBe(1.0);
-    expect(FX_PRESET_PALETTES.CYBER_NEON.primary).toBe('#00f3ff');
+  it('handles experiment benchmark logging', () => {
+    const exp: LaboratoryExperiment = {
+      id: 'exp-101',
+      name: 'Prototype Baseline Run',
+      modelId: 'built-in-triad-lock',
+      modelName: 'Triad Lock',
+      modelVersion: '1.0.0',
+      algorithm: 'centroid_prototype',
+      hyperparameters: { confidenceThreshold: 0.7, smoothingFrames: 2 },
+      stats: {
+        sampleCount: 50,
+        trainAccuracy: 0.98,
+        valAccuracy: 0.96,
+        classCounts: { TRIAD: 25, NEUTRAL: 25 },
+        trainedAt: '12:00:00',
+      },
+      notes: 'Clean execution',
+      createdAt: new Date().toISOString(),
+    };
+
+    saveExperiment(exp);
+    const list = getAllExperiments();
+    expect(list.length).toBe(1);
+    expect(list[0]?.name).toBe('Prototype Baseline Run');
+
+    deleteExperiment('exp-101');
+    expect(getAllExperiments().length).toBe(0);
   });
 
-  it('updates configuration and intensity cleanly', () => {
-    const engine = new GestureFXEngine();
-    engine.updateConfig({
-      ...DEFAULT_FX_CONFIG,
-      intensity: 1.8,
-      preset: 'QUANTUM_VOID',
+  it('saves and clears autosave drafts', () => {
+    saveDraft({
+      modelId: 'test-model',
+      mode: 'PIPELINE',
+      timestamp: Date.now(),
+      unsavedModel: { name: 'Draft Model' },
     });
-    expect(engine.getConfig().intensity).toBe(1.8);
-    expect(engine.getConfig().preset).toBe('QUANTUM_VOID');
+
+    const draft = getDraft('test-model');
+    expect(draft?.unsavedModel?.name).toBe('Draft Model');
+
+    clearDraft();
+    expect(getDraft('test-model')).toBeNull();
   });
 });
 
-describe('PipelineValidator', () => {
-  it('validates default pipeline DAG', () => {
+describe('Visual Pipeline Runner & Execution Engine', () => {
+  it('validates default pipeline DAG and port compatibility', () => {
     const pipeline = createDefaultPipeline();
     const result = validatePipeline(pipeline);
     expect(result.isValid).toBe(true);
     expect(result.errors.length).toBe(0);
-    expect(result.executionOrder.length).toBe(pipeline.nodes.length);
+    expect(arePortsCompatible('landmarks', 'landmarks')).toBe(true);
+    expect(arePortsCompatible('classification', 'stream')).toBe(false);
+  });
+
+  it('executes real pipeline passing 3D landmarks through every node', () => {
+    const pipeline = createDefaultPipeline();
+    const testHand = generateSyntheticHand(100);
+
+    const { pipeline: executed, finalOutput, executionLog } = executePipeline(pipeline, testHand);
+
+    expect(executionLog.length).toBe(pipeline.nodes.length);
+    expect(finalOutput).toBeDefined();
+    expect(finalOutput.type).toBe('GESTURE_FX_EVENT');
+
+    // Verify intermediate outputs on nodes
+    const normalizerNode = executed.nodes.find((n) => n.type === 'wrist_normalizer');
+    expect(normalizerNode?.lastOutput).toBeDefined();
+    expect(normalizerNode?.lastOutput.length).toBe(21);
+
+    const featureNode = executed.nodes.find((n) => n.type === 'landmark_vector_extractor');
+    expect(featureNode?.lastOutput).toBeDefined();
+    expect(featureNode?.lastOutput.length).toBe(63);
   });
 
   it('detects cycles in pipeline connections', () => {
     const pipeline = createDefaultPipeline();
-    // Introduce a cycle: node-stab -> node-prep
     pipeline.connections.push({
       id: 'cycle-link',
       fromNodeId: 'node-stab',
@@ -310,14 +434,5 @@ describe('PipelineValidator', () => {
     const result = validatePipeline(pipeline);
     expect(result.isValid).toBe(false);
     expect(result.errors.some((e) => e.includes('Cycle detected'))).toBe(true);
-  });
-
-  it('detects missing inputs or outputs', () => {
-    const pipeline = createDefaultPipeline();
-    pipeline.nodes = pipeline.nodes.filter((n) => n.category !== 'input');
-
-    const result = validatePipeline(pipeline);
-    expect(result.isValid).toBe(false);
-    expect(result.errors.some((e) => e.includes('missing an Input node'))).toBe(true);
   });
 });

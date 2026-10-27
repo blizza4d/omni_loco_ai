@@ -83,6 +83,13 @@ export function LiveTestBench({ model, onModelUpdated }: LiveTestBenchProps) {
     setIsMirrored,
   } = useCamera({ autoStart: true });
 
+  // Guarantee clean camera hardware track release on unmount
+  useEffect(() => {
+    return () => {
+      stopCamera();
+    };
+  }, [stopCamera]);
+
   const handleFrameRender = useCallback(
     (landmarks: Landmark3D[] | null) => {
       const canvas = canvasRef.current;
