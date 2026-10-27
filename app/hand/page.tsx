@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import Link from 'next/link';
 import { GlobalNav } from '@/components/ui/GlobalNav';
 import { CrosshairViewport } from '@/components/ui/CrosshairViewport';
 import { DeskCard } from '@/components/ui/DeskCard';
@@ -12,11 +13,16 @@ import { useCamera } from '@/core/camera/useCamera';
 import { useHandGestures } from '@/modules/hand/useHandGestures';
 import { renderHandOverlay } from '@/modules/hand/overlay-renderer';
 import { MouseFreeDemoBoard } from '@/modules/hand/components/MouseFreeDemoBoard';
-import { JOINT_NAMES, Landmark3D } from '@/modules/hand/types';
+import { JOINT_NAMES, Landmark3D, RecognizedGesture } from '@/modules/hand/types';
 import { syncCanvasToVideo } from '@/core/camera/coordinates';
 import { useSystemStore } from '@/core/store';
-import { Video, VideoOff, RefreshCw, Sparkles, Cpu, Wand2 } from 'lucide-react';
+import { Video, VideoOff, RefreshCw, Sparkles, Cpu, Wand2, FlaskConical, Sliders } from 'lucide-react';
 import { unlockAchievement } from '@/modules/easter-eggs/achievements';
+import { GestureFXEngine } from '@/modules/hand/fx/gesture-fx-engine';
+import { GestureStateMachine } from '@/modules/hand/gesture-events';
+import { GestureFXControls } from '@/modules/hand/components/GestureFXControls';
+import { loadFXConfig } from '@/modules/hand/fx/fx-registry';
+import { GestureFXConfig } from '@/modules/hand/fx/types';
 
 interface GeoParticle {
   x: number;
@@ -36,12 +42,17 @@ export default function HandModulePage() {
   const [showRawCoords, setShowRawCoords] = useState(false);
   const [syntheticMode, setSyntheticMode] = useState(false);
   const [rawCoordsList, setRawCoordsList] = useState<Landmark3D[]>([]);
+  const [fxControlsOpen, setFxControlsOpen] = useState(false);
+  const [fxConfig, setFxConfig] = useState<GestureFXConfig>(loadFXConfig());
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const lastRawCoordsUpdateRef = useRef<number>(0);
   const particlesRef = useRef<GeoParticle[]>([]);
   const wasPinchingRef = useRef<boolean>(false);
   const [burstsCount, setBurstsCount] = useState(0);
+
+  const fxEngineRef = useRef<GestureFXEngine>(new GestureFXEngine());
+  const stateMachineRef = useRef<GestureStateMachine>(new GestureStateMachine({ minHoldMs: 80 }));
 
   const spawnBurst = useCallback((cx: number, cy: number) => {
     const colors = ['#22c55e', '#06b6d4', '#f59e0b', '#ec4899', '#ffffff'];
@@ -88,7 +99,10 @@ export default function HandModulePage() {
   const handleFrameRender = useCallback(
     (
       landmarks: Landmark3D[] | null,
-      cursor: { x: number; y: number; isPinching: boolean; dwellProgress: number }
+      cursor: { x: number; y: number; isPinching: boolean; dwellProgress: number },
+      multiHands?: Landmark3D[][],
+      multiHandednesses?: ('Left' | 'Right')[],
+      gestures?: RecognizedGesture[]
     ) => {
       const canvas = canvasRef.current;
       const video = videoRef.current;
@@ -108,6 +122,29 @@ export default function HandModulePage() {
         cursor,
         isMirrored,
       });
+
+      const now = performance.now();
+
+      // Process Gesture FX Engine events
+      if (landmarks && landmarks.length >= 21) {
+        const topGesture = gestures && gestures[0] ? gestures[0] : { name: 'none', confidence: 0 };
+        const event = stateMachineRef.current.update(
+          'Right',
+          topGesture.name,
+          topGesture.confidence,
+          landmarks,
+          now
+        );
+        if (event) {
+          fxEngineRef.current.onGestureEvent(event, canvas.width, canvas.height, isMirrored);
+          if (event.phase === 'start') {
+            unlockAchievement('FX_VIRTUOSO');
+          }
+        }
+      }
+
+      // Render real-time Gesture FX layers
+      fxEngineRef.current.render(ctx, canvas.width, canvas.height);
 
       // Detect trigger on pinch transition
       if (cursor.isPinching && !wasPinchingRef.current) {
@@ -213,7 +250,30 @@ export default function HandModulePage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 flex-wrap">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setFxControlsOpen(true)}
+              className="gap-1.5 border-charcoal-soft hover:border-sage-green hover:text-sage-green"
+              title="Open Gesture FX Engine Configuration Matrix"
+            >
+              <Wand2 className="w-3.5 h-3.5 text-sage-green" />
+              <span>GESTURE FX</span>
+            </Button>
+
+            <Link href="/laboratory">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5 border-cyan-500 text-cyan-700 dark:text-cyan-400 hover:bg-cyan-500/10"
+                title="Create custom models and configure visual pipelines in Laboratory"
+              >
+                <FlaskConical className="w-3.5 h-3.5 text-cyan-500" />
+                <span>LABORATORY</span>
+              </Button>
+            </Link>
+
             <Button
               variant={syntheticMode ? 'brick' : 'outline'}
               size="sm"
@@ -410,6 +470,17 @@ export default function HandModulePage() {
           onRecalibrate={recalibrate}
           handedness={handedness}
           onHandednessChange={setHandedness}
+        />
+
+        {/* Gesture FX Engine Controls Modal */}
+        <GestureFXControls
+          isOpen={fxControlsOpen}
+          onClose={() => setFxControlsOpen(false)}
+          config={fxConfig}
+          onChange={(newCfg) => {
+            setFxConfig(newCfg);
+            fxEngineRef.current.updateConfig(newCfg);
+          }}
         />
       </main>
     </div>

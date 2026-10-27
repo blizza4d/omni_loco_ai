@@ -6,6 +6,8 @@ import { HandGestureClassifier } from './gesture-classifier';
 import { generateSyntheticHand } from './synthetic-hand';
 import { OneEuroFilter } from '@/core/filters';
 import { MediaPipeTaskRunner } from '@/core/mediapipe/task-runner';
+import { getPublishedModels } from '@/modules/laboratory/model-storage';
+import { ClassifierTrainer } from '@/modules/laboratory/classifier-trainer';
 
 export interface UseHandGesturesOptions {
   videoElement?: HTMLVideoElement | null;
@@ -20,7 +22,8 @@ export interface UseHandGesturesOptions {
     landmarks: Landmark3D[] | null,
     cursor: { x: number; y: number; isPinching: boolean; dwellProgress: number },
     multiHands?: Landmark3D[][],
-    multiHandednesses?: ('Left' | 'Right')[]
+    multiHandednesses?: ('Left' | 'Right')[],
+    gestures?: RecognizedGesture[]
   ) => void;
 }
 
@@ -85,6 +88,25 @@ export function useHandGestures(options: UseHandGesturesOptions = {}) {
   const frameCountRef = useRef<number>(0);
   const lastFpsCalcRef = useRef<number>(performance.now());
   const lastUiUpdateRef = useRef<number>(0);
+  const customTrainersRef = useRef<{ id: string; trainer: ClassifierTrainer }[]>([]);
+
+  // Load published custom models from Laboratory storage
+  useEffect(() => {
+    try {
+      const published = getPublishedModels().filter((m) => m.modelData);
+      customTrainersRef.current = published.map((m) => {
+        const t = new ClassifierTrainer({
+          metric: m.hyperparameters.metric || 'euclidean',
+          confidenceThreshold: m.hyperparameters.confidenceThreshold || 0.68,
+          kNeighbors: m.hyperparameters.kNeighbors || 3,
+        });
+        t.loadModelData(m.modelData!);
+        return { id: m.id, trainer: t };
+      });
+    } catch {
+      // safe fallback
+    }
+  }, []);
 
   // Initialize MediaPipe HandLandmarker
   useEffect(() => {
@@ -177,6 +199,19 @@ export function useHandGestures(options: UseHandGesturesOptions = {}) {
 
       // Classify gestures via pure math
       const recognized = classifierRef.current.classify(currentLandmarks, now);
+
+      // Check published custom models from Laboratory
+      for (const { trainer } of customTrainersRef.current) {
+        const pred = trainer.predict(currentLandmarks);
+        if (pred.isRecognized && pred.label !== 'none' && pred.label !== 'neutral') {
+          recognized.unshift({
+            name: pred.label as any,
+            confidence: pred.confidence,
+            label: pred.label.replace('_', ' '),
+          });
+        }
+      }
+
       gesturesRef.current = recognized;
 
       if (onGestureRef.current && recognized[0]) {
@@ -243,13 +278,14 @@ export function useHandGestures(options: UseHandGesturesOptions = {}) {
           currentLandmarks,
           cursorRef.current,
           multiHandsRef.current,
-          multiHandednessesRef.current
+          multiHandednessesRef.current,
+          recognized
         );
       }
     } else {
       // Clear overlay when no hands detected
       if (onFrameRenderRef.current) {
-        onFrameRenderRef.current(null, cursorRef.current, [], []);
+        onFrameRenderRef.current(null, cursorRef.current, [], [], []);
       }
     }
 

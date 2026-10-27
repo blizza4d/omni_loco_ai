@@ -92,6 +92,33 @@ export const INITIAL_ACHIEVEMENTS: Achievement[] = [
     unlockedAt: null,
     category: 'VISION',
   },
+  {
+    id: 'LAB_INVENTOR',
+    title: 'LABORATORY INVENTOR',
+    codename: 'NEURAL_CLASSIFIER_TRAINED',
+    description: 'Trained and deployed a custom on-device spatial gesture classifier in the Laboratory.',
+    icon: '⚗️',
+    unlockedAt: null,
+    category: 'SYSTEM',
+  },
+  {
+    id: 'NEURAL_ARCHITECT',
+    title: 'NEURAL ARCHITECT',
+    codename: 'PIPELINE_GRAPH_COMPILED',
+    description: 'Constructed and validated a multi-node spatial processing pipeline DAG.',
+    icon: '📐',
+    unlockedAt: null,
+    category: 'SYSTEM',
+  },
+  {
+    id: 'FX_VIRTUOSO',
+    title: 'FX VIRTUOSO',
+    codename: 'GESTURE_RESONANCE_BURST',
+    description: 'Activated gesture-reactive visual effect signatures with verified hand kinematics.',
+    icon: '✨',
+    unlockedAt: null,
+    category: 'VISION',
+  },
 ];
 
 const STORAGE_KEY = 'omni-achievements-v1';

@@ -19,6 +19,7 @@ import {
   Keyboard,
   Trophy,
   Terminal,
+  FlaskConical,
 } from 'lucide-react';
 import { detectCapabilities } from '@/core/capabilities';
 import { useSettingsStore, useSystemStore } from '@/core/store';
@@ -242,6 +243,23 @@ export function GlobalNav({
                 icon={<ShieldCheck className="w-3 h-3 text-sage-green group-hover:scale-110 transition-transform" />}
               />
             </button>
+
+            {/* Laboratory Navigation Button */}
+            <Link href="/laboratory">
+              <button
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-mono font-bold uppercase border-2 rounded-tactile transition-all ${
+                  pathname === '/laboratory'
+                    ? 'border-cyan-500 bg-cyan-500/20 text-cyan-700 dark:text-cyan-400 shadow-tactile-sm'
+                    : 'border-charcoal-soft text-charcoal-soft hover:bg-paper-dark hover:border-cyan-500 hover:text-cyan-600'
+                }`}
+                title="Open Omni Loco Experimental AI Laboratory Workspace"
+                aria-label="Open Laboratory Workspace"
+              >
+                <FlaskConical className="w-3.5 h-3.5 text-cyan-500" />
+                <span className="hidden sm:inline">LABORATORY</span>
+                <span className="sm:hidden">LAB</span>
+              </button>
+            </Link>
 
             {/* Backend Status Badge */}
             <button
