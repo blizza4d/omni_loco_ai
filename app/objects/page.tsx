@@ -60,12 +60,13 @@ export default function ObjectsPage() {
   // Initialize Detector Backend
   useEffect(() => {
     let unmounted = false;
-    detectorRef.current.init().then((b) => {
+    const detector = detectorRef.current;
+    detector.init().then((b) => {
       if (!unmounted) setBackend(b);
     });
     return () => {
       unmounted = true;
-      detectorRef.current.reset();
+      detector.reset();
     };
   }, []);
 

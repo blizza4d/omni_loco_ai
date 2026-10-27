@@ -180,18 +180,34 @@ const DATASETS_KEY = 'omni-laboratory-datasets-v1';
 const EXPERIMENTS_KEY = 'omni-laboratory-experiments-v1';
 const DRAFT_KEY = 'omni-laboratory-draft-v1';
 
-// Strict validation to prevent prototype pollution and malformed payloads
+// Strict recursive validation to prevent prototype pollution and malformed payloads
 function sanitizeObject<T>(input: any): T {
   if (typeof input !== 'object' || input === null) {
     throw new Error('Invalid input payload: expected an object');
   }
-  // Remove dangerous keys
-  const forbidden = ['__proto__', 'constructor', 'prototype'];
-  for (const key of forbidden) {
-    if (key in input) {
-      delete input[key];
+
+  const sanitizeRecursive = (obj: any): void => {
+    if (typeof obj !== 'object' || obj === null) return;
+    if (Array.isArray(obj)) {
+      for (let i = 0; i < obj.length; i++) {
+        sanitizeRecursive(obj[i]);
+      }
+    } else {
+      const forbidden = ['__proto__', 'constructor', 'prototype'];
+      for (const key of forbidden) {
+        if (key in obj) {
+          delete obj[key];
+        }
+      }
+      for (const key of Object.keys(obj)) {
+        if (typeof obj[key] === 'object' && obj[key] !== null) {
+          sanitizeRecursive(obj[key]);
+        }
+      }
     }
-  }
+  };
+
+  sanitizeRecursive(input);
   return input as T;
 }
 

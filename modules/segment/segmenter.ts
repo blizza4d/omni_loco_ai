@@ -205,4 +205,13 @@ export class PromptableSegmenter {
     ctx.putImageData(imgData, 0, 0);
     return canvas.toDataURL('image/png');
   }
+
+  dispose(): void {
+    if (this.scratchCanvas) {
+      this.scratchCanvas.width = 0;
+      this.scratchCanvas.height = 0;
+      this.scratchCanvas = null;
+      this.scratchCtx = null;
+    }
+  }
 }

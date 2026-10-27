@@ -118,7 +118,7 @@ export function NetworkTransparencyModal({ isOpen, onClose }: NetworkTransparenc
             <div className="border border-charcoal-soft p-2.5 bg-paper-cream">
               <span className="block text-[10px] text-ink-muted uppercase">CSP Status</span>
               <span className="text-lg font-bold text-charcoal-soft">ENFORCED</span>
-              <span className="block text-[9px] text-ink-muted">connect-src 'self'</span>
+              <span className="block text-[9px] text-ink-muted">connect-src &apos;self&apos;</span>
             </div>
           </div>
 

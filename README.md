@@ -1,6 +1,6 @@
 # OMNI LOCO AI: Multimodal On-Device Intelligence Suite
 
-> **Production-grade, fully client-side multimodal machine learning laboratory built with Next.js 14, WebGPU, and WebAssembly (WASM). All neural inference runs strictly inside your local browser. Zero video, audio, or biometric data ever leaves the device.**
+> **Production-grade, client-side multimodal machine learning laboratory built with Next.js 14, WebGPU, WebAssembly (WASM SIMD), ONNX Runtime Web, and MediaPipe Tasks Vision. All neural inference runs strictly inside your local browser. Zero video frames, audio buffers, or biometric vectors are transmitted over any network.**
 
 ---
 
@@ -8,28 +8,32 @@
 
 ```mermaid
 flowchart TD
-    subgraph Browser ["Client Browser Sandbox (Air-Gapped)"]
+    subgraph Browser ["Client Browser Sandbox (100% On-Device)"]
         subgraph MainThread ["Main UI Thread (Target: 60 FPS)"]
-            UI["Next.js App Router (React 18)\nTailwind 'Analog AI' Design System"]
+            UI["Next.js App Router (React 18)\nAnalog Technical Design System"]
             HUD["Performance HUD & Network Transparency Auditor"]
             AudioDSP["Web Audio API & AnalyserNode"]
-            Canvas3D["Three.js 3D Driving Simulator Viewport"]
+            Canvas3D["Three.js 3D Road Simulator Canvas"]
+            GazePointer["Calibrated Viewport Gaze Cursor Overlay"]
+            GestureFX["Real-Time Canvas Particle FX Engine"]
         end
 
-        subgraph WorkerPool ["Dedicated Web Workers (Target: 30+ FPS)"]
-            Scheduler["Adaptive Frame Scheduler\n(requestVideoFrameCallback / Zero-Copy ImageBitmap)"]
+        subgraph WorkerPool ["Ephemeral Web Workers & Runtimes (Target: 30+ FPS)"]
+            Scheduler["Adaptive Frame Scheduler & Monotonic Clock"]
             OneEuro["One Euro & Kalman Kinematic Filters"]
             
-            subgraph HardwareAcceleration ["Hardware Acceleration Fallback"]
-                WebGPU["WebGPU Pipeline\n(Direct Compute Shaders)"]
-                WebGL["WebGL 2.0 Fallback"]
-                WASM["WASM SIMD 128-bit\n(Multi-Threaded SharedArrayBuffer)"]
+            subgraph Runtimes ["Execution Runtimes"]
+                MP["MediaPipe Tasks Vision (GPU Delegate / WASM fallback)"]
+                ORT["ONNX Runtime Web (WebGPU / WASM SIMD threaded)"]
+                TF["TensorFlow.js (WebGPU / WebGL fallback)"]
+                DSP["Web Audio Worklet & Autocorrelation DSP"]
             end
         end
 
-        subgraph LocalStorage ["Local-Only Volatile & Cache Storage"]
+        subgraph LocalStorage ["Local-Only Ephemeral & Persistent Cache"]
             CacheAPI["Cache Storage API ('omni-loco-models-v1')"]
-            IDB["IndexedDB Session Ledger"]
+            IDB["IndexedDB Laboratory Model & Dataset Ledger"]
+            LocalSettings["localStorage (Preferences & Calibration Targets)"]
         end
     end
 
@@ -41,106 +45,159 @@ flowchart TD
     UI --> AudioDSP
     UI --> Canvas3D
     UI --> HUD
-    Scheduler -->|Transferable ImageBitmap| WorkerPool
-    WorkerPool --> HardwareAcceleration
-    HardwareAcceleration --> LocalStorage
+    UI --> GazePointer
+    UI --> GestureFX
+    Scheduler -->|Transferable ImageBitmap / Frame| WorkerPool
+    WorkerPool --> Runtimes
+    Runtimes --> LocalStorage
     Browser -->|Allowed: Static GET| StaticAssets
-    Browser -.->|Blocked by CSP| ExternalNetwork
+    Browser -.->|Blocked by CSP: 0 Outbound Bytes| ExternalNetwork
 ```
 
 ---
 
-## 2. Non-Negotiable Engineering Principles
+## 2. Core Engineering Principles
 
-1. **Privacy by Architecture**:
-   - Zero server-side inference, zero uploads of camera/microphone frames, zero third-party telemetry.
-   - Enforced by strict Content-Security-Policy: `connect-src 'self' blob: data:` and `frame-ancestors 'none'`.
-   - Visible **"100% On-Device"** badge and interactive **Network Transparency Auditor** displaying verified zero-byte outbound data transmission.
+1. **Privacy by Architecture (Zero-Cloud)**:
+   - Zero server-side inference, zero uploads of camera/microphone streams, zero third-party telemetry.
+   - Enforced by Content-Security-Policy (`connect-src 'self' blob: data:` and `frame-ancestors 'none'`).
+   - Verified by the in-app **Network Transparency Auditor** displaying 0.00 KB outbound traffic.
 2. **Main-Thread Protection**:
-   - The UI thread only renders and handles input. All matrix inference, audio DSP, and heavy trigonometry run in Web Workers.
-   - Smooth 60 FPS UI rendering while inference runs at 30+ FPS.
+   - The UI thread handles rendering and inputs at 60 FPS. Heavy matrix operations, ML model inference, and complex trigonometry run with zero UI blocking.
 3. **Hardware Acceleration with Graceful Fallback**:
-   - Primary: **WebGPU** (Direct GPU compute pipelines)
+   - Primary: **WebGPU** (Direct compute shaders)
    - Secondary: **WebGL 2.0**
-   - Tertiary: **WebAssembly SIMD (128-bit vector instructions)** and multithreaded workers via `SharedArrayBuffer`
-   - Quaternary: Deterministic synthetic replay mode for headless and camera-less environments.
+   - Tertiary: **WASM SIMD (128-bit vector instructions)**
+   - Quaternary: Deterministic synthetic replay mode for testing without camera hardware.
 4. **Strict Module Isolation & Resource Discipline**:
    - Each module is a self-contained sandbox.
-   - Leaving a route automatically terminates its worker thread, calls `MediaStreamTrack.stop()`, disposes GPU textures/buffers via `tf.dispose()`, and releases camera/mic hardware.
-5. **"Analog AI / Engineer's Desk" Design System**:
-   - Physical drafting desk aesthetic: 24px blueprint grid, paper grain texture, stamped corner figures (`FIG. 01` through `FIG. 07`), Courier Prime technical typography, and mechanical tactile buttons with 3px collapsing offset shadows (`shadow-tactile`).
+   - Leaving a route automatically stops all `MediaStreamTrack` hardware feeds, terminates workers, disposes GPU textures/buffers via `.dispose()`, and cancels animation frame loops.
+5. **Retro-Technical Instrumentation Aesthetic**:
+   - Technical blueprint drafting identity: 24px grid, Courier Prime monospaced typography, stamped figure identifiers (`FIG. 01` through `FIG. 12`), and tactile mechanical controls.
 
 ---
 
-## 3. Multimodal Laboratory Modules
+## 3. Implemented Modules and Capabilities
 
-| Figure | Module | Route | Technologies | Capabilities |
+| Figure | Module | Route | Runtimes / Model Family | Capabilities |
 | :--- | :--- | :--- | :--- | :--- |
-| **FIG. 01** | **Hand Gesture Recognition** | `/hand` | MediaPipe Tasks Vision, One Euro Filter | 21 3D landmarks, dual-hand tracking, pinch hysteresis, swipe velocity, and touchless virtual spatial mouse cursor. |
-| **FIG. 02** | **Biometric Face Mesh** | `/face` | 478 Landmarks, 52 ARKit Blendshapes | Eye Aspect Ratio (EAR) blink frequency, PERCLOS drowsiness detection, 3D head-pose gizmo (yaw/pitch/roll), and vocal activity detection. |
-| **FIG. 03** | **Kinematic Pose Estimation** | `/pose` | 33 World Landmarks, 3D Vector Math | 3D joint angle trigonometry ($\arccos(\vec{a}\cdot\vec{b})$), hysteresis rep counter for squats, push-ups, curls, and desk worker forward-head ergonomics check. |
-| **FIG. 04** | **Driving Simulator** | `/drive` | Three.js WebGL, Bicycle Kinematics | Procedural endless road, two-hand steering matrix with deadzone and progressive non-linear curve, analog instrument cluster, and "HANDS LOST" auto-ease safety. |
-| **FIG. 05** | **Acoustic & Speech Analytics** | `/speech` | Web Audio API, Autocorrelation, VAD | Fundamental frequency pitch contour ($F_0$), voice activity detection (VAD), cadence WPM pacing, temporal flaw detection, and dual-needle VU meter. |
-| **FIG. 06** | **Waste Segregation Scanner** | `/waste` | TensorFlow.js WebGPU, MobileNetV3 | 10-category waste classification, center-crop ROI box, 8-frame temporal voting stability, and municipal recycling bin directives. |
-| **FIG. 07** | **Gaze Heatmap Generator** | `/gaze` | Refined Iris Vectors, Ridge Regression | 9-point on-screen calibration, I-DT fixation clustering vs saccades, scan-path ordering, Gaussian accumulation heatmap, and Area of Interest (AOI) metrics. |
+| **FIG. 01** | **Hand Gesture Recognition** | `/hand` | MediaPipe Tasks Vision (`hand_landmarker.task`) | 21 3D landmarks, dual-hand tracking, pinch hysteresis, swipe velocity, touchless spatial cursor, and Gesture FX particle engine. |
+| **FIG. 02** | **Biometric Face Mesh** | `/face` | MediaPipe FaceLandmarker (`face_landmarker.task`) | 478 dense landmarks, 52 ARKit blendshapes, PERCLOS drowsiness detection, 3D head-pose gizmo (yaw/pitch/roll), and real-time expression radar. |
+| **FIG. 03** | **Kinematic Pose Estimation** | `/pose` | MediaPipe PoseLandmarker (`pose_landmarker_full.task`) | 33 full-body world landmarks, 3D joint angle trigonometry ($\arccos(\vec{a}\cdot\vec{b})$), rep counter state machine, and posture ergonomics check. |
+| **FIG. 04** | **Gesture-Steered Simulator** | `/drive` | Three.js WebGL, Bicycle Kinematics | Procedural endless road, two-hand steering matrix with deadzone & curve, keyboard fallback, analog cluster, and "HANDS LOST" auto-ease safety. |
+| **FIG. 05** | **Acoustic & Speech Analytics** | `/speech` | Web Audio API, Autocorrelation, VAD | Pitch contour ($F_0$), voice activity detection (VAD), cadence WPM pacing, temporal flaw detection, and dual-needle VU meter. |
+| **FIG. 06** | **Smart Waste Segregator** | `/waste` | TensorFlow.js WebGPU (`classifier.tflite`) | 10-class neural waste classification, center-crop ROI box, 8-frame temporal voting stability, and municipal recycling bin directives. |
+| **FIG. 07** | **Gaze-Tracking Heatmap** | `/gaze` | MediaPipe Tasks Vision & Ridge Regression | 9-point on-screen calibration, I-DT fixation clustering vs saccades, scan-path ordering, Gaussian accumulation heatmap, and Area of Interest (AOI) metrics. |
+| **FIG. 08** | **Bilateral Eye & Iris Tracking** | `/eye` | MediaPipe Iris Mesh, Pupillometry | Anatomical OS/OD iris segmentation, pupil diameter metrics, ocular gaze vectors, and Homelander Heat Vision laser easter egg with procedural audio. |
+| **FIG. 09** | **Advanced Object Intelligence** | `/objects` | ONNX Runtime Web (`ort-wasm-simd-threaded.wasm`) | YOLO multi-object detection, spatial IoU bounding box tracking, confidence thresholds, and COCO-80 filtering. |
+| **FIG. 10** | **Promptable Segmentation Lab** | `/segment` | ONNX Runtime Web Feature Decoder | Point-and-click promptable segmentation decoder, geodesic mask extraction, boundary contours, and PNG cutout export. |
+| **FIG. 11** | **Monocular Depth Estimation** | `/depth` | ONNX Runtime Web Scene Geometry | Relative depth geometry, side-by-side & split-screen scrubber, Turbo/Inferno/Viridis palettes, and 3D surface normal probe. |
+| **FIG. 12** | **Finger Counting & Output** | `/fingers` | Invariant Kinematics (`hand_landmarker.task`) | Real-time 0-10 dual-hand finger counting, hysteresis voting stabilization, action triggers, and Web Speech API TTS audio output. |
+| **LAB** | **Laboratory V2 Workspace** | `/laboratory` | Custom kNN / Centroid Classifier Trainer | End-to-end model creation, 63D feature dataset collector, hyperparameter tuning, DAG visual pipeline editor, live test bench, and experiment evaluation. |
 
 ---
 
-## 4. Browser Support Matrix
+## 4. Laboratory V2 Architecture
 
-| Browser | WebGPU Acceleration | WebGL Fallback | WASM SIMD & Threads | Status |
-| :--- | :---: | :---: | :---: | :--- |
-| **Google Chrome / Chromium** (113+) | Full Native | Supported | Supported (COOP/COEP) | Recommended |
-| **Microsoft Edge** (113+) | Full Native | Supported | Supported (COOP/COEP) | Recommended |
-| **Mozilla Firefox** (120+) | Experimental | Full Native | Supported (SIMD enabled) | Supported |
-| **Apple Safari** (17+) | WebGPU Flag | Full Native | Supported (WASM SIMD) | Supported |
-| **Mobile Browsers (iOS / Android)** | Tier Dependent | Full Native | Supported | Responsive & Front/Rear Switching |
+The Laboratory (`/laboratory`) is an interactive workbench for creating, evaluating, and fine-tuning lightweight on-device models:
 
----
-
-## 5. Performance Tuning Guide
-
-1. **Cross-Origin Isolation (COOP & COEP)**:
-   Configured in `next.config.mjs`:
-   ```javascript
-   { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
-   { key: 'Cross-Origin-Embedder-Policy', value: 'require-corp' }
-   ```
-   This unlocks `SharedArrayBuffer`, allowing multi-threaded WebAssembly and atomic memory sharing across Web Workers without inter-thread data copying.
-
-2. **Adaptive Frame Scheduler & Zero Queue Backlog**:
-   The `AdaptiveFrameScheduler` in `core/scheduler/adaptive-scheduler.ts` tracks worker inference latency. If inference takes longer than the frame budget ($>33.3\text{ms}$), incoming camera frames are immediately dropped rather than queued, eliminating video latency drift.
-
-3. **Zero-Copy ImageBitmap Transfers**:
-   Frames captured from `<video>` are converted into `ImageBitmap` primitives and posted to workers as `Transferable` objects (`worker.postMessage(msg, [bitmap])`). The underlying GPU/system memory pointer transfers ownership in $0\text{ms}$.
-
-4. **One Euro Smoothing**:
-   All spatial cursor and joint coordinates pass through Casiez's One Euro adaptive low-pass filter:
-   $$\alpha = \frac{1}{1 + \frac{\tau}{T_e}}, \quad \text{where } \tau = \frac{1}{2\pi (f_c + \beta |\dot{x}|)}$$
-   This guarantees jitter-free stability when hands dwell, and low-latency tracking during fast sweeps.
+1. **Model Library**: Browse, duplicate, create variants of factory baselines, or import custom models via JSON.
+2. **Dataset Workbench**: Capture live 63-dimensional normalized hand landmark samples per class with class distribution balance tracking.
+3. **Training & Validation Engine**:
+   - Metric choices: Euclidean, Cosine, Manhattan.
+   - $k$-Nearest Neighbors ($k$-NN) and Centroid prototype classifiers.
+   - 80/20 train/validation split with confusion matrix and top-1 accuracy computation.
+4. **Visual Pipeline Editor**: Interactive DAG editor connecting input sources, filters (EMA, One Euro, Kalman), feature extractors, classifiers, and output actions.
+5. **Live Test Bench**: Real-time camera validation with confidence gauges, latency meters, and Gesture FX mappings.
+6. **Experiment Workbench**: Systematic comparative benchmark evaluation matrix.
 
 ---
 
-## 6. Verification and Testing
+## 5. Shared Camera & Model Lifecycle
 
-Omni Loco AI includes Vitest unit tests verifying all mathematical formulas, vector kinematics, and DSP algorithms:
+- **Camera Management (`core/camera/useCamera.ts`)**:
+  - Handles single-point stream initialization, track enumeration, and front/rear switching.
+  - Abort-protected asynchronous acquisition: if unmounted while `getUserMedia()` is resolving, tracks are immediately stopped to eliminate background camera leaks.
+- **Model Task Runner (`core/mediapipe/task-runner.ts`)**:
+  - Automatically attempts WebGPU delegate first, falling back to CPU WebAssembly.
+  - Single-flight locking (`isProcessing`) and strictly monotonic timestamp enforcement for video mode.
+  - Abort-guarded disposal (`isDisposed` flag): closes in-flight WebAssembly workers if navigation occurs during model fetch.
 
+---
+
+## 6. Installation and Commands
+
+### Prerequisites
+- Node.js 18.17+ or Node.js 20+
+- Modern Chromium browser (recommended for WebGPU support)
+
+### Setup
 ```bash
-# Run complete unit test suite
-npm test
+# Clone the repository
+git clone https://github.com/blizza4d/omni_loco_ai.git
+cd "omni loco"
 
-# Build production bundle with full type safety
+# Install dependencies
+npm install
+```
+
+### Development Server
+```bash
+npm run dev
+# Starts development server on http://localhost:3000
+```
+
+### Static Build & Production Server
+```bash
+# Compile and validate all 17 static routes
 npm run build
 
-# Start local server with COOP/COEP headers
+# Start production server with COOP/COEP isolation headers
 npm run start
 ```
 
+### Code Quality & Tests
+```bash
+# Run ESLint validation (0 errors, 0 warnings enforced)
+npm run lint
+
+# Run TypeScript static type check
+npx tsc --noEmit
+
+# Run unit and integration tests (91 automated tests)
+npm test
+```
+
 ---
 
-## 7. License
+## 7. Automated Test Suites
+
+| Test Suite | File | Tests | Validated Subsystems |
+| :--- | :--- | :---: | :--- |
+| **Finger Counting** | `tests/finger-counting.test.ts` | 12 | Invariant finger curl geometry, hysteresis voting, dual-hand accumulation |
+| **Gesture FX & Laboratory** | `tests/gesture-fx-and-laboratory.test.ts` | 19 | Particle physics, model persistence, kNN trainer, dataset importer, versioning |
+| **Easter Eggs & Secrets** | `tests/easter-eggs.test.ts` | 12 | Konami code sequence, achievements ledger, tab watcher, secret CLI |
+| **Gaze & Calibration** | `tests/gaze-cursor-and-calibration.test.ts` | 11 | 9-point ridge regression, I-DT fixation clustering, viewport cursor mapping |
+| **Eye & Drive Sim** | `tests/eye-and-drive.test.ts` | 8 | Bilateral iris metrics, pupillometry, bicycle kinematics, steering deadzones |
+| **Kinematics & DSP** | `tests/kinematics-and-dsp.test.ts` | 11 | 3D joint angles, autocorrelation pitch detection, RMS loudness, ZCR |
+| **Camera & Overlays** | `tests/camera-and-overlay.test.ts` | 6 | Aspect ratio coordinate scaling, canvas buffer synchronization, DPR mapping |
+| **Advanced Modules** | `tests/advanced-modules.test.ts` | 7 | YOLO IoU tracker, SAM promptable segmenter, monocular depth estimator |
+| **Platform UI & Registry** | `tests/platform-ui-and-registry.test.ts` | 5 | Registry figure completeness, category summaries, storage cache helpers |
+| **Total** | **9 Test Suites** | **91** | **All 91 tests passing in < 2.0s** |
+
+---
+
+## 8. Known Limitations & Technical Constraints
+
+1. **Hardware Acceleration**:
+   - WebGPU requires Chrome/Edge 113+ or Safari 17+ (with flag). On older browsers, models gracefully fall back to WASM SIMD or WebGL.
+2. **Camera Lighting & Background**:
+   - Extreme backlighting or hands perpendicular to camera plane may reduce landmark confidence; the system falls back to temporal EMA smoothing.
+3. **Speech Synthesis**:
+   - TTS feedback in Finger Counting relies on browser `window.speechSynthesis`, which may be muted if user has not interacted with the page first.
+
+---
+
+## 9. License
 
 MIT License. Designed and engineered for 100% on-device private multimodal intelligence.
-# omni_loco_ai
-# omni_loco_ai
-# omni_loco_ai

@@ -97,15 +97,16 @@ export default function FaceModulePage() {
   // Initialize MediaPipe FaceLandmarker
   useEffect(() => {
     let mounted = true;
-    runnerRef.current.initFaceLandmarker().then((success) => {
+    const runner = runnerRef.current;
+    runner.initFaceLandmarker().then((success) => {
       if (mounted) {
-        setBackendInUse(runnerRef.current.getBackend());
+        setBackendInUse(runner.getBackend());
       }
     });
 
     return () => {
       mounted = false;
-      runnerRef.current.dispose();
+      runner.dispose();
     };
   }, []);
 

@@ -119,8 +119,9 @@ export default function GazePage() {
   }, [heatVisionConfig.enabled, heatVisionConfig.soundEnabled, heatVisionConfig.intensity]);
 
   useEffect(() => {
+    const audio = heatVisionAudioRef.current;
     return () => {
-      heatVisionAudioRef.current.dispose();
+      audio.dispose();
     };
   }, []);
 
@@ -173,15 +174,16 @@ export default function GazePage() {
     setAccuracy(calibrationEngineRef.current.getAccuracy());
 
     let unmounted = false;
-    taskRunnerRef.current.initFaceLandmarker().then((success) => {
+    const runner = taskRunnerRef.current;
+    runner.initFaceLandmarker().then((success) => {
       if (!unmounted) {
-        setModelBackend(success ? `MEDIAPIPE (${taskRunnerRef.current.getBackend()})` : 'SYNTHETIC FALLBACK');
+        setModelBackend(success ? `MEDIAPIPE (${runner.getBackend()})` : 'SYNTHETIC FALLBACK');
       }
     });
 
     return () => {
       unmounted = true;
-      taskRunnerRef.current.dispose();
+      runner.dispose();
     };
   }, []);
 
@@ -643,6 +645,7 @@ export default function GazePage() {
               )}
 
               {targetCanvasMode === 'upload' && uploadedImageSrc && (
+                /* eslint-disable-next-line @next/next/no-img-element */
                 <img
                   src={uploadedImageSrc}
                   alt="Target screenshot"

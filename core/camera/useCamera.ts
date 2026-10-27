@@ -132,6 +132,17 @@ export function useCamera(options: UseCameraOptions = {}) {
 
       try {
         const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+        if (!isStartingRef.current) {
+          // Component unmounted or camera stopped while getUserMedia was resolving
+          newStream.getTracks().forEach((track) => {
+            try {
+              track.stop();
+            } catch {
+              // ignore
+            }
+          });
+          return;
+        }
         streamRef.current = newStream;
         setStream(newStream);
         setIsStreaming(true);

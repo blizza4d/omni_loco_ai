@@ -89,7 +89,7 @@ export default function LaboratoryPage() {
   }, []);
 
   // Update URL query parameters on mode or model change
-  const handleModeChange = (newMode: LabWorkstationMode) => {
+  const handleModeChange = useCallback((newMode: LabWorkstationMode) => {
     setMode(newMode);
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
@@ -97,7 +97,7 @@ export default function LaboratoryPage() {
       if (activeModel) params.set('model', activeModel.id);
       window.history.replaceState(null, '', `?${params.toString()}`);
     }
-  };
+  }, [activeModel]);
 
   const handleModelChange = (m: LaboratoryModel) => {
     setActiveModel(m);
@@ -144,7 +144,7 @@ export default function LaboratoryPage() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeModel, router]);
+  }, [activeModel, router, handleModeChange]);
 
   const handleOpenTestBench = (m: LaboratoryModel) => {
     handleModelChange(m);

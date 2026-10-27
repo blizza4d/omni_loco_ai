@@ -62,9 +62,15 @@ export default function SegmentationPage() {
 
   // Initialize Segmenter Backend
   useEffect(() => {
-    segmenterRef.current.init().then((b) => {
-      setBackend(b);
+    let unmounted = false;
+    const segmenter = segmenterRef.current;
+    segmenter.init().then((b) => {
+      if (!unmounted) setBackend(b);
     });
+    return () => {
+      unmounted = true;
+      segmenter.dispose();
+    };
   }, []);
 
   const { setPerfStats } = useSystemStore();

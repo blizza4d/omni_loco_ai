@@ -90,20 +90,21 @@ export default function PoseModulePage() {
   // Initialize MediaPipe PoseLandmarker
   useEffect(() => {
     let mounted = true;
+    const runner = runnerRef.current;
     const modelPath =
       modelTier === 'lite'
         ? '/models/pose_landmarker_full.task' // fallback to full if lite isn't preloaded
         : '/models/pose_landmarker_full.task';
 
-    runnerRef.current.initPoseLandmarker(modelPath).then((success) => {
+    runner.initPoseLandmarker(modelPath).then((success) => {
       if (mounted) {
-        setBackendInUse(runnerRef.current.getBackend());
+        setBackendInUse(runner.getBackend());
       }
     });
 
     return () => {
       mounted = false;
-      runnerRef.current.dispose();
+      runner.dispose();
     };
   }, [modelTier]);
 
@@ -140,7 +141,7 @@ export default function PoseModulePage() {
     let currentLandmarks: PoseLandmark[] = [];
 
     if (syntheticMode || !videoRef.current || videoRef.current.readyState < 2) {
-      currentLandmarks = generateSyntheticPose(now, exercise);
+      currentLandmarks = generateSyntheticPose(now, exerciseRef.current);
     } else {
       // Run real MediaPipe PoseLandmarker
       const mpResult = runnerRef.current.detectPose(videoRef.current, now);

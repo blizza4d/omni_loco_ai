@@ -263,7 +263,7 @@ export default function DepthEstimationPage() {
         }
       }
     }
-  }, [config, scrubberPos, isHoveringCanvas, activeProbe]);
+  }, [config, scrubberPos, isHoveringCanvas, activeProbe, videoRef]);
 
   // Real-time animation loop
   useEffect(() => {

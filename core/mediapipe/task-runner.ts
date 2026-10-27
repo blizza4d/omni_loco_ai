@@ -25,6 +25,7 @@ export class MediaPipeTaskRunner {
 
   private isInitializing = false;
   private isProcessing = false;
+  private isDisposed = false;
   private lastTimestampMs = 0;
   private activeBackend: 'GPU' | 'CPU' | 'SYNTHETIC' = 'SYNTHETIC';
 
@@ -55,6 +56,7 @@ export class MediaPipeTaskRunner {
     if (this.handLandmarker) return true;
     if (this.isInitializing) return false;
 
+    this.isDisposed = false;
     this.isInitializing = true;
     try {
       const vision = await this.getVisionResolver();
@@ -62,7 +64,7 @@ export class MediaPipeTaskRunner {
 
       // Attempt GPU delegate first
       try {
-        this.handLandmarker = await HandLandmarker.createFromOptions(vision, {
+        const created = await HandLandmarker.createFromOptions(vision, {
           baseOptions: {
             modelAssetPath: modelPath,
             delegate: 'GPU',
@@ -73,10 +75,16 @@ export class MediaPipeTaskRunner {
           minHandPresenceConfidence: 0.5,
           minTrackingConfidence: 0.5,
         });
+        if (this.isDisposed) {
+          try { created.close(); } catch {}
+          this.isInitializing = false;
+          return false;
+        }
+        this.handLandmarker = created;
         this.activeBackend = 'GPU';
       } catch {
         // Fallback to CPU delegate
-        this.handLandmarker = await HandLandmarker.createFromOptions(vision, {
+        const created = await HandLandmarker.createFromOptions(vision, {
           baseOptions: {
             modelAssetPath: modelPath,
             delegate: 'CPU',
@@ -85,6 +93,12 @@ export class MediaPipeTaskRunner {
           numHands: 2,
           minHandDetectionConfidence: 0.5,
         });
+        if (this.isDisposed) {
+          try { created.close(); } catch {}
+          this.isInitializing = false;
+          return false;
+        }
+        this.handLandmarker = created;
         this.activeBackend = 'CPU';
       }
 
@@ -123,13 +137,14 @@ export class MediaPipeTaskRunner {
     if (this.faceLandmarker) return true;
     if (this.isInitializing) return false;
 
+    this.isDisposed = false;
     this.isInitializing = true;
     try {
       const vision = await this.getVisionResolver();
       const { FaceLandmarker } = await import('@mediapipe/tasks-vision');
 
       try {
-        this.faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+        const created = await FaceLandmarker.createFromOptions(vision, {
           baseOptions: {
             modelAssetPath: modelPath,
             delegate: 'GPU',
@@ -142,9 +157,15 @@ export class MediaPipeTaskRunner {
           minFacePresenceConfidence: 0.5,
           minTrackingConfidence: 0.5,
         });
+        if (this.isDisposed) {
+          try { created.close(); } catch {}
+          this.isInitializing = false;
+          return false;
+        }
+        this.faceLandmarker = created;
         this.activeBackend = 'GPU';
       } catch {
-        this.faceLandmarker = await FaceLandmarker.createFromOptions(vision, {
+        const created = await FaceLandmarker.createFromOptions(vision, {
           baseOptions: {
             modelAssetPath: modelPath,
             delegate: 'CPU',
@@ -154,6 +175,12 @@ export class MediaPipeTaskRunner {
           outputFacialTransformationMatrixes: true,
           numFaces: 1,
         });
+        if (this.isDisposed) {
+          try { created.close(); } catch {}
+          this.isInitializing = false;
+          return false;
+        }
+        this.faceLandmarker = created;
         this.activeBackend = 'CPU';
       }
 
@@ -190,13 +217,14 @@ export class MediaPipeTaskRunner {
     if (this.poseLandmarker) return true;
     if (this.isInitializing) return false;
 
+    this.isDisposed = false;
     this.isInitializing = true;
     try {
       const vision = await this.getVisionResolver();
       const { PoseLandmarker } = await import('@mediapipe/tasks-vision');
 
       try {
-        this.poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+        const created = await PoseLandmarker.createFromOptions(vision, {
           baseOptions: {
             modelAssetPath: modelPath,
             delegate: 'GPU',
@@ -207,9 +235,15 @@ export class MediaPipeTaskRunner {
           minPosePresenceConfidence: 0.5,
           minTrackingConfidence: 0.5,
         });
+        if (this.isDisposed) {
+          try { created.close(); } catch {}
+          this.isInitializing = false;
+          return false;
+        }
+        this.poseLandmarker = created;
         this.activeBackend = 'GPU';
       } catch {
-        this.poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+        const created = await PoseLandmarker.createFromOptions(vision, {
           baseOptions: {
             modelAssetPath: modelPath,
             delegate: 'CPU',
@@ -217,6 +251,12 @@ export class MediaPipeTaskRunner {
           runningMode: 'VIDEO',
           numPoses: 1,
         });
+        if (this.isDisposed) {
+          try { created.close(); } catch {}
+          this.isInitializing = false;
+          return false;
+        }
+        this.poseLandmarker = created;
         this.activeBackend = 'CPU';
       }
 
@@ -253,13 +293,14 @@ export class MediaPipeTaskRunner {
     if (this.imageClassifier) return true;
     if (this.isInitializing) return false;
 
+    this.isDisposed = false;
     this.isInitializing = true;
     try {
       const vision = await this.getVisionResolver();
       const { ImageClassifier } = await import('@mediapipe/tasks-vision');
 
       try {
-        this.imageClassifier = await ImageClassifier.createFromOptions(vision, {
+        const created = await ImageClassifier.createFromOptions(vision, {
           baseOptions: {
             modelAssetPath: modelPath,
             delegate: 'GPU',
@@ -267,9 +308,15 @@ export class MediaPipeTaskRunner {
           runningMode: 'IMAGE',
           maxResults: 5,
         });
+        if (this.isDisposed) {
+          try { created.close(); } catch {}
+          this.isInitializing = false;
+          return false;
+        }
+        this.imageClassifier = created;
         this.activeBackend = 'GPU';
       } catch {
-        this.imageClassifier = await ImageClassifier.createFromOptions(vision, {
+        const created = await ImageClassifier.createFromOptions(vision, {
           baseOptions: {
             modelAssetPath: modelPath,
             delegate: 'CPU',
@@ -277,6 +324,12 @@ export class MediaPipeTaskRunner {
           runningMode: 'IMAGE',
           maxResults: 5,
         });
+        if (this.isDisposed) {
+          try { created.close(); } catch {}
+          this.isInitializing = false;
+          return false;
+        }
+        this.imageClassifier = created;
         this.activeBackend = 'CPU';
       }
 
@@ -311,6 +364,7 @@ export class MediaPipeTaskRunner {
   }
 
   dispose(): void {
+    this.isDisposed = true;
     if (this.handLandmarker) {
       try {
         this.handLandmarker.close();

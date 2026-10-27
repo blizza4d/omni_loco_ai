@@ -29,6 +29,11 @@
 }
 
 /* Precision Telemetry Blueprint Grid */
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
 body {
   background-color: var(--paper-cream);
   color: var(--soft-charcoal);

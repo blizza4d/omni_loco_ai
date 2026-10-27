@@ -56,12 +56,13 @@ export default function WastePage() {
   // Initialize ML backend with proper cleanup
   useEffect(() => {
     let unmounted = false;
-    classifierRef.current.init().then((b) => {
+    const classifier = classifierRef.current;
+    classifier.init().then((b) => {
       if (!unmounted) setBackend(b);
     });
     return () => {
       unmounted = true;
-      classifierRef.current.dispose();
+      classifier.dispose();
     };
   }, []);
 
@@ -247,6 +248,7 @@ export default function WastePage() {
               backend={backend}
             >
               {uploadedImageSrc ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
                 <img
                   ref={uploadedImgRef}
                   src={uploadedImageSrc}

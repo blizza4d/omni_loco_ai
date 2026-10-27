@@ -38,6 +38,20 @@ export interface GlobalNavProps {
   onTogglePerfHud?: () => void;
 }
 
+// Konami code sequence
+const KONAMI_SEQUENCE = [
+  'ArrowUp',
+  'ArrowUp',
+  'ArrowDown',
+  'ArrowDown',
+  'ArrowLeft',
+  'ArrowRight',
+  'ArrowLeft',
+  'ArrowRight',
+  'b',
+  'a',
+];
+
 export function GlobalNav({
   gestureNavEnabled = false,
   onToggleGestureNav,
@@ -86,20 +100,6 @@ export function GlobalNav({
     !isHub && activeModule !== 'STANDBY' && storeBackend
       ? storeBackend.toUpperCase()
       : activeBackend;
-
-  // Konami code sequence
-  const KONAMI_SEQUENCE = [
-    'ArrowUp',
-    'ArrowUp',
-    'ArrowDown',
-    'ArrowDown',
-    'ArrowLeft',
-    'ArrowRight',
-    'ArrowLeft',
-    'ArrowRight',
-    'b',
-    'a',
-  ];
 
   // Global Tactical Keyboard Shortcuts Listener & Easter Egg triggers
   useEffect(() => {

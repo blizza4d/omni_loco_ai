@@ -129,7 +129,6 @@ export default function DrivePage() {
     if (!canvas) return;
 
     roadControllerRef.current = initRoadScene(canvas);
-    roadControllerRef.current.setLighting(lightingMode);
 
     const handleResize = () => {
       if (canvas && roadControllerRef.current) {

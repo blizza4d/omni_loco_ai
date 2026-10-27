@@ -74,6 +74,7 @@ export default function SpeechPage() {
   const sessionStartTimeRef = useRef<number>(0);
   const wpmHistoryRef = useRef<{ timeSec: number; wpm: number }[]>([]);
   const isRecordingRef = useRef<boolean>(false);
+  const isStartingRef = useRef<boolean>(false);
   const lastUiUpdateRef = useRef<number>(0);
 
   // Sync recording ref for animation frame loop
@@ -99,6 +100,7 @@ export default function SpeechPage() {
   const startAudio = async () => {
     try {
       setErrorMessage(null);
+      isStartingRef.current = true;
       const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
       audioCtxRef.current = audioCtx;
 
@@ -110,6 +112,12 @@ export default function SpeechPage() {
         },
         video: false,
       });
+
+      if (!isStartingRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        audioCtx.close().catch(() => {});
+        return;
+      }
       streamRef.current = stream;
 
       const source = audioCtx.createMediaStreamSource(stream);
@@ -128,11 +136,13 @@ export default function SpeechPage() {
       }
 
       setIsCapturing(true);
+      isStartingRef.current = false;
       sessionStartTimeRef.current = performance.now();
       vadRef.current.reset();
       flawAnalyzerRef.current.reset();
       wpmHistoryRef.current = [];
     } catch (err: unknown) {
+      isStartingRef.current = false;
       const e = err as Error;
       setIsCapturing(false);
       setErrorMessage(e.message || 'Microphone capture failed. Verify browser microphone permissions.');
@@ -140,6 +150,7 @@ export default function SpeechPage() {
   };
 
   const stopAudio = () => {
+    isStartingRef.current = false;
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
@@ -155,6 +166,7 @@ export default function SpeechPage() {
   // Ensure audio stream and AudioContext are cleanly released when leaving module
   useEffect(() => {
     return () => {
+      isStartingRef.current = false;
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((t) => t.stop());
         streamRef.current = null;

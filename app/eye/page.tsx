@@ -179,8 +179,9 @@ export default function EyeTrackingPage() {
   }, [heatVisionConfig.enabled, heatVisionConfig.soundEnabled, heatVisionConfig.intensity]);
 
   useEffect(() => {
+    const audio = heatVisionAudioRef.current;
     return () => {
-      heatVisionAudioRef.current.dispose();
+      audio.dispose();
     };
   }, []);
 
@@ -215,11 +216,12 @@ export default function EyeTrackingPage() {
   // Initialize MediaPipe FaceLandmarker with cleanup
   useEffect(() => {
     let unmounted = false;
-    taskRunnerRef.current.initFaceLandmarker().then((success) => {
+    const runner = taskRunnerRef.current;
+    runner.initFaceLandmarker().then((success) => {
       if (!unmounted) {
         setModelBackend(
           success
-            ? `MEDIAPIPE (${taskRunnerRef.current.getBackend()})`
+            ? `MEDIAPIPE (${runner.getBackend()})`
             : 'SYNTHETIC FALLBACK'
         );
       }
@@ -227,7 +229,7 @@ export default function EyeTrackingPage() {
 
     return () => {
       unmounted = true;
-      taskRunnerRef.current.dispose();
+      runner.dispose();
     };
   }, []);
 
