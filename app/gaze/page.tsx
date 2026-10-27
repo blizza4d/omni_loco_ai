@@ -9,16 +9,16 @@ import { StampBadge } from '@/components/ui/StampBadge';
 import { MechanicalToggle } from '@/components/ui/MechanicalToggle';
 import { PerformanceHUD } from '@/components/ui/PerformanceHUD';
 import { useCamera } from '@/core/camera/useCamera';
-import { GazeCalibrationEngine } from '@/modules/gaze/calibration';
+import { GazeCalibrationEngine, extractGazeFeatures } from '@/modules/gaze/calibration';
 import { IDTFixationParser } from '@/modules/gaze/idt-parser';
 import { HeatmapRenderer, HeatmapConfig } from '@/modules/gaze/heatmap-renderer';
-import { IrisFeatures, AreaOfInterest } from '@/modules/gaze/types';
+import { GazeFeatures, AreaOfInterest } from '@/modules/gaze/types';
 import { generateSyntheticFace } from '@/modules/face/synthetic-face';
 import { MediaPipeTaskRunner } from '@/core/mediapipe/task-runner';
 import { FaceMetricsAnalyzer } from '@/modules/face/blendshapes';
 import { OneEuroFilter } from '@/core/filters';
 import { useSystemStore } from '@/core/store';
-import { Download, Target, Flame } from 'lucide-react';
+import { Download, Target, Flame, MousePointer } from 'lucide-react';
 import {
   HeatVisionRenderer,
   HeatVisionConfig,
@@ -27,6 +27,10 @@ import {
 import { HeatVisionAudioSynthesizer } from '@/modules/easter-eggs/heat-vision-audio';
 import { HeatVisionControls } from '@/components/easter-eggs/HeatVisionControls';
 import { unlockAchievement } from '@/modules/easter-eggs/achievements';
+import { GazeCursorOverlay } from '@/components/gaze/GazeCursorOverlay';
+import { GazeCalibrationModal } from '@/components/gaze/GazeCalibrationModal';
+import { GazeCursorController, GazeCursorState } from '@/modules/gaze/gaze-cursor-controller';
+import { GazeCursorConfig, DEFAULT_GAZE_CURSOR_CONFIG } from '@/modules/gaze/types';
 
 const INITIAL_AOIS: AreaOfInterest[] = [
   {
@@ -54,7 +58,26 @@ const INITIAL_AOIS: AreaOfInterest[] = [
 export default function GazePage() {
   const [targetCanvasMode, setTargetCanvasMode] = useState<'sample_ui' | 'upload' | 'camera'>('sample_ui');
   const [uploadedImageSrc, setUploadedImageSrc] = useState<string | null>(null);
-  const [isCalibrating, setIsCalibrating] = useState(false);
+  const [calibrationModalOpen, setCalibrationModalOpen] = useState(false);
+  const [gazeCursorConfig, setGazeCursorConfig] = useState<GazeCursorConfig>(DEFAULT_GAZE_CURSOR_CONFIG);
+  const cursorControllerRef = useRef<GazeCursorController>(new GazeCursorController());
+  const [cursorState, setCursorState] = useState<GazeCursorState>({
+    x: 0,
+    y: 0,
+    rawX: 0,
+    rawY: 0,
+    normX: 0.5,
+    normY: 0.5,
+    isTracking: false,
+    isCalibrated: false,
+    isFixating: true,
+    velocityPxSec: 0,
+    dwellProgress: 0,
+    dwellTargetName: null,
+    dwellLocked: false,
+    trail: [],
+    lastUpdateTime: 0,
+  });
   const [accuracy, setAccuracy] = useState({ errorPx: 28, errorDeg: 0.8 });
   const [syntheticMode, setSyntheticMode] = useState(false);
 
@@ -171,10 +194,10 @@ export default function GazePage() {
       fps: 30,
       p50Ms: 16,
       p95Ms: 22,
-      trackingStatus: isCalibrating ? 'INITIALIZING' : isStreaming ? 'TRACKING_ACTIVE' : 'STANDBY',
+      trackingStatus: calibrationModalOpen ? 'INITIALIZING' : isStreaming ? 'TRACKING_ACTIVE' : 'STANDBY',
       streamStatus: isStreaming ? 'STREAMING' : 'STANDBY',
     });
-  }, [isCalibrating, isStreaming, setPerfStats]);
+  }, [calibrationModalOpen, isStreaming, setPerfStats]);
 
   // Main 60 FPS Tracking & Rendering Loop (Decoupled from React State)
   useEffect(() => {
@@ -185,14 +208,18 @@ export default function GazePage() {
       const now = performance.now();
       const elapsedMs = Math.round(now - sessionStartTimeRef.current);
 
-      // Extract Iris features
-      let irisFeatures: IrisFeatures = {
+      // Extract Gaze features
+      let gazeFeatures: GazeFeatures = {
         leftRatioX: 0.5,
         leftRatioY: 0.5,
         rightRatioX: 0.5,
         rightRatioY: 0.5,
         headYaw: 0,
         headPitch: 0,
+        eyeMidX: 0.5,
+        eyeMidY: 0.5,
+        isTracking: false,
+        confidence: 0,
       };
 
       if (!syntheticMode && videoRef.current && videoRef.current.readyState >= 2) {
@@ -225,55 +252,17 @@ export default function GazePage() {
             }
           }
 
-          const leftIris = lms[468];
-          const leftInner = lms[133];
-          const leftOuter = lms[33];
-          const leftTop = lms[160];
-          const leftBottom = lms[144];
-
-          const rightIris = lms[473];
-          const rightInner = lms[362];
-          const rightOuter = lms[263];
-          const rightTop = lms[385];
-          const rightBottom = lms[380];
-
-          if (leftIris && leftInner && leftOuter && rightIris && rightInner && rightOuter) {
-            const leftSpanX = Math.max(0.001, leftInner.x - leftOuter.x);
-            const leftSpanY = Math.max(0.001, (leftBottom?.y || 0.5) - (leftTop?.y || 0.45));
-            const rightSpanX = Math.max(0.001, rightOuter.x - rightInner.x);
-            const rightSpanY = Math.max(0.001, (rightBottom?.y || 0.5) - (rightTop?.y || 0.45));
-
-            const rawRatioLX = (leftIris.x - leftOuter.x) / leftSpanX;
-            const rawRatioLY = leftTop ? (leftIris.y - leftTop.y) / leftSpanY : 0.5;
-            const rawRatioRX = (rightIris.x - rightInner.x) / rightSpanX;
-            const rawRatioRY = rightTop ? (rightIris.y - rightTop.y) / rightSpanY : 0.5;
-
-            const headPose = faceAnalyzerRef.current.decomposeHeadPose(lms);
-
-            irisFeatures = {
-              leftRatioX: Math.max(0, Math.min(1, rawRatioLX)),
-              leftRatioY: Math.max(0, Math.min(1, rawRatioLY)),
-              rightRatioX: Math.max(0, Math.min(1, rawRatioRX)),
-              rightRatioY: Math.max(0, Math.min(1, rawRatioRY)),
-              headYaw: headPose.yaw,
-              headPitch: headPose.pitch,
-            };
+          const extracted = extractGazeFeatures(lms as any, true);
+          if (extracted) {
+            gazeFeatures = extracted;
           }
         }
       } else {
         const syn = generateSyntheticFace(now);
         lastFaceLandmarksRef.current = syn.landmarks;
-        const leftIris = syn.landmarks[468];
-        const rightIris = syn.landmarks[473];
-        if (leftIris && rightIris) {
-          irisFeatures = {
-            leftRatioX: leftIris.x,
-            leftRatioY: leftIris.y,
-            rightRatioX: rightIris.x,
-            rightRatioY: rightIris.y,
-            headYaw: Math.sin(now / 1500) * 15,
-            headPitch: Math.cos(now / 1200) * 8,
-          };
+        const extracted = extractGazeFeatures(syn.landmarks as any, true);
+        if (extracted) {
+          gazeFeatures = extracted;
         }
       }
 
@@ -281,16 +270,12 @@ export default function GazePage() {
       const height = 480;
 
       // Handle active calibration
-      if (isCalibrating) {
-        const finished = calibrationEngineRef.current.addSample(irisFeatures, width, height);
-        if (finished) {
-          setIsCalibrating(false);
-          setAccuracy(calibrationEngineRef.current.getAccuracy());
-        }
+      if (calibrationModalOpen) {
+        calibrationEngineRef.current.addSample(gazeFeatures, now);
       }
 
       // Predict screen coordinates with OneEuroFilter adaptive stabilization
-      const rawGaze = calibrationEngineRef.current.predictGaze(irisFeatures, width, height);
+      const rawGaze = calibrationEngineRef.current.predictGaze(gazeFeatures, width, height);
       const smoothGazeX = gazeFilterXRef.current.filter(rawGaze.x, now);
       const smoothGazeY = gazeFilterYRef.current.filter(rawGaze.y, now);
       const gaze = { x: smoothGazeX, y: smoothGazeY };
@@ -361,10 +346,22 @@ export default function GazePage() {
         }
       }
 
-      // Throttle UI table updates to 4 Hz (every 250ms)
-      if (now - lastUiUpdateRef.current >= 250) {
+      // Process live Gaze Cursor across full viewport
+      const vpWidth = typeof window !== 'undefined' ? window.innerWidth : 1920;
+      const vpHeight = typeof window !== 'undefined' ? window.innerHeight : 1080;
+      const liveCursorState = cursorControllerRef.current.process(
+        gazeFeatures,
+        calibrationEngineRef.current,
+        vpWidth,
+        vpHeight,
+        now
+      );
+
+      // Throttle UI table updates to 10 Hz (every 100ms)
+      if (now - lastUiUpdateRef.current >= 100) {
         lastUiUpdateRef.current = now;
         setAois(aoisRef.current.map((a) => ({ ...a })));
+        setCursorState(liveCursorState);
       }
 
       animFrameRef.current = requestAnimationFrame(tick);
@@ -378,11 +375,11 @@ export default function GazePage() {
         cancelAnimationFrame(animFrameRef.current);
       }
     };
-  }, [syntheticMode, isCalibrating, heatmapConfig, videoRef]);
+  }, [syntheticMode, calibrationModalOpen, heatmapConfig, videoRef]);
 
   const handleStartCalibration = () => {
     calibrationEngineRef.current.startCalibration();
-    setIsCalibrating(true);
+    setCalibrationModalOpen(true);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -432,6 +429,20 @@ export default function GazePage() {
       <GlobalNav />
       <PerformanceHUD />
 
+      {/* Viewport Gaze Cursor Overlay */}
+      <GazeCursorOverlay cursorState={cursorState} config={gazeCursorConfig} />
+
+      {/* 9-Point Calibration Modal */}
+      <GazeCalibrationModal
+        isOpen={calibrationModalOpen}
+        engine={calibrationEngineRef.current}
+        onClose={() => setCalibrationModalOpen(false)}
+        onCalibrationComplete={() => {
+          setGazeCursorConfig((prev) => ({ ...prev, enabled: true }));
+          setAccuracy(calibrationEngineRef.current.getAccuracy());
+        }}
+      />
+
       <main className="flex-1 max-w-7xl mx-auto w-full p-4 md:p-6 space-y-6">
         {/* Header */}
         <div className="flex flex-col md:flex-row md:items-end justify-between border-b-2 border-charcoal-soft pb-4 gap-4">
@@ -445,7 +456,7 @@ export default function GazePage() {
               <StampBadge label={`VISION: ${modelBackend}`} variant="brick" />
             </div>
             <h1 className="text-xl md:text-2xl font-bold tracking-technical text-charcoal-soft uppercase">
-              GAZE-TRACKING HEATMAP & FIXATION ANALYZER
+              GAZE-TRACKING HEATMAP &amp; FIXATION ANALYZER
             </h1>
             <p className="text-xs text-ink-muted max-w-2xl mt-1 leading-relaxed">
               Iris vector estimation, I-DT fixation clustering, scan-path ordering, cumulative dwell accumulation, and automated Area of Interest (AOI) metrics.
@@ -453,6 +464,22 @@ export default function GazePage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {/* Gaze Cursor Toggle Button */}
+            <button
+              onClick={() =>
+                setGazeCursorConfig((prev) => ({ ...prev, enabled: !prev.enabled }))
+              }
+              className={`px-3 py-1 text-xs font-bold font-mono uppercase border-2 rounded-tactile flex items-center gap-1.5 transition-all ${
+                gazeCursorConfig.enabled
+                  ? 'border-sage-green bg-sage-green/20 text-charcoal-soft shadow-tactile-sm'
+                  : 'border-charcoal-soft text-charcoal-soft hover:bg-paper-dark'
+              }`}
+              title="Toggle Live Viewport Gaze Cursor [Shortcut: C]"
+            >
+              <MousePointer className="w-3.5 h-3.5 text-sage-green" />
+              <span>{gazeCursorConfig.enabled ? 'GAZE CURSOR: ON [C]' : 'GAZE CURSOR [C]'}</span>
+            </button>
+
             <Link href="/eye">
               <Button variant="outline" size="sm" className="gap-1.5">
                 <Target className="w-3.5 h-3.5 text-sage-green" />
@@ -641,20 +668,6 @@ export default function GazePage() {
                 className="absolute inset-0 w-full h-full object-contain pointer-events-none"
               />
 
-              {/* 9-Point Calibration Dot Overlay */}
-              {isCalibrating && activeTarget && (
-                <div
-                  className="absolute w-8 h-8 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-brick-red flex items-center justify-center pointer-events-none transition-all duration-300"
-                  style={{
-                    left: `${activeTarget.normX * 100}%`,
-                    top: `${activeTarget.normY * 100}%`,
-                  }}
-                >
-                  <div className="w-3 h-3 bg-brick-red rounded-full animate-ping" />
-                  <div className="w-2 h-2 bg-brick-red rounded-full" />
-                </div>
-              )}
-
               {/* Heat Vision Apex Controls Drawer */}
               <HeatVisionControls
                 config={heatVisionConfig}
@@ -674,7 +687,7 @@ export default function GazePage() {
                 </span>
               </div>
               <span className="text-[10px] text-ink-muted">
-                {isCalibrating ? 'LOOK AT PULSING RED DOT' : 'CALIBRATED & ACCUMULATING'}
+                {calibrationModalOpen ? 'CALIBRATION IN PROGRESS' : 'CALIBRATED & ACCUMULATING'}
               </span>
             </div>
           </div>

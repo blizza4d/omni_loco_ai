@@ -28,6 +28,10 @@ import {
   Crosshair,
   FlipHorizontal,
   CheckCircle2,
+  MousePointer,
+  Target,
+  Hand,
+  Compass,
 } from 'lucide-react';
 import {
   HeatVisionRenderer,
@@ -37,12 +41,28 @@ import {
 import { HeatVisionAudioSynthesizer } from '@/modules/easter-eggs/heat-vision-audio';
 import { HeatVisionControls } from '@/components/easter-eggs/HeatVisionControls';
 import { unlockAchievement } from '@/modules/easter-eggs/achievements';
+import {
+  GazeCalibrationEngine,
+  extractGazeFeatures,
+} from '@/modules/gaze/calibration';
+import {
+  GazeCursorController,
+  GazeCursorState,
+} from '@/modules/gaze/gaze-cursor-controller';
+import {
+  GazeCursorConfig,
+  DEFAULT_GAZE_CURSOR_CONFIG,
+} from '@/modules/gaze/types';
+import { GazeCursorOverlay } from '@/components/gaze/GazeCursorOverlay';
+import { GazeCalibrationModal } from '@/components/gaze/GazeCalibrationModal';
 
 export default function EyeTrackingPage() {
   const [syntheticMode, setSyntheticMode] = useState(false);
   const [modelBackend, setModelBackend] = useState('INITIALIZING...');
   const [discoveredHeatVision, setDiscoveredHeatVision] = useState(false);
+  const [calibrationModalOpen, setCalibrationModalOpen] = useState(false);
 
+  // Eye Tracking Display Configuration
   const [config, setConfig] = useState<EyeTrackingConfig>({
     showIrisContours: true,
     showGazeVectors: true,
@@ -58,6 +78,37 @@ export default function EyeTrackingPage() {
   useEffect(() => {
     configRef.current = config;
   }, [config]);
+
+  // Gaze Cursor Configuration & Controller
+  const [gazeCursorConfig, setGazeCursorConfig] = useState<GazeCursorConfig>(
+    DEFAULT_GAZE_CURSOR_CONFIG
+  );
+  const gazeCursorConfigRef = useRef<GazeCursorConfig>(DEFAULT_GAZE_CURSOR_CONFIG);
+  useEffect(() => {
+    gazeCursorConfigRef.current = gazeCursorConfig;
+    cursorControllerRef.current.updateConfig(gazeCursorConfig);
+  }, [gazeCursorConfig]);
+
+  const calibrationEngineRef = useRef<GazeCalibrationEngine>(new GazeCalibrationEngine());
+  const cursorControllerRef = useRef<GazeCursorController>(new GazeCursorController());
+
+  const [cursorState, setCursorState] = useState<GazeCursorState>({
+    x: 0,
+    y: 0,
+    rawX: 0,
+    rawY: 0,
+    normX: 0.5,
+    normY: 0.5,
+    isTracking: false,
+    isCalibrated: false,
+    isFixating: true,
+    velocityPxSec: 0,
+    dwellProgress: 0,
+    dwellTargetName: null,
+    dwellLocked: false,
+    trail: [],
+    lastUpdateTime: 0,
+  });
 
   const analyzerRef = useRef<PupillometryAnalyzer>(new PupillometryAnalyzer());
   const [metrics, setMetrics] = useState<BilateralMetrics>(() =>
@@ -133,7 +184,7 @@ export default function EyeTrackingPage() {
     };
   }, []);
 
-  // 'V' key shortcut listener for Heat Vision
+  // Keyboard shortcut listener ('V' for Heat Vision, 'C' for Gaze Cursor)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -148,6 +199,9 @@ export default function EyeTrackingPage() {
       if (e.key === 'v' || e.key === 'V') {
         e.preventDefault();
         triggerHeatVisionToggle('KEYBOARD_V');
+      } else if (e.key === 'c' || e.key === 'C') {
+        e.preventDefault();
+        setGazeCursorConfig((prev) => ({ ...prev, enabled: !prev.enabled }));
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -252,6 +306,25 @@ export default function EyeTrackingPage() {
         const currentMetrics = analyzerRef.current.process(landmarks, now);
         const pupilHistory = analyzerRef.current.getPupilHistory();
 
+        // Extract high-precision gaze features for calibration & live cursor
+        const gazeFeatures = extractGazeFeatures(landmarks, currentConfig.isMirrored);
+
+        // Feed calibration engine if calibration is actively in progress
+        if (calibrationModalOpen && gazeFeatures) {
+          calibrationEngineRef.current.addSample(gazeFeatures, now);
+        }
+
+        // Process live Gaze Cursor across full viewport
+        const vpWidth = typeof window !== 'undefined' ? window.innerWidth : 1920;
+        const vpHeight = typeof window !== 'undefined' ? window.innerHeight : 1080;
+        const liveCursorState = cursorControllerRef.current.process(
+          gazeFeatures,
+          calibrationEngineRef.current,
+          vpWidth,
+          vpHeight,
+          now
+        );
+
         // Secret Easter Egg: Intentional double-blink detection (with 3.5s cooldown)
         if (
           currentMetrics.leftEye.state === 'BLINKING' &&
@@ -314,10 +387,11 @@ export default function EyeTrackingPage() {
             if (currentHeatConfig.aimMode === 'MANUAL_RETICLE' && currentConfig.manualTarget) {
               targetPoint = currentConfig.manualTarget;
             } else if (leftIris || rightIris) {
-              // Gaze vector targeting
-              const midX = (leftIris && rightIris) ? (leftIris.x + rightIris.x) / 2 : (leftIris ? leftIris.x : rightIris!.x);
-              const midY = (leftIris && rightIris) ? (leftIris.y + rightIris.y) / 2 : (leftIris ? leftIris.y : rightIris!.y);
-              targetPoint = { x: midX, y: midY + height * 0.45 };
+              // Gaze vector targeting: use the calibrated viewport gaze estimate mapped to preview canvas!
+              targetPoint = {
+                x: liveCursorState.normX * width,
+                y: liveCursorState.normY * height,
+              };
             }
 
             heatVisionRendererRef.current.render(
@@ -333,10 +407,11 @@ export default function EyeTrackingPage() {
           }
         }
 
-        // Throttle React state update to 10 Hz (every 100ms)
-        if (now - lastUiUpdateRef.current >= 100) {
+        // Throttle React state update to 12 Hz (every 80ms)
+        if (now - lastUiUpdateRef.current >= 80) {
           lastUiUpdateRef.current = now;
           setMetrics(currentMetrics);
+          setCursorState(liveCursorState);
         }
       } else if (ctx) {
         ctx.clearRect(0, 0, width, height);
@@ -350,13 +425,15 @@ export default function EyeTrackingPage() {
       active = false;
       cancelAnimationFrame(handle);
     };
-  }, [syntheticMode, isStreaming, videoRef, triggerHeatVisionToggle]);
+  }, [syntheticMode, isStreaming, videoRef, calibrationModalOpen, triggerHeatVisionToggle]);
 
   const exportSessionJSON = () => {
     const data = {
       timestamp: new Date().toISOString(),
       module: 'FIG. 08 — BILATERAL EYE & IRIS TRACKING',
       metrics,
+      cursorState,
+      calibrationAccuracy: calibrationEngineRef.current.getAccuracy(),
       pupilHistory: analyzerRef.current.getPupilHistory(),
       saccades: analyzerRef.current.getRecentSaccades(),
       config,
@@ -386,10 +463,26 @@ export default function EyeTrackingPage() {
     }
   };
 
+  const accuracy = calibrationEngineRef.current.getAccuracy();
+  const isCalibrated = calibrationEngineRef.current.isReady();
+
   return (
     <div className="min-h-screen flex flex-col font-mono bg-paper-cream">
       <GlobalNav />
       <PerformanceHUD />
+
+      {/* Global Viewport Gaze Cursor Overlay */}
+      <GazeCursorOverlay cursorState={cursorState} config={gazeCursorConfig} />
+
+      {/* 9-Point Gaze Calibration Modal */}
+      <GazeCalibrationModal
+        isOpen={calibrationModalOpen}
+        engine={calibrationEngineRef.current}
+        onClose={() => setCalibrationModalOpen(false)}
+        onCalibrationComplete={() => {
+          setGazeCursorConfig((prev) => ({ ...prev, enabled: true }));
+        }}
+      />
 
       <main className="flex-1 max-w-7xl mx-auto w-full p-4 md:p-6 space-y-6">
         {/* Header */}
@@ -406,11 +499,41 @@ export default function EyeTrackingPage() {
               FIG. 08 — BILATERAL EYE &amp; IRIS TRACKING
             </h1>
             <p className="text-xs text-ink-muted max-w-2xl mt-1 leading-relaxed">
-              Anatomical bilateral tracking of Oculus Sinister (OS) &amp; Oculus Dexter (OD) with independent pupil diameter, occlusion detection, Pupillary Light Reflex (PLR), and 3D optical raycast vectors.
+              Anatomical bilateral tracking of Oculus Sinister (OS) &amp; Oculus Dexter (OD) with calibrated viewport gaze cursor, dwell interaction, and synchronized Heat Vision aiming.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {/* Gaze Cursor Toggle Button */}
+            <button
+              onClick={() =>
+                setGazeCursorConfig((prev) => ({ ...prev, enabled: !prev.enabled }))
+              }
+              className={`px-3 py-1 text-xs font-bold font-mono uppercase border-2 rounded-tactile flex items-center gap-1.5 transition-all ${
+                gazeCursorConfig.enabled
+                  ? 'border-sage-green bg-sage-green/20 text-charcoal-soft shadow-tactile-sm'
+                  : 'border-charcoal-soft text-charcoal-soft hover:bg-paper-dark'
+              }`}
+              title="Toggle Live Viewport Gaze Cursor [Shortcut: C]"
+            >
+              <MousePointer className="w-3.5 h-3.5 text-sage-green" />
+              <span>{gazeCursorConfig.enabled ? 'GAZE CURSOR: ON [C]' : 'GAZE CURSOR [C]'}</span>
+            </button>
+
+            {/* 9-Point Calibration Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setCalibrationModalOpen(true);
+                calibrationEngineRef.current.startCalibration();
+              }}
+              className="gap-1.5"
+            >
+              <Target className="w-3.5 h-3.5 text-brick-red" />
+              <span>{isCalibrated ? 'RECALIBRATE [9-PT]' : 'CALIBRATE GAZE'}</span>
+            </Button>
+
             {/* Heat Vision Apex Override Button */}
             <button
               onClick={() => triggerHeatVisionToggle('HEADER_BUTTON')}
@@ -556,20 +679,35 @@ export default function EyeTrackingPage() {
                 <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
                   <input
                     type="checkbox"
+                    checked={gazeCursorConfig.enabled}
+                    onChange={(e) =>
+                      setGazeCursorConfig({ ...gazeCursorConfig, enabled: e.target.checked })
+                    }
+                    className="accent-charcoal-soft"
+                  />
+                  <MousePointer className="w-3 h-3 text-sage-green" />
+                  <span>GAZE CURSOR</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
+                  <input
+                    type="checkbox"
+                    checked={gazeCursorConfig.dwellEnabled}
+                    onChange={(e) =>
+                      setGazeCursorConfig({ ...gazeCursorConfig, dwellEnabled: e.target.checked })
+                    }
+                    className="accent-charcoal-soft"
+                  />
+                  <Hand className="w-3 h-3 text-brick-red" />
+                  <span>DWELL INTERACTION</span>
+                </label>
+                <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
+                  <input
+                    type="checkbox"
                     checked={config.showIrisContours}
                     onChange={(e) => setConfig({ ...config, showIrisContours: e.target.checked })}
                     className="accent-charcoal-soft"
                   />
                   <span>IRIS &amp; PUPILS</span>
-                </label>
-                <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
-                  <input
-                    type="checkbox"
-                    checked={config.showGazeVectors}
-                    onChange={(e) => setConfig({ ...config, showGazeVectors: e.target.checked })}
-                    className="accent-charcoal-soft"
-                  />
-                  <span>3D GAZE RAYS</span>
                 </label>
                 <label className="flex items-center gap-1.5 cursor-pointer text-[11px]">
                   <input
@@ -602,6 +740,110 @@ export default function EyeTrackingPage() {
 
           {/* Right Instrument Telemetry Clusters */}
           <div className="space-y-4">
+            {/* FIG. 08-C — Calibrated Gaze Cursor & Dwell Control */}
+            <DeskCard figure="FIG. 08-C" title="CALIBRATED GAZE POINTER &amp; DWELL CONTROL">
+              <div className="space-y-3">
+                {/* Real-time Viewport Coordinates */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 border border-charcoal-soft bg-paper-dark rounded-tactile text-center">
+                    <span className="text-[10px] text-ink-muted block uppercase">VIEWPORT GAZE (X)</span>
+                    <span className="text-2xl font-bold text-charcoal-soft tabular-nums">
+                      {cursorState.isTracking ? Math.round(cursorState.x) : '---'}
+                    </span>
+                    <span className="text-[9px] text-sage-green block mt-0.5">
+                      {(cursorState.normX * 100).toFixed(1)}% WIDTH
+                    </span>
+                  </div>
+
+                  <div className="p-3 border border-charcoal-soft bg-paper-dark rounded-tactile text-center">
+                    <span className="text-[10px] text-ink-muted block uppercase">VIEWPORT GAZE (Y)</span>
+                    <span className="text-2xl font-bold text-charcoal-soft tabular-nums">
+                      {cursorState.isTracking ? Math.round(cursorState.y) : '---'}
+                    </span>
+                    <span className="text-[9px] text-cyan-600 block mt-0.5">
+                      {(cursorState.normY * 100).toFixed(1)}% HEIGHT
+                    </span>
+                  </div>
+                </div>
+
+                {/* Calibration Status Strip */}
+                <div className="p-2.5 border border-charcoal-soft/40 bg-paper-cream rounded-[2px] flex items-center justify-between text-xs">
+                  <div>
+                    <span className="text-[10px] text-ink-muted block uppercase">CALIBRATION ENGINE</span>
+                    <span className="font-bold text-charcoal-soft flex items-center gap-1.5">
+                      <Target className="w-3.5 h-3.5 text-brick-red" />
+                      {isCalibrated ? '9-POINT RIDGE REGRESSION' : 'ANATOMICAL PRIOR'}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] text-ink-muted block uppercase">EST. RESIDUAL</span>
+                    <span className="font-bold text-sage-green tabular-nums">
+                      &plusmn;{accuracy.errorDeg}&deg; ({accuracy.errorPx}px)
+                    </span>
+                  </div>
+                </div>
+
+                {/* Saccadic Velocity & Fixation Dynamics */}
+                <div className="p-2.5 border border-charcoal-soft/40 bg-paper-cream rounded-[2px] space-y-1 text-xs">
+                  <div className="flex justify-between items-center">
+                    <span className="text-ink-muted flex items-center gap-1">
+                      <Zap className="w-3.5 h-3.5 text-brick-red" />
+                      INSTANTANEOUS SACCADE
+                    </span>
+                    <span className="font-bold tabular-nums text-charcoal-soft">
+                      {cursorState.velocityPxSec} PX/S
+                    </span>
+                  </div>
+                  <div className="w-full bg-paper-cream border border-charcoal-soft h-1.5 rounded-[1px] overflow-hidden">
+                    <div
+                      className="h-full bg-brick-red transition-all duration-75"
+                      style={{
+                        width: `${Math.min(100, (cursorState.velocityPxSec / 800) * 100)}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Dwell Interaction Feedback */}
+                <div className="p-2.5 border border-charcoal-soft/40 bg-paper-cream rounded-[2px] space-y-1.5 text-xs">
+                  <div className="flex justify-between items-center">
+                    <span className="text-ink-muted flex items-center gap-1 font-bold">
+                      <Hand className="w-3.5 h-3.5 text-brick-red" />
+                      DWELL CLICK INTERACTION:
+                    </span>
+                    <span className="text-[10px] font-bold text-charcoal-soft">
+                      {gazeCursorConfig.dwellEnabled ? 'ACTIVE (1.1S)' : 'DISABLED'}
+                    </span>
+                  </div>
+
+                  {gazeCursorConfig.dwellEnabled && (
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] text-ink-muted">
+                        <span className="truncate max-w-[180px]">
+                          TARGET: {cursorState.dwellTargetName || 'NONE'}
+                        </span>
+                        <span>{Math.round(cursorState.dwellProgress * 100)}%</span>
+                      </div>
+                      <div className="w-full bg-paper-cream border border-charcoal-soft h-2 rounded-[1px] overflow-hidden">
+                        <div
+                          className="h-full bg-sage-green transition-all duration-75"
+                          style={{ width: `${cursorState.dwellProgress * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Honest Scientific Disclosure Notice */}
+                <div className="p-2.5 border border-charcoal-soft/30 bg-paper-cream/60 rounded-[2px] text-[10px] text-ink-muted flex items-start gap-2 leading-relaxed">
+                  <Compass className="w-4 h-4 shrink-0 text-charcoal-soft mt-0.5" />
+                  <span>
+                    Consumer webcam eye tracking estimates screen point-of-regard within ~1&deg;&ndash;1.8&deg; visual angle. Accuracy depends on user distance, camera tilt, and ambient lighting.
+                  </span>
+                </div>
+              </div>
+            </DeskCard>
+
             {/* FIG. 08-A — Anatomical Bilateral Telemetry */}
             <DeskCard figure="FIG. 08-A" title="ANATOMICAL BILATERAL TELEMETRY">
               <div className="space-y-4">

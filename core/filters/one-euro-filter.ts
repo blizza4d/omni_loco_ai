@@ -104,6 +104,12 @@ export class OneEuroFilter {
     return this.x.filterWithAlpha(val, this.alpha(cutoff, freq));
   }
 
+  setParams({ minCutoff, beta, dCutoff }: OneEuroParams): void {
+    if (minCutoff !== undefined) this.minCutoff = minCutoff;
+    if (beta !== undefined) this.beta = beta;
+    if (dCutoff !== undefined) this.dCutoff = dCutoff;
+  }
+
   reset(): void {
     this.x.reset();
     this.dx.reset();
