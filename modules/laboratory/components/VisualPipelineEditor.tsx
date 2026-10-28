@@ -76,6 +76,14 @@ export function VisualPipelineEditor({ model, onModelUpdated }: VisualPipelineEd
 
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
 
+  // Synchronize pipeline state when the selected model or its configuration changes
+  useEffect(() => {
+    setPipeline(model.pipelineConfig || createDefaultPipeline());
+    setSelectedNodeId(null);
+    setHistory([]);
+    setRedoStack([]);
+  }, [model.id, model.updatedAt]);
+
   useEffect(() => {
     const val = validatePipeline(pipeline);
     setValidation(val);

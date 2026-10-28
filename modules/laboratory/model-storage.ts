@@ -180,6 +180,59 @@ const DATASETS_KEY = 'omni-laboratory-datasets-v1';
 const EXPERIMENTS_KEY = 'omni-laboratory-experiments-v1';
 const DRAFT_KEY = 'omni-laboratory-draft-v1';
 
+// In-memory storage fallback for SSR, test runners, and quota-restricted sessions
+const memoryStore = new Map<string, string>();
+
+function getStorageItem(key: string): string | null {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      const val = window.localStorage.getItem(key);
+      if (val !== null) return val;
+    } catch {
+      // localStorage restricted or quota exceeded
+    }
+  }
+  return memoryStore.get(key) || null;
+}
+
+function setStorageItem(key: string, value: string): void {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      window.localStorage.setItem(key, value);
+      return;
+    } catch {
+      // quota exceeded, fallback to memoryStore
+    }
+  }
+  memoryStore.set(key, value);
+}
+
+function removeStorageItem(key: string): void {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      window.localStorage.removeItem(key);
+    } catch {
+      // ignore
+    }
+  }
+  memoryStore.delete(key);
+}
+
+export function clearLaboratoryStorage(): void {
+  memoryStore.clear();
+  if (typeof window !== 'undefined' && window.localStorage) {
+    try {
+      window.localStorage.removeItem(STORAGE_KEY);
+      window.localStorage.removeItem(PUBLISHED_KEY);
+      window.localStorage.removeItem(DATASETS_KEY);
+      window.localStorage.removeItem(EXPERIMENTS_KEY);
+      window.localStorage.removeItem(DRAFT_KEY);
+    } catch {
+      // ignore
+    }
+  }
+}
+
 // Strict recursive validation to prevent prototype pollution and malformed payloads
 function sanitizeObject<T>(input: any): T {
   if (typeof input !== 'object' || input === null) {
@@ -216,12 +269,11 @@ function sanitizeObject<T>(input: any): T {
 // -------------------------------------------------------------
 
 export function getAllModels(): LaboratoryModel[] {
-  if (typeof window === 'undefined') return BUILT_IN_MODELS;
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = getStorageItem(STORAGE_KEY);
     const userModels: LaboratoryModel[] = raw ? JSON.parse(raw) : [];
 
-    const publishedRaw = localStorage.getItem(PUBLISHED_KEY);
+    const publishedRaw = getStorageItem(PUBLISHED_KEY);
     const publishedIds: string[] = publishedRaw
       ? JSON.parse(publishedRaw)
       : ['built-in-mediapipe-standard', 'built-in-triad-lock'];
@@ -249,14 +301,13 @@ export function getModelById(id: string): LaboratoryModel | null {
 }
 
 export function saveModel(model: LaboratoryModel): void {
-  if (typeof window === 'undefined') return;
   // Guard built-in models against overwriting
   if (BUILT_IN_MODELS.some((b) => b.id === model.id)) {
     throw new Error('Cannot overwrite protected built-in model. Create a custom variant instead.');
   }
 
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = getStorageItem(STORAGE_KEY);
     const userModels: LaboratoryModel[] = raw ? JSON.parse(raw) : [];
 
     const existingIdx = userModels.findIndex((m) => m.id === model.id);
@@ -275,7 +326,7 @@ export function saveModel(model: LaboratoryModel): void {
       });
     }
 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(userModels));
+    setStorageItem(STORAGE_KEY, JSON.stringify(userModels));
   } catch (err) {
     console.error('Failed to save laboratory model:', err);
     throw err;
@@ -283,16 +334,15 @@ export function saveModel(model: LaboratoryModel): void {
 }
 
 export function deleteModel(id: string): boolean {
-  if (typeof window === 'undefined') return false;
   // Prevent deletion of built-ins
   if (BUILT_IN_MODELS.some((m) => m.id === id)) return false;
 
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = getStorageItem(STORAGE_KEY);
     if (!raw) return false;
     const userModels: LaboratoryModel[] = JSON.parse(raw);
     const filtered = userModels.filter((m) => m.id !== id);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+    setStorageItem(STORAGE_KEY, JSON.stringify(filtered));
 
     unpublishModel(id);
     return true;
@@ -444,15 +494,14 @@ export function restoreVersion(modelId: string, targetVersion: string): Laborato
 // -------------------------------------------------------------
 
 export function publishModel(id: string): boolean {
-  if (typeof window === 'undefined') return false;
   try {
-    const publishedRaw = localStorage.getItem(PUBLISHED_KEY);
+    const publishedRaw = getStorageItem(PUBLISHED_KEY);
     const publishedIds: string[] = publishedRaw
       ? JSON.parse(publishedRaw)
       : ['built-in-mediapipe-standard', 'built-in-triad-lock'];
     if (!publishedIds.includes(id)) {
       publishedIds.push(id);
-      localStorage.setItem(PUBLISHED_KEY, JSON.stringify(publishedIds));
+      setStorageItem(PUBLISHED_KEY, JSON.stringify(publishedIds));
     }
     return true;
   } catch {
@@ -461,13 +510,12 @@ export function publishModel(id: string): boolean {
 }
 
 export function unpublishModel(id: string): boolean {
-  if (typeof window === 'undefined') return false;
   try {
-    const publishedRaw = localStorage.getItem(PUBLISHED_KEY);
+    const publishedRaw = getStorageItem(PUBLISHED_KEY);
     if (!publishedRaw) return false;
     const publishedIds: string[] = JSON.parse(publishedRaw);
     const updated = publishedIds.filter((item) => item !== id);
-    localStorage.setItem(PUBLISHED_KEY, JSON.stringify(updated));
+    setStorageItem(PUBLISHED_KEY, JSON.stringify(updated));
     return true;
   } catch {
     return false;
@@ -529,9 +577,8 @@ export function importModelFromJSON(jsonStr: string): LaboratoryModel {
 // -------------------------------------------------------------
 
 export function getAllDatasets(): LaboratoryDataset[] {
-  if (typeof window === 'undefined') return [];
   try {
-    const raw = localStorage.getItem(DATASETS_KEY);
+    const raw = getStorageItem(DATASETS_KEY);
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
@@ -544,7 +591,6 @@ export function getDatasetById(id: string): LaboratoryDataset | null {
 }
 
 export function saveDataset(dataset: LaboratoryDataset): void {
-  if (typeof window === 'undefined') return;
   try {
     const datasets = getAllDatasets();
     const idx = datasets.findIndex((d) => d.id === dataset.id);
@@ -562,7 +608,7 @@ export function saveDataset(dataset: LaboratoryDataset): void {
       });
     }
 
-    localStorage.setItem(DATASETS_KEY, JSON.stringify(datasets));
+    setStorageItem(DATASETS_KEY, JSON.stringify(datasets));
   } catch (err) {
     console.error('Failed to save dataset:', err);
     throw err;
@@ -570,10 +616,9 @@ export function saveDataset(dataset: LaboratoryDataset): void {
 }
 
 export function deleteDataset(id: string): boolean {
-  if (typeof window === 'undefined') return false;
   try {
     const datasets = getAllDatasets().filter((d) => d.id !== id);
-    localStorage.setItem(DATASETS_KEY, JSON.stringify(datasets));
+    setStorageItem(DATASETS_KEY, JSON.stringify(datasets));
     return true;
   } catch {
     return false;
@@ -627,9 +672,8 @@ export function importDatasetFromJSON(jsonStr: string): LaboratoryDataset {
 // -------------------------------------------------------------
 
 export function getAllExperiments(): LaboratoryExperiment[] {
-  if (typeof window === 'undefined') return [];
   try {
-    const raw = localStorage.getItem(EXPERIMENTS_KEY);
+    const raw = getStorageItem(EXPERIMENTS_KEY);
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
@@ -637,23 +681,21 @@ export function getAllExperiments(): LaboratoryExperiment[] {
 }
 
 export function saveExperiment(experiment: LaboratoryExperiment): void {
-  if (typeof window === 'undefined') return;
   try {
     const list = getAllExperiments();
     list.unshift(experiment);
     // Keep last 30 experiments
     const trimmed = list.slice(0, 30);
-    localStorage.setItem(EXPERIMENTS_KEY, JSON.stringify(trimmed));
+    setStorageItem(EXPERIMENTS_KEY, JSON.stringify(trimmed));
   } catch (err) {
     console.error('Failed to save experiment:', err);
   }
 }
 
 export function deleteExperiment(id: string): boolean {
-  if (typeof window === 'undefined') return false;
   try {
     const list = getAllExperiments().filter((e) => e.id !== id);
-    localStorage.setItem(EXPERIMENTS_KEY, JSON.stringify(list));
+    setStorageItem(EXPERIMENTS_KEY, JSON.stringify(list));
     return true;
   } catch {
     return false;
@@ -665,18 +707,16 @@ export function deleteExperiment(id: string): boolean {
 // -------------------------------------------------------------
 
 export function saveDraft(draft: LaboratoryDraft): void {
-  if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    setStorageItem(DRAFT_KEY, JSON.stringify(draft));
   } catch {
     // ignore quota errors
   }
 }
 
 export function getDraft(modelId?: string): LaboratoryDraft | null {
-  if (typeof window === 'undefined') return null;
   try {
-    const raw = localStorage.getItem(DRAFT_KEY);
+    const raw = getStorageItem(DRAFT_KEY);
     if (!raw) return null;
     const draft: LaboratoryDraft = JSON.parse(raw);
     if (modelId && draft.modelId !== modelId) return null;
@@ -687,9 +727,8 @@ export function getDraft(modelId?: string): LaboratoryDraft | null {
 }
 
 export function clearDraft(): void {
-  if (typeof window === 'undefined') return;
   try {
-    localStorage.removeItem(DRAFT_KEY);
+    removeStorageItem(DRAFT_KEY);
   } catch {
     // ignore
   }

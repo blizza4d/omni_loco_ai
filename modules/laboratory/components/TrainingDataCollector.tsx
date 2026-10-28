@@ -41,6 +41,7 @@ import {
   Eye,
   Sliders,
   Layers,
+  Edit2,
   X,
 } from 'lucide-react';
 
@@ -248,12 +249,101 @@ export function TrainingDataCollector({
       const updated = {
         ...activeDataset,
         classes: [...activeDataset.classes, formatted],
+        updatedAt: new Date().toISOString(),
       };
       saveDataset(updated);
       setActiveDataset(updated);
       setSelectedClass(formatted);
       setNewClassInput('');
+
+      // Keep model classes synchronized
+      if (!model.classes.includes(formatted)) {
+        const updatedModel: LaboratoryModel = {
+          ...model,
+          classes: [...model.classes, formatted],
+          updatedAt: new Date().toISOString(),
+        };
+        saveModel(updatedModel);
+        onModelUpdated(updatedModel);
+      }
     }
+  };
+
+  const handleDeleteClass = (cls: string) => {
+    if (!activeDataset) return;
+    if (activeDataset.classes.length <= 2) {
+      alert('A classifier model requires at least 2 distinct classes to train.');
+      return;
+    }
+    if (!confirm(`Permanently delete class "${cls}" and all associated samples from dataset?`)) {
+      return;
+    }
+
+    const remainingClasses = activeDataset.classes.filter((c) => c !== cls);
+    const updatedDataset: LaboratoryDataset = {
+      ...activeDataset,
+      classes: remainingClasses,
+      samples: activeDataset.samples.filter((s) => s.label !== cls),
+      updatedAt: new Date().toISOString(),
+    };
+    saveDataset(updatedDataset);
+    setActiveDataset(updatedDataset);
+
+    if (selectedClass === cls) {
+      setSelectedClass(remainingClasses[0] || 'NEUTRAL_REST');
+    }
+
+    // Keep model synchronized
+    const updatedModel: LaboratoryModel = {
+      ...model,
+      classes: model.classes.filter((c) => c !== cls),
+      updatedAt: new Date().toISOString(),
+    };
+    saveModel(updatedModel);
+    onModelUpdated(updatedModel);
+  };
+
+  const handleRenameClass = (oldName: string) => {
+    if (!activeDataset) return;
+    const input = prompt(`Enter new identifier for class "${oldName}":`, oldName);
+    if (!input) return;
+    const formatted = input.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_');
+    if (!formatted || formatted === oldName) return;
+
+    if (activeDataset.classes.includes(formatted)) {
+      alert(`Class "${formatted}" already exists in the dataset.`);
+      return;
+    }
+
+    const updatedClasses = activeDataset.classes.map((c) => (c === oldName ? formatted : c));
+    const updatedSamples = activeDataset.samples.map((s) => (s.label === oldName ? { ...s, label: formatted } : s));
+    const updatedDataset: LaboratoryDataset = {
+      ...activeDataset,
+      classes: updatedClasses,
+      samples: updatedSamples,
+      updatedAt: new Date().toISOString(),
+    };
+    saveDataset(updatedDataset);
+    setActiveDataset(updatedDataset);
+
+    if (selectedClass === oldName) {
+      setSelectedClass(formatted);
+    }
+
+    // Update model classes and fx mapping
+    const newFxMapping = { ...(model.fxMapping || {}) };
+    if (newFxMapping[oldName]) {
+      newFxMapping[formatted] = newFxMapping[oldName]!;
+      delete newFxMapping[oldName];
+    }
+    const updatedModel: LaboratoryModel = {
+      ...model,
+      classes: model.classes.map((c) => (c === oldName ? formatted : c)),
+      fxMapping: newFxMapping,
+      updatedAt: new Date().toISOString(),
+    };
+    saveModel(updatedModel);
+    onModelUpdated(updatedModel);
   };
 
   const handleDeleteSample = (id: string) => {
@@ -644,15 +734,31 @@ export function TrainingDataCollector({
                       </span>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <span className="font-bold text-sm">{count}</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-sm tabular-nums mr-1">{count}</span>
+                      <button
+                        onClick={() => handleRenameClass(cls)}
+                        className="p-1 hover:text-cyan-600 text-ink-muted transition-colors"
+                        title={`Rename class ${cls}`}
+                      >
+                        <Edit2 className="w-3 h-3" />
+                      </button>
                       {count > 0 && (
                         <button
                           onClick={() => handleClearClassSamples(cls)}
-                          className="p-1 hover:text-brick-red text-ink-muted"
-                          title="Clear class samples"
+                          className="p-1 hover:text-amber-600 text-ink-muted transition-colors"
+                          title={`Clear all ${count} samples for ${cls}`}
                         >
                           <Trash2 className="w-3 h-3" />
+                        </button>
+                      )}
+                      {(activeDataset?.classes.length || 0) > 2 && (
+                        <button
+                          onClick={() => handleDeleteClass(cls)}
+                          className="p-1 hover:text-brick-red text-ink-muted transition-colors"
+                          title={`Delete class ${cls} from dataset`}
+                        >
+                          <X className="w-3.5 h-3.5" />
                         </button>
                       )}
                     </div>

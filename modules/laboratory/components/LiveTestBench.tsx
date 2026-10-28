@@ -10,6 +10,7 @@ import { useHandGestures } from '@/modules/hand/useHandGestures';
 import { renderHandOverlay } from '@/modules/hand/overlay-renderer';
 import { syncCanvasToVideo } from '@/core/camera/coordinates';
 import { ClassifierTrainer, PredictionResult } from '../classifier-trainer';
+import { HandGestureClassifier } from '@/modules/hand/gesture-classifier';
 import { GestureStateMachine } from '@/modules/hand/gesture-events';
 import { GestureFXEngine } from '@/modules/hand/fx/gesture-fx-engine';
 import { publishModel, unpublishModel } from '../model-storage';
@@ -44,8 +45,11 @@ export function LiveTestBench({ model, onModelUpdated }: LiveTestBenchProps) {
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const trainerRef = useRef<ClassifierTrainer | null>(null);
+  const geometricClassifierRef = useRef<HandGestureClassifier>(new HandGestureClassifier());
   const stateMachineRef = useRef<GestureStateMachine>(new GestureStateMachine({ minHoldMs: 80 }));
   const fxEngineRef = useRef<GestureFXEngine>(new GestureFXEngine());
+  const lastPredictionUpdateRef = useRef<number>(0);
+  const lastPredictedLabelRef = useRef<string>('none');
 
   // Initialize or update trainer instance
   useEffect(() => {
@@ -83,10 +87,11 @@ export function LiveTestBench({ model, onModelUpdated }: LiveTestBenchProps) {
     setIsMirrored,
   } = useCamera({ autoStart: true });
 
-  // Guarantee clean camera hardware track release on unmount
+  // Guarantee clean camera hardware track and FX release on unmount
   useEffect(() => {
     return () => {
       stopCamera();
+      fxEngineRef.current.clear();
     };
   }, [stopCamera]);
 
@@ -110,26 +115,52 @@ export function LiveTestBench({ model, onModelUpdated }: LiveTestBenchProps) {
         isMirrored,
       });
 
-      // Run inference on landmarks
+      // Run genuine inference on landmarks (no fabricated/mocked predictions)
       if (landmarks && landmarks.length >= 21) {
         let recognizedLabel = 'none';
-        let conf = 0.5;
+        let conf = 0;
+        let predictionResult: PredictionResult;
 
         if (trainerRef.current) {
-          const res = trainerRef.current.predict(landmarks);
-          recognizedLabel = res.label;
-          conf = res.confidence;
-          setPrediction(res);
-        } else {
-          // Fallback or geometric model
-          recognizedLabel = 'open_palm';
-          conf = 0.95;
-          setPrediction({
+          predictionResult = trainerRef.current.predict(landmarks);
+          recognizedLabel = predictionResult.label;
+          conf = predictionResult.confidence;
+        } else if (model.modelType === 'geometric_rules') {
+          // Real-time geometric evaluation
+          const detectedGestures = geometricClassifierRef.current.classify(landmarks, now);
+          const topGesture = detectedGestures[0];
+          const threshold = model.hyperparameters.confidenceThreshold || 0.65;
+          const isRecognized = !!topGesture && topGesture.name !== 'none' && topGesture.confidence >= threshold;
+
+          recognizedLabel = isRecognized ? topGesture.name : 'none';
+          conf = topGesture ? topGesture.confidence : 0;
+
+          predictionResult = {
             label: recognizedLabel,
             confidence: conf,
             distances: {},
-            isRecognized: true,
-          });
+            isRecognized,
+          };
+        } else {
+          // Untrained custom model: genuine reporting of no classification
+          recognizedLabel = 'none';
+          conf = 0;
+          predictionResult = {
+            label: 'none',
+            confidence: 0,
+            distances: {},
+            isRecognized: false,
+          };
+        }
+
+        // Throttle React state updates to 10Hz or on label transition to eliminate 60Hz re-render bottlenecks
+        if (
+          recognizedLabel !== lastPredictedLabelRef.current ||
+          now - lastPredictionUpdateRef.current >= 100
+        ) {
+          lastPredictionUpdateRef.current = now;
+          lastPredictedLabelRef.current = recognizedLabel;
+          setPrediction(predictionResult);
         }
 
         // Feed to Gesture State Machine
@@ -150,12 +181,24 @@ export function LiveTestBench({ model, onModelUpdated }: LiveTestBenchProps) {
             isMirrored
           );
         }
+      } else {
+        // No landmarks detected - reset if previously recognized
+        if (lastPredictedLabelRef.current !== 'none' || now - lastPredictionUpdateRef.current >= 100) {
+          lastPredictionUpdateRef.current = now;
+          lastPredictedLabelRef.current = 'none';
+          setPrediction({
+            label: 'none',
+            confidence: 0,
+            distances: {},
+            isRecognized: false,
+          });
+        }
       }
 
-      // Render FX layer at 60 FPS
+      // Render FX layer at full 60 FPS directly to canvas
       fxEngineRef.current.render(ctx, canvas.width, canvas.height);
     },
-    [isMirrored, videoRef]
+    [isMirrored, model, videoRef]
   );
 
   const { fps, latencyMs } = useHandGestures({
@@ -300,9 +343,13 @@ export function LiveTestBench({ model, onModelUpdated }: LiveTestBenchProps) {
                   );
                 })}
               </div>
-            ) : (
+            ) : model.modelType === 'geometric_rules' ? (
               <div className="text-xs text-ink-muted leading-relaxed">
                 Geometric rule-based model active. Distances evaluated dynamically against joint kinematics.
+              </div>
+            ) : (
+              <div className="p-2.5 border border-brick-red/30 bg-brick-red/10 rounded text-xs text-brick-red leading-relaxed font-bold">
+                UNTRAINED CLASSIFIER: Capture training samples in the [TRAIN] tab to fit prototype centroids for real-time inference.
               </div>
             )}
           </div>

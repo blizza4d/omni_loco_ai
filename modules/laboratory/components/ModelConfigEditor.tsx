@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   LaboratoryModel,
   ModelHyperparameters,
@@ -43,6 +43,12 @@ export function ModelConfigEditor({ model, onModelUpdated }: ModelConfigEditorPr
   const [versionNote, setVersionNote] = useState('');
   const [isVersionModalOpen, setIsVersionModalOpen] = useState(false);
   const [saveToast, setSaveToast] = useState<string | null>(null);
+
+  // Synchronize parameter state when the selected model or its version changes
+  useEffect(() => {
+    setParams({ ...model.hyperparameters });
+    setFxMapping({ ...(model.fxMapping || {}) });
+  }, [model.id, model.updatedAt]);
 
   // Find factory baseline defaults if built-in
   const factoryDefault = BUILT_IN_MODELS.find((b) => b.id === model.id)?.hyperparameters;
@@ -222,6 +228,17 @@ export function ModelConfigEditor({ model, onModelUpdated }: ModelConfigEditorPr
           </Button>
         </div>
       )}
+
+      {/* Notice Banner: Runtime Settings vs Trained Centroids */}
+      <div className="p-3 border-2 border-indigo-400/40 bg-indigo-50/50 dark:bg-indigo-950/20 rounded-tactile text-xs flex items-start gap-2.5">
+        <Sparkles className="w-4 h-4 text-indigo-500 shrink-0 mt-0.5" />
+        <div className="leading-relaxed">
+          <span className="font-bold uppercase tracking-wider text-charcoal-soft">Runtime Configuration vs. Trained Weights: </span>
+          <span className="text-ink-muted">
+            The parameters below adjust real-time tracking thresholds, smoothing filters, and visual effect signatures. They modify runtime evaluation parameters without altering the underlying prototype centroids or dataset samples stored in the [TRAIN] tab.
+          </span>
+        </div>
+      </div>
 
       {/* Configuration Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

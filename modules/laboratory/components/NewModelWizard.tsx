@@ -6,7 +6,7 @@ import { GestureFXType } from '../../hand/fx/types';
 import { Button } from '@/components/ui/Button';
 import { saveModel } from '../model-storage';
 import { createDefaultPipeline } from '../pipeline-runner';
-import { X, Sparkles, Cpu, Layers, ArrowRight, Check } from 'lucide-react';
+import { X, Sparkles, Cpu, Layers, ArrowRight, Check, AlertTriangle } from 'lucide-react';
 
 export interface NewModelWizardProps {
   isOpen: boolean;
@@ -25,20 +25,45 @@ export function NewModelWizard({ isOpen, onClose, onModelCreated }: NewModelWiza
   const [classes, setClasses] = useState<string[]>(['CUSTOM_POSE_1', 'NEUTRAL_REST']);
   const [newClassInput, setNewClassInput] = useState('');
   const [selectedFX, setSelectedFX] = useState<GestureFXType>('HOLOGRAM_BURST');
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const handleAddClass = () => {
     const formatted = newClassInput.trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_');
-    if (formatted && !classes.includes(formatted)) {
-      setClasses([...classes, formatted]);
-      setNewClassInput('');
+    if (!formatted) return;
+    if (classes.includes(formatted)) {
+      setValidationError(`Class "${formatted}" already exists in model definition.`);
+      return;
     }
+    setValidationError(null);
+    setClasses([...classes, formatted]);
+    setNewClassInput('');
   };
 
   const handleRemoveClass = (cls: string) => {
-    if (classes.length <= 2) return; // keep at least 2 classes
+    if (classes.length <= 2) {
+      setValidationError('A minimum of 2 classes is required.');
+      return;
+    }
+    setValidationError(null);
     setClasses(classes.filter((c) => c !== cls));
+  };
+
+  const handleNext = () => {
+    setValidationError(null);
+    if (step === 2) {
+      if (!name.trim()) {
+        setValidationError('Model name is required before proceeding.');
+        return;
+      }
+    } else if (step === 3) {
+      if (classes.length < 2) {
+        setValidationError('At least 2 distinct gesture classes are required to train a model.');
+        return;
+      }
+    }
+    setStep((s) => (s + 1) as any);
   };
 
   const handleFinish = () => {
@@ -297,10 +322,25 @@ export function NewModelWizard({ isOpen, onClose, onModelCreated }: NewModelWiza
           </div>
         )}
 
+        {/* Validation Error Banner */}
+        {validationError && (
+          <div className="p-2.5 border-2 border-brick-red/40 bg-brick-red/10 rounded-tactile text-xs text-brick-red font-bold flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>{validationError}</span>
+          </div>
+        )}
+
         {/* Footer Navigation */}
         <div className="flex items-center justify-between pt-3 border-t-2 border-charcoal-soft">
           {step > 1 ? (
-            <Button variant="outline" size="sm" onClick={() => setStep((s) => (s - 1) as any)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                setValidationError(null);
+                setStep((s) => (s - 1) as any);
+              }}
+            >
               BACK
             </Button>
           ) : (
@@ -310,7 +350,7 @@ export function NewModelWizard({ isOpen, onClose, onModelCreated }: NewModelWiza
           )}
 
           {step < 4 ? (
-            <Button variant="default" size="sm" onClick={() => setStep((s) => (s + 1) as any)}>
+            <Button variant="default" size="sm" onClick={handleNext}>
               NEXT <ArrowRight className="w-3.5 h-3.5 ml-1" />
             </Button>
           ) : (
