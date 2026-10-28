@@ -20,6 +20,7 @@ import {
   Trophy,
   Terminal,
   FlaskConical,
+  Workflow,
 } from 'lucide-react';
 import { detectCapabilities } from '@/core/capabilities';
 import { useSettingsStore, useSystemStore } from '@/core/store';
@@ -258,6 +259,23 @@ export function GlobalNav({
                 <FlaskConical className="w-3.5 h-3.5 text-cyan-500" />
                 <span className="hidden sm:inline">LABORATORY</span>
                 <span className="sm:hidden">LAB</span>
+              </button>
+            </Link>
+
+            {/* Protocol Forge Navigation Button */}
+            <Link href="/forge">
+              <button
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-mono font-bold uppercase border-2 rounded-tactile transition-all ${
+                  pathname === '/forge' || pathname === '/protocols'
+                    ? 'border-brick-red bg-brick-red/20 text-brick-red shadow-tactile-sm'
+                    : 'border-charcoal-soft text-charcoal-soft hover:bg-paper-dark hover:border-brick-red hover:text-brick-red'
+                }`}
+                title="Open Omni Protocol Forge Multimodal Workflow Engine"
+                aria-label="Open Protocol Forge"
+              >
+                <Workflow className="w-3.5 h-3.5 text-brick-red" />
+                <span className="hidden sm:inline">FORGE</span>
+                <span className="sm:hidden">FORGE</span>
               </button>
             </Link>
 

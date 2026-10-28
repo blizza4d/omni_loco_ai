@@ -12,6 +12,7 @@ import { WasteClassifier } from '@/modules/waste/classifier';
 import { SessionTally } from '@/modules/waste/components/SessionTally';
 import { WasteCategory, WASTE_CLASSES, ClassificationResult } from '@/modules/waste/types';
 import { useSystemStore } from '@/core/store';
+import { ProtocolEventBus } from '@/modules/forge/event-bus';
 import { Video, VideoOff, Upload, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
 
 export default function WastePage() {
@@ -118,6 +119,19 @@ export default function WastePage() {
             ...prev,
             [res.lockedCategory!]: (prev[res.lockedCategory!] || 0) + 1,
           }));
+
+          const meta = WASTE_CLASSES[res.lockedCategory];
+          ProtocolEventBus.getInstance().publish(
+            'WASTE_CLASSIFIED',
+            {
+              category: res.lockedCategory,
+              confidence: res.top3[0]?.confidence ?? 0.85,
+              recyclable: meta ? meta.bin === 'RECYCLE' : false,
+              municipalTip: meta?.disposalTip ?? 'Dispose in designated sorting bin.',
+            },
+            'waste',
+            res.top3[0]?.confidence ?? 0.85
+          );
         } else if (!res.isStable) {
           lastLockedRef.current = null;
         }

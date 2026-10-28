@@ -17,6 +17,7 @@ import { Landmark3D } from '@/modules/hand/types';
 import { RefreshCw, Sun, Moon, Radio, Flame } from 'lucide-react';
 import { useSettingsStore, useSystemStore } from '@/core/store';
 import { unlockAchievement } from '@/modules/easter-eggs/achievements';
+import { ProtocolEventBus } from '@/modules/forge/event-bus';
 
 export default function DrivePage() {
   const { theme } = useSettingsStore();
@@ -121,6 +122,20 @@ export default function DrivePage() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
+  }, []);
+
+  // Listen for Protocol Forge cross-module trigger commands
+  useEffect(() => {
+    const unsub = ProtocolEventBus.getInstance().subscribe(
+      'MANUAL_TRIGGER',
+      (evt) => {
+        if (evt.payload.triggerId === 'TOGGLE_AFTERBURNER') {
+          setAfterburner((prev) => !prev);
+        }
+      },
+      'drive'
+    );
+    return unsub;
   }, []);
 
   // Initialize Three.js WebGL scene
@@ -267,6 +282,19 @@ export default function DrivePage() {
       if (now - lastHudUpdateRef.current >= 100) {
         lastHudUpdateRef.current = now;
         setVehicleState({ ...nextState });
+
+        // Publish Simulator State to Omni Protocol Forge
+        ProtocolEventBus.getInstance().publish(
+          'SIMULATOR_STATE',
+          {
+            speed: Math.round(nextState.speed),
+            positionX: Number(nextState.positionX.toFixed(2)),
+            steeringAngle: Math.round(nextState.steeringAngle),
+            controlSource: nextState.controlSource,
+          },
+          'drive',
+          1.0
+        );
       }
 
       animFrameRef.current = requestAnimationFrame(loop);

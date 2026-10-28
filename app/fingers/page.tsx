@@ -18,6 +18,7 @@ import {
 } from '@/modules/fingers/types';
 import { syncCanvasToVideo } from '@/core/camera/coordinates';
 import { useSystemStore } from '@/core/store';
+import { ProtocolEventBus } from '@/modules/forge/event-bus';
 import {
   Hand,
   Volume2,
@@ -136,6 +137,27 @@ export default function FingerCountingPage() {
 
       if (hasHand && currentStable !== lastStableCountRef.current) {
         lastStableCountRef.current = currentStable;
+
+        // Publish to Omni Protocol Forge Event Bus
+        ProtocolEventBus.getInstance().publish(
+          'FINGER_COUNT',
+          {
+            stableCount: currentStable,
+            rawCount: fingerResult.totalRawCount,
+            handedness:
+              fingerResult.leftHand && fingerResult.rightHand
+                ? 'Both'
+                : fingerResult.rightHand
+                ? 'Right'
+                : 'Left',
+            gestureName:
+              fingerResult.rightHand?.gestureName ||
+              fingerResult.leftHand?.gestureName ||
+              `${currentStable} Fingers`,
+          },
+          'fingers',
+          fingerResult.rightHand?.confidence || fingerResult.leftHand?.confidence || 0.95
+        );
 
         // Map count to configured action
         const matchedAction = actionMappings.find((m) => m.count === currentStable);

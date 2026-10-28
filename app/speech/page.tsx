@@ -13,6 +13,7 @@ import { renderVUMeter, renderOscilloscope, renderSpectrogram } from '@/modules/
 import { SpeechScorecard } from '@/modules/speech/components/SpeechScorecard';
 import { AcousticFeatures, SpeechSessionReport } from '@/modules/speech/types';
 import { useSystemStore } from '@/core/store';
+import { ProtocolEventBus } from '@/modules/forge/event-bus';
 import { Mic, MicOff, Circle, AlertTriangle, Radio, Sparkles } from 'lucide-react';
 import { unlockAchievement } from '@/modules/easter-eggs/achievements';
 
@@ -76,6 +77,7 @@ export default function SpeechPage() {
   const isRecordingRef = useRef<boolean>(false);
   const isStartingRef = useRef<boolean>(false);
   const lastUiUpdateRef = useRef<number>(0);
+  const lastSpeakingRef = useRef<boolean>(false);
 
   // Sync recording ref for animation frame loop
   useEffect(() => {
@@ -205,6 +207,22 @@ export default function SpeechPage() {
         // Run Voice Activity Detector
         const vad = vadRef.current.process(feat.rms, feat.zeroCrossingRate, now);
         vadStatsRef.current = vad;
+
+        // Publish Audio Activity to Omni Protocol Forge on speaking transitions
+        if (vad.isSpeaking !== lastSpeakingRef.current) {
+          lastSpeakingRef.current = vad.isSpeaking;
+          ProtocolEventBus.getInstance().publish(
+            'AUDIO_ACTIVITY',
+            {
+              isVoiced: feat.isVoiced,
+              pitchHz: Math.round(feat.pitchHz),
+              loudnessDb: Math.round(feat.dbFs),
+              wpm: vad.estimatedWpm,
+            },
+            'speech',
+            0.9
+          );
+        }
 
         if (vad.estimatedWpm > 0 && isRecordingRef.current) {
           wpmHistoryRef.current.push({ timeSec: Math.round(elapsedSec), wpm: vad.estimatedWpm });

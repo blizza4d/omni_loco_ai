@@ -17,6 +17,7 @@ import { PoseLandmark, JointAngles, ExerciseType, ExerciseRepStats } from '@/mod
 import { MediaPipeTaskRunner } from '@/core/mediapipe/task-runner';
 import { syncCanvasToVideo } from '@/core/camera/coordinates';
 import { useSystemStore } from '@/core/store';
+import { ProtocolEventBus } from '@/modules/forge/event-bus';
 import { Video, VideoOff, RefreshCw, Sparkles, Download, Activity, Dumbbell, UserCheck } from 'lucide-react';
 
 export default function PoseModulePage() {
@@ -67,6 +68,8 @@ export default function PoseModulePage() {
   const frameCountRef = useRef<number>(0);
   const lastFpsCalcRef = useRef<number>(performance.now());
   const lastPoseDetectionTimeRef = useRef<number>(0);
+  const lastRepCountRef = useRef<number>(0);
+  const lastStageRef = useRef<string>('neutral');
 
   const {
     videoRef,
@@ -174,6 +177,37 @@ export default function PoseModulePage() {
       // Update Exercise State Machine
       const stats = stateMachineRef.current.process(computedAngles, currentLandmarks, now);
       repStatsRef.current = stats;
+
+      // Publish events to Omni Protocol Forge
+      if (stats.repCount > lastRepCountRef.current) {
+        lastRepCountRef.current = stats.repCount;
+        ProtocolEventBus.getInstance().publish(
+          'POSE_REP',
+          {
+            exercise: stats.exercise,
+            repCount: stats.repCount,
+            durationSec: stats.tempoSeconds,
+            formScore: Math.round(stats.romPercentage),
+          },
+          'pose',
+          0.95
+        );
+      }
+
+      if (stats.stage !== lastStageRef.current) {
+        lastStageRef.current = stats.stage;
+        ProtocolEventBus.getInstance().publish(
+          'POSE_STATE',
+          {
+            exercise: stats.exercise,
+            stage: (stats.stage === 'up' || stats.stage === 'down' ? stats.stage : 'neutral') as 'up' | 'down' | 'neutral',
+            repCount: stats.repCount,
+            activeFaults: stats.activeFaults,
+          },
+          'pose',
+          0.9
+        );
+      }
 
       // Direct canvas rendering with zero React re-render overhead!
       const canvas = canvasRef.current;

@@ -23,6 +23,7 @@ import { GestureStateMachine } from '@/modules/hand/gesture-events';
 import { GestureFXControls } from '@/modules/hand/components/GestureFXControls';
 import { loadFXConfig } from '@/modules/hand/fx/fx-registry';
 import { GestureFXConfig } from '@/modules/hand/fx/types';
+import { ProtocolEventBus } from '@/modules/forge/event-bus';
 
 interface GeoParticle {
   x: number;
@@ -139,6 +140,17 @@ export default function HandModulePage() {
           fxEngineRef.current.onGestureEvent(event, canvas.width, canvas.height, isMirrored);
           if (event.phase === 'start') {
             unlockAchievement('FX_VIRTUOSO');
+            ProtocolEventBus.getInstance().publish(
+              'HAND_GESTURE',
+              {
+                gesture: event.gesture,
+                confidence: event.confidence,
+                handedness: 'Right',
+                position: event.palmCenter,
+              },
+              'hand',
+              event.confidence
+            );
           }
         }
       }
@@ -149,6 +161,27 @@ export default function HandModulePage() {
       // Detect trigger on pinch transition
       if (cursor.isPinching && !wasPinchingRef.current) {
         spawnBurst(cursor.x, cursor.y);
+        ProtocolEventBus.getInstance().publish(
+          'PINCH',
+          {
+            state: 'start',
+            position: { x: cursor.x, y: cursor.y },
+            handedness: 'Right',
+          },
+          'hand',
+          0.9
+        );
+      } else if (!cursor.isPinching && wasPinchingRef.current) {
+        ProtocolEventBus.getInstance().publish(
+          'PINCH',
+          {
+            state: 'release',
+            position: { x: cursor.x, y: cursor.y },
+            handedness: 'Right',
+          },
+          'hand',
+          0.9
+        );
       }
       wasPinchingRef.current = cursor.isPinching;
 

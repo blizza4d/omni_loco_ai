@@ -55,6 +55,7 @@ import {
 } from '@/modules/gaze/types';
 import { GazeCursorOverlay } from '@/components/gaze/GazeCursorOverlay';
 import { GazeCalibrationModal } from '@/components/gaze/GazeCalibrationModal';
+import { ProtocolEventBus } from '@/modules/forge/event-bus';
 
 export default function EyeTrackingPage() {
   const [syntheticMode, setSyntheticMode] = useState(false);
@@ -120,6 +121,8 @@ export default function EyeTrackingPage() {
   const taskRunnerRef = useRef<MediaPipeTaskRunner>(new MediaPipeTaskRunner());
   const rendererRef = useRef<EyeRenderer>(new EyeRenderer());
   const lastUiUpdateRef = useRef<number>(0);
+  const lastDwellTriggeredRef = useRef<boolean>(false);
+  const lastTargetRef = useRef<string | null>(null);
 
   // Status badge multi-click Easter egg trigger
   const badgeClickCountRef = useRef<number>(0);
@@ -326,6 +329,44 @@ export default function EyeTrackingPage() {
           vpHeight,
           now
         );
+
+        // Publish Gaze Dwell and Gaze Target to Omni Protocol Forge
+        if (liveCursorState.dwellProgress >= 1.0 && !lastDwellTriggeredRef.current) {
+          lastDwellTriggeredRef.current = true;
+          ProtocolEventBus.getInstance().publish(
+            'GAZE_DWELL',
+            {
+              targetName: liveCursorState.dwellTargetName || 'Interactive Control',
+              normX: liveCursorState.normX,
+              normY: liveCursorState.normY,
+              durationMs: gazeCursorConfigRef.current.dwellDurationMs,
+              isCalibrated: liveCursorState.isCalibrated,
+            },
+            'eye',
+            liveCursorState.isCalibrated ? 0.95 : 0.75
+          );
+        } else if (liveCursorState.dwellProgress < 0.2) {
+          lastDwellTriggeredRef.current = false;
+        }
+
+        if (
+          liveCursorState.dwellTargetName &&
+          liveCursorState.dwellTargetName !== lastTargetRef.current
+        ) {
+          lastTargetRef.current = liveCursorState.dwellTargetName;
+          ProtocolEventBus.getInstance().publish(
+            'GAZE_TARGET',
+            {
+              targetName: liveCursorState.dwellTargetName,
+              normX: liveCursorState.normX,
+              normY: liveCursorState.normY,
+              isFixating: liveCursorState.isFixating,
+              isCalibrated: liveCursorState.isCalibrated,
+            },
+            'eye',
+            liveCursorState.isCalibrated ? 0.95 : 0.75
+          );
+        }
 
         // Secret Easter Egg: Intentional double-blink detection (with 3.5s cooldown)
         if (
