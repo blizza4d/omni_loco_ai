@@ -39,13 +39,18 @@ export class PupillometryAnalyzer {
     // MediaPipe Landmarks:
     // Outer canthus: 33, Inner canthus: 133
     // Upper lid: 159, Lower lid: 145
-    // Iris Center: 468, Iris Ring: 469 (left), 470 (top), 471 (right), 472 (bottom)
+    // Iris: 5-point contour averaging (468 center, 469 right, 470 top, 471 left, 472 bottom)
     // ─────────────────────────────────────────────────────────────
     const rOuter = landmarks[33];
     const rInner = landmarks[133];
     const rUpper = landmarks[159];
     const rLower = landmarks[145];
-    const rIrisCenter = landmarks[468];
+    const rIrisPts = [landmarks[468], landmarks[469], landmarks[470], landmarks[471], landmarks[472]].filter(Boolean);
+    const rIrisCenter = rIrisPts.length > 0 ? {
+      x: rIrisPts.reduce((acc, p) => acc + p.x, 0) / rIrisPts.length,
+      y: rIrisPts.reduce((acc, p) => acc + p.y, 0) / rIrisPts.length,
+      z: rIrisPts.reduce((acc, p) => acc + (p.z || 0), 0) / rIrisPts.length,
+    } : landmarks[468];
     const rIrisLeft = landmarks[469];
     const rIrisRight = landmarks[471];
 
@@ -84,13 +89,18 @@ export class PupillometryAnalyzer {
     // MediaPipe Landmarks:
     // Inner canthus: 362, Outer canthus: 263
     // Upper lid: 386, Lower lid: 374
-    // Iris Center: 473, Iris Ring: 474 (left), 475 (top), 476 (right), 477 (bottom)
+    // Iris: 5-point contour averaging (473 center, 474 right, 475 top, 476 left, 477 bottom)
     // ─────────────────────────────────────────────────────────────
     const lInner = landmarks[362];
     const lOuter = landmarks[263];
     const lUpper = landmarks[386];
     const lLower = landmarks[374];
-    const lIrisCenter = landmarks[473];
+    const lIrisPts = [landmarks[473], landmarks[474], landmarks[475], landmarks[476], landmarks[477]].filter(Boolean);
+    const lIrisCenter = lIrisPts.length > 0 ? {
+      x: lIrisPts.reduce((acc, p) => acc + p.x, 0) / lIrisPts.length,
+      y: lIrisPts.reduce((acc, p) => acc + p.y, 0) / lIrisPts.length,
+      z: lIrisPts.reduce((acc, p) => acc + (p.z || 0), 0) / lIrisPts.length,
+    } : landmarks[473];
     const lIrisLeft = landmarks[474];
     const lIrisRight = landmarks[476];
 

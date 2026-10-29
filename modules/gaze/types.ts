@@ -5,10 +5,14 @@ export interface GazeFeatures {
   rightRatioY: number; // 0 to 1
   headYaw: number;     // in degrees (-45 to +45)
   headPitch: number;   // in degrees (-30 to +30)
+  headRoll?: number;   // in degrees (-30 to +30)
   eyeMidX: number;     // 0 to 1 normalized face center in video frame
   eyeMidY: number;     // 0 to 1 normalized face center in video frame
   isTracking: boolean; // whether landmarks were detected
   confidence: number;  // 0 to 1
+  isBilateral?: boolean; // true when BOTH eyes are actively tracked
+  trackingQuality?: 'OPTIMAL' | 'DEGRADED_UNILATERAL' | 'OCCLUDED' | 'SEARCHING';
+  ipdNorm?: number;    // Inter-pupillary distance normalized
 }
 
 // Backwards compatibility alias

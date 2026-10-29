@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import Link from 'next/link';
 import { GlobalNav } from '@/components/ui/GlobalNav';
 import { CrosshairViewport } from '@/components/ui/CrosshairViewport';
 import { DeskCard } from '@/components/ui/DeskCard';
@@ -18,7 +19,7 @@ import { MediaPipeTaskRunner } from '@/core/mediapipe/task-runner';
 import { syncCanvasToVideo } from '@/core/camera/coordinates';
 import { useSystemStore } from '@/core/store';
 import { ProtocolEventBus } from '@/modules/forge/event-bus';
-import { Video, VideoOff, RefreshCw, Sparkles, Download, Activity, Dumbbell, UserCheck } from 'lucide-react';
+import { Video, VideoOff, RefreshCw, Sparkles, Download, Activity, Dumbbell, UserCheck, Smile } from 'lucide-react';
 
 export default function PoseModulePage() {
   const [modelTier, setModelTier] = useState<'lite' | 'full' | 'heavy'>('full');
@@ -344,6 +345,30 @@ export default function PoseModulePage() {
               <span>{isStreaming ? 'PAUSE' : 'ACTIVATE'}</span>
             </Button>
           </div>
+        </div>
+
+        {/* Goofy Mode Feature Showcase Card */}
+        <div className="p-3.5 border-2 border-amber-500 bg-amber-500/10 rounded-tactile flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-tactile-sm">
+          <div className="flex items-center gap-2.5">
+            <span className="text-2xl">🤪</span>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-charcoal-soft">
+                  NEW MODE: GOOFY MODE // HUMAN SOUND EFFECT GENERATOR
+                </span>
+                <StampBadge label="MEME AUDIO RIG" variant="sage" />
+              </div>
+              <p className="text-[11px] text-ink-muted">
+                Strike T-Pose, Flex, Squat, or Dab to trigger synthesized meme sound effects, comic particles & typography!
+              </p>
+            </div>
+          </div>
+          <Link href="/goofy" className="shrink-0">
+            <Button variant="default" size="sm" className="w-full sm:w-auto text-xs font-bold gap-1.5 bg-amber-500 hover:bg-amber-600 text-charcoal-dark border-charcoal-soft">
+              <Smile className="w-3.5 h-3.5" />
+              LAUNCH GOOFY MODE
+            </Button>
+          </Link>
         </div>
 
         {/* Exercise Selector Strip */}

@@ -26,6 +26,7 @@ import {
   X,
   Filter,
   CheckCircle2,
+  Activity,
 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -490,6 +491,41 @@ export default function DashboardPage() {
             </div>
           </div>
         )}
+
+        {/* Experimental Suites & Labs Showcase */}
+        <div className="p-3.5 border-2 border-charcoal-soft bg-paper-dark rounded-tactile flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-tactile-sm">
+          <div className="flex items-center gap-2.5">
+            <span className="text-xl">⚡</span>
+            <div>
+              <span className="text-xs font-bold uppercase tracking-wider text-charcoal-soft block">
+                EXPERIMENTAL WORKSPACES & WORKFLOW RIGS
+              </span>
+              <span className="text-[11px] text-ink-muted">
+                Explore custom gesture synthesis in Laboratory, multimodal cross-trigger pipelines in Forge, or pose-reactive meme sounds in Goofy Mode.
+              </span>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            <Link href="/goofy">
+              <Button variant="outline" size="sm" className="text-xs gap-1.5 border-amber-500 bg-amber-500/10 text-amber-700 dark:text-amber-400 font-bold hover:bg-amber-500/20">
+                <span>🤪</span>
+                <span>GOOFY MODE</span>
+              </Button>
+            </Link>
+            <Link href="/laboratory">
+              <Button variant="outline" size="sm" className="text-xs gap-1.5 border-cyan-500 bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 font-bold hover:bg-cyan-500/20">
+                <Sparkles className="w-3.5 h-3.5 text-cyan-500" />
+                <span>LABORATORY</span>
+              </Button>
+            </Link>
+            <Link href="/forge">
+              <Button variant="outline" size="sm" className="text-xs gap-1.5 border-brick-red bg-brick-red/10 text-brick-red font-bold hover:bg-brick-red/20">
+                <Activity className="w-3.5 h-3.5 text-brick-red" />
+                <span>PROTOCOL FORGE</span>
+              </Button>
+            </Link>
+          </div>
+        </div>
 
         {/* Keyboard Instrument Guidance Footer Strip */}
         <div className="p-3 border-2 border-charcoal-soft bg-paper-dark rounded-tactile flex flex-wrap items-center justify-between gap-3 text-xs text-charcoal-soft">

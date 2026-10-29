@@ -262,6 +262,23 @@ export function GlobalNav({
               </button>
             </Link>
 
+            {/* Goofy Mode Navigation Button */}
+            <Link href="/goofy">
+              <button
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-mono font-bold uppercase border-2 rounded-tactile transition-all ${
+                  pathname === '/goofy'
+                    ? 'border-amber-500 bg-amber-500/20 text-amber-700 dark:text-amber-400 shadow-tactile-sm'
+                    : 'border-charcoal-soft text-charcoal-soft hover:bg-paper-dark hover:border-amber-500 hover:text-amber-600'
+                }`}
+                title="Launch Goofy Mode Human Sound Effect Generator"
+                aria-label="Launch Goofy Mode"
+              >
+                <span className="text-xs">🤪</span>
+                <span className="hidden sm:inline">GOOFY</span>
+                <span className="sm:hidden">GOOFY</span>
+              </button>
+            </Link>
+
             {/* Protocol Forge Navigation Button */}
             <Link href="/forge">
               <button

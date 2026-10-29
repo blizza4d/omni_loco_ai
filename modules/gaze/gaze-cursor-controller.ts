@@ -18,6 +18,8 @@ export interface GazeCursorState {
   dwellLocked: boolean;
   trail: { x: number; y: number; alpha: number }[];
   lastUpdateTime: number;
+  trackingQuality?: 'OPTIMAL' | 'DEGRADED_UNILATERAL' | 'OCCLUDED' | 'SEARCHING';
+  isBilateral?: boolean;
 }
 
 export class GazeCursorController {
@@ -127,8 +129,12 @@ export class GazeCursorController {
     this.isFixating = this.currentVelocity < 280;
 
     // 3. Saccade-Adaptive One Euro Filtering:
-    // If user eyes are jumping rapidly (> 380 px/s), increase filter responsiveness to eliminate lag
-    if (this.currentVelocity > 380) {
+    // If user eyes are jumping rapidly (> 380 px/s), increase filter responsiveness to eliminate lag.
+    // If unilateral tracking degradation occurs, stabilize with tighter cutoff to suppress monocular jitter.
+    if (features.trackingQuality === 'DEGRADED_UNILATERAL') {
+      this.filterX.setParams({ minCutoff: 1.0, beta: 0.008 });
+      this.filterY.setParams({ minCutoff: 1.0, beta: 0.008 });
+    } else if (this.currentVelocity > 380) {
       this.filterX.setParams({ minCutoff: 3.5, beta: 0.15 });
       this.filterY.setParams({ minCutoff: 3.5, beta: 0.15 });
     } else {
@@ -193,6 +199,8 @@ export class GazeCursorController {
       dwellLocked: isDwellLocked,
       trail: formattedTrail,
       lastUpdateTime: now,
+      trackingQuality: features.trackingQuality || (features.isBilateral ? 'OPTIMAL' : 'DEGRADED_UNILATERAL'),
+      isBilateral: features.isBilateral ?? true,
     };
   }
 
