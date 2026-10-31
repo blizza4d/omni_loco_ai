@@ -103,9 +103,50 @@ export class GoofyPoseStateMachine {
       };
     }
 
-    // 3. User is performing a recognizable pose!
+    // 3. User is performing a recognizable pose or dynamic action!
     this.currentPose = rawPose;
 
+    // DYNAMIC ACTION FAST-PATH (e.g. JUMP, CLAP)
+    // Dynamic actions are transient movement sequences that fire on completion
+    if (classification.isDynamicAction) {
+      const cooldownElapsed = now - this.lastTriggerTime;
+      if (cooldownElapsed >= this.cooldownMs) {
+        this.status = 'POSE_TRIGGERED';
+        this.triggeredPose = rawPose;
+        this.lastTriggerTime = now;
+        this.holdProgress = 1.0;
+
+        const meta = GOOFY_POSE_METADATA[rawPose];
+        const event: GoofyTriggerEvent = {
+          id: `goofy-evt-${now}-${Math.random().toString(36).slice(2, 6)}`,
+          timestamp: now,
+          pose: rawPose,
+          poseLabel: meta.label,
+          caption: classification.comicCaption || meta.defaultCaption,
+          soundId: 'CARTOON_CLAP',
+          soundName: '',
+          confidence: classification.confidence,
+          isDynamic: true,
+        };
+
+        return {
+          status: this.status,
+          activePose: rawPose,
+          holdProgress: 1.0,
+          triggerEvent: event,
+        };
+      } else {
+        this.status = 'STABLE_RECOGNIZED';
+        return {
+          status: this.status,
+          activePose: rawPose,
+          holdProgress: 1.0,
+          triggerEvent: null,
+        };
+      }
+    }
+
+    // STATIC POSE HANDLING:
     // Check if the user is still holding the pose that was ALREADY triggered
     if (this.triggeredPose === rawPose) {
       this.status = 'POSE_TRIGGERED';
@@ -157,6 +198,7 @@ export class GoofyPoseStateMachine {
           soundId: 'AIR_HORN', // will be mapped by audio engine
           soundName: '',
           confidence: classification.confidence,
+          isDynamic: false,
         };
 
         return {

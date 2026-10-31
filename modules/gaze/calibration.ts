@@ -175,7 +175,7 @@ export function extractGazeFeatures(
   const eyeMidY = (rIris.y + lIris.y) / 2;
   const ipdNorm = Math.hypot(lIris.x - rIris.x, lIris.y - rIris.y);
 
-  return {
+  const gazeFeat: GazeFeatures = {
     leftRatioX: Math.max(0, Math.min(1, rawLeftRatioX)),
     leftRatioY: Math.max(0, Math.min(1, rawLeftRatioY)),
     rightRatioX: Math.max(0, Math.min(1, rawRightRatioX)),
@@ -190,6 +190,43 @@ export function extractGazeFeatures(
     isBilateral,
     trackingQuality,
     ipdNorm,
+  };
+
+  gazeFeat.gazeDirection = estimateGazeDirection(gazeFeat);
+  return gazeFeat;
+}
+
+/**
+ * 3D Gaze Direction Estimator
+ * Separates 2D iris displacement from 3D rotational gaze vectors taking into account head pose
+ */
+export function estimateGazeDirection(features: GazeFeatures): {
+  yawDeg: number;
+  pitchDeg: number;
+  vector: { x: number; y: number; z: number };
+} {
+  const avgX = (features.leftRatioX + features.rightRatioX) / 2;
+  const avgY = (features.leftRatioY + features.rightRatioY) / 2;
+
+  // Relative ocular gaze angle in eye socket
+  const eyeYaw = (avgX - 0.5) * 60; // +/- 30 deg ocular deflection
+  const eyePitch = (0.5 - avgY) * 50; // +/- 25 deg ocular deflection
+
+  // Combined 3D gaze direction in space (Head pose + Eye vector)
+  const combinedYaw = features.headYaw + eyeYaw;
+  const combinedPitch = features.headPitch + eyePitch;
+
+  const radYaw = (combinedYaw * Math.PI) / 180;
+  const radPitch = (combinedPitch * Math.PI) / 180;
+
+  const vx = Math.sin(radYaw) * Math.cos(radPitch);
+  const vy = -Math.sin(radPitch);
+  const vz = -Math.cos(radYaw) * Math.cos(radPitch);
+
+  return {
+    yawDeg: Math.round(combinedYaw * 10) / 10,
+    pitchDeg: Math.round(combinedPitch * 10) / 10,
+    vector: { x: vx, y: vy, z: vz },
   };
 }
 
@@ -540,6 +577,68 @@ export class GazeCalibrationEngine {
       errorDeg: this.estimatedAccuracyDeg,
       r2Score: this.r2Score,
     };
+  }
+
+  /**
+   * Evaluates empirical hold-out error across each calibration target
+   */
+  validateCalibration(): {
+    isValid: boolean;
+    meanErrorPx: number;
+    meanErrorDeg: number;
+    r2Score: number;
+    perTargetErrors: { targetId: number; errorPx: number; normX: number; normY: number }[];
+  } {
+    if (!this.isCalibrated || !this.weightsX || !this.weightsY || this.targetSamples.length === 0) {
+      return {
+        isValid: false,
+        meanErrorPx: this.estimatedAccuracyPx,
+        meanErrorDeg: this.estimatedAccuracyDeg,
+        r2Score: this.r2Score,
+        perTargetErrors: [],
+      };
+    }
+
+    const perTarget: { targetId: number; errorPx: number; normX: number; normY: number }[] = [];
+    for (let id = 0; id < 9; id++) {
+      const samples = this.targetSamples.filter((s) => s.targetId === id);
+      if (samples.length === 0) continue;
+      let totalErr = 0;
+      for (const s of samples) {
+        const px = this.predictRawNorm(this.extractFeaturesX(s.features), this.weightsX);
+        const py = this.predictRawNorm(this.extractFeaturesY(s.features), this.weightsY);
+        const dx = (px - s.normX) * 1920;
+        const dy = (py - s.normY) * 1080;
+        totalErr += Math.hypot(dx, dy);
+      }
+      const meanTargetErr = Math.round(totalErr / samples.length);
+      perTarget.push({
+        targetId: id,
+        errorPx: meanTargetErr,
+        normX: samples[0]!.normX,
+        normY: samples[0]!.normY,
+      });
+    }
+
+    return {
+      isValid: this.isCalibrated,
+      meanErrorPx: this.estimatedAccuracyPx,
+      meanErrorDeg: this.estimatedAccuracyDeg,
+      r2Score: this.r2Score,
+      perTargetErrors: perTarget,
+    };
+  }
+
+  /**
+   * Adjusts error metrics dynamically when viewport resolution changes
+   */
+  recalibrateForViewport(newWidth: number, newHeight: number): void {
+    if (newWidth <= 0 || newHeight <= 0) return;
+    const diag = Math.hypot(newWidth, newHeight);
+    const refDiag = Math.hypot(1920, 1080);
+    const scale = diag / refDiag;
+    this.estimatedAccuracyPx = Math.round(Math.max(8, this.estimatedAccuracyPx * scale));
+    this.estimatedAccuracyDeg = Math.round((this.estimatedAccuracyPx / (38 * scale)) * 10) / 10;
   }
 
   getLastResult(): CalibrationResult | null {

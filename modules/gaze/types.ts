@@ -13,6 +13,11 @@ export interface GazeFeatures {
   isBilateral?: boolean; // true when BOTH eyes are actively tracked
   trackingQuality?: 'OPTIMAL' | 'DEGRADED_UNILATERAL' | 'OCCLUDED' | 'SEARCHING';
   ipdNorm?: number;    // Inter-pupillary distance normalized
+  gazeDirection?: {
+    yawDeg: number;
+    pitchDeg: number;
+    vector: { x: number; y: number; z: number };
+  };
 }
 
 // Backwards compatibility alias

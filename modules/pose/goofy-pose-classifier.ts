@@ -5,7 +5,20 @@ import {
   GOOFY_POSE_METADATA,
 } from './goofy-types';
 
+interface PoseHistoryFrame {
+  timestamp: number;
+  midHipY: number;
+  midAnkleY: number;
+  wristDist: number;
+  torsoHeight: number;
+  shoulderWidth: number;
+}
+
 export class GoofyPoseClassifier {
+  private history: PoseHistoryFrame[] = [];
+  private lastClapTriggerTime = 0;
+  private lastJumpTriggerTime = 0;
+
   /**
    * Euclidean distance between two 3D landmarks
    */
@@ -39,9 +52,11 @@ export class GoofyPoseClassifier {
   }
 
   /**
-   * Evaluates input 33 MediaPipe pose landmarks and classifies the active human pose
+   * Evaluates input 33 MediaPipe pose landmarks and classifies the active human pose or action
+   * @param landmarks 33 MediaPipe pose landmarks
+   * @param now Current timestamp in milliseconds (defaults to performance.now())
    */
-  classify(landmarks: PoseLandmark[] | null): PoseClassificationResult {
+  classify(landmarks: PoseLandmark[] | null, now = typeof performance !== 'undefined' ? performance.now() : Date.now()): PoseClassificationResult {
     if (!landmarks || landmarks.length < 33) {
       return {
         pose: null,
@@ -100,6 +115,23 @@ export class GoofyPoseClassifier {
 
     const torsoHeight = Math.max(0.12, this.dist3D(midShoulder, midHip));
     const shoulderWidth = Math.max(0.08, this.dist3D(ls, rs));
+    const currentWristDist = this.dist3D(lw, rw);
+    const midAnkleY = (la && ra) ? (la.y + ra.y) / 2 : 1.0;
+
+    // Record into rolling history (up to 1.2s / 40 frames)
+    this.history.push({
+      timestamp: now,
+      midHipY: midHip.y,
+      midAnkleY,
+      wristDist: currentWristDist,
+      torsoHeight,
+      shoulderWidth,
+    });
+    if (this.history.length > 40) {
+      this.history.shift();
+    }
+    const cutoff = now - 1200;
+    this.history = this.history.filter((h) => h.timestamp >= cutoff);
 
     // Core joint angles
     const leftElbow = this.computeAngle3D(ls, le, lw);
@@ -116,23 +148,78 @@ export class GoofyPoseClassifier {
       elbowAngleRight: Math.round(rightElbow),
       kneeAngleLeft: Math.round(leftKnee),
       kneeAngleRight: Math.round(rightKnee),
+      wristDistance: Math.round(currentWristDist * 100) / 100,
     };
 
-    const candidates: { pose: GoofyPoseType; score: number }[] = [];
+    const candidates: { pose: GoofyPoseType; score: number; isDynamic?: boolean }[] = [];
 
     // ─────────────────────────────────────────────────────────────
-    // 1. T-POSE
+    // DYNAMIC ACTION 1: CLAP
+    // Temporal sequence: hands were separated, rapidly approached, and met
+    // ─────────────────────────────────────────────────────────────
+    if (now - this.lastClapTriggerTime > 600 && this.history.length >= 3) {
+      // Find maximum wrist separation in past 120ms - 450ms
+      const pastFrames = this.history.filter((h) => now - h.timestamp >= 100 && now - h.timestamp <= 450);
+      const maxPastDist = pastFrames.length > 0 ? Math.max(...pastFrames.map((f) => f.wristDist)) : 0;
+
+      const handsTogetherNow = currentWristDist < Math.min(shoulderWidth * 0.32, torsoHeight * 0.22);
+      const handsWereApart = maxPastDist > shoulderWidth * 0.45;
+      const handsInFrontOfTorso =
+        lw.y > midShoulder.y && lw.y < midHip.y + torsoHeight * 0.1 &&
+        rw.y > midShoulder.y && rw.y < midHip.y + torsoHeight * 0.1;
+
+      if (handsTogetherNow && handsWereApart && handsInFrontOfTorso) {
+        this.lastClapTriggerTime = now;
+        candidates.push({
+          pose: 'CLAP',
+          score: 0.95,
+          isDynamic: true,
+        });
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // DYNAMIC ACTION 2: JUMP
+    // Temporal sequence: pre-jump ground baseline, rapid upward displacement, apex
+    // ─────────────────────────────────────────────────────────────
+    const lowerBodyVisible = (lk.visibility ?? 0) > 0.4 && (rk.visibility ?? 0) > 0.4;
+    if (lowerBodyVisible && now - this.lastJumpTriggerTime > 750 && this.history.length >= 4) {
+      // Baseline hip Y in past 300ms - 900ms (larger Y = lower on screen / ground level)
+      const pastGroundFrames = this.history.filter((h) => now - h.timestamp >= 250 && now - h.timestamp <= 800);
+      if (pastGroundFrames.length > 0) {
+        const baselineHipY = Math.max(...pastGroundFrames.map((f) => f.midHipY));
+        // Upward displacement: midHip.y significantly smaller than baseline
+        const upwardDisplacement = baselineHipY - midHip.y;
+
+        // Takeoff velocity check
+        const recentFrame = pastGroundFrames[pastGroundFrames.length - 1]!;
+        const dtSec = Math.max(0.016, (now - recentFrame.timestamp) / 1000);
+        const verticalVelocity = (recentFrame.midHipY - midHip.y) / dtSec; // positive = upward
+
+        if (upwardDisplacement > torsoHeight * 0.12 && verticalVelocity > torsoHeight * 0.35) {
+          this.lastJumpTriggerTime = now;
+          candidates.push({
+            pose: 'JUMP',
+            score: 0.94,
+            isDynamic: true,
+          });
+        }
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // STATIC POSE 1: T-POSE
     // Outstretched horizontal arms, level wrists, wide spread
     // ─────────────────────────────────────────────────────────────
     const tShoulders = leftShoulder >= 70 && leftShoulder <= 125 && rightShoulder >= 70 && rightShoulder <= 125;
-    const tElbows = leftElbow >= 142 && rightElbow >= 142;
+    const tElbows = leftElbow >= 138 && rightElbow >= 138;
     const tLevelWrists =
       Math.abs(lw.y - ls.y) < torsoHeight * 0.28 && Math.abs(rw.y - rs.y) < torsoHeight * 0.28;
-    const tWristSpread = this.dist3D(lw, rw) > shoulderWidth * 2.0;
+    const tWristSpread = currentWristDist > shoulderWidth * 2.0;
 
     if (tShoulders && tElbows && tLevelWrists && tWristSpread) {
-      const spreadScore = Math.min(1.0, this.dist3D(lw, rw) / (shoulderWidth * 2.5));
-      const straightness = ((leftElbow - 142) / 38 + (rightElbow - 142) / 38) / 2;
+      const spreadScore = Math.min(1.0, currentWristDist / (shoulderWidth * 2.5));
+      const straightness = ((leftElbow - 138) / 42 + (rightElbow - 138) / 42) / 2;
       candidates.push({
         pose: 'T_POSE',
         score: Math.min(0.99, 0.75 + spreadScore * 0.15 + straightness * 0.1),
@@ -140,13 +227,13 @@ export class GoofyPoseClassifier {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 2. HANDS RAISED (VICTORY / TOUCHDOWN)
+    // STATIC POSE 2: HANDS RAISED (VICTORY / TOUCHDOWN)
     // Both wrists high above shoulders & head, arms reaching up
     // ─────────────────────────────────────────────────────────────
-    const wristsAboveHead = lw.y < ls.y - torsoHeight * 0.25 && rw.y < rs.y - torsoHeight * 0.25;
-    const armsHigh = leftShoulder > 125 && rightShoulder > 125;
-    const elbowsExtended = leftElbow > 115 && rightElbow > 115;
-    const wristsSeparated = this.dist3D(lw, rw) > shoulderWidth * 0.6;
+    const wristsAboveHead = lw.y < ls.y - torsoHeight * 0.22 && rw.y < rs.y - torsoHeight * 0.22;
+    const armsHigh = leftShoulder > 120 && rightShoulder > 120;
+    const elbowsExtended = leftElbow > 110 && rightElbow > 110;
+    const wristsSeparated = currentWristDist > shoulderWidth * 0.55;
 
     if (wristsAboveHead && armsHigh && elbowsExtended && wristsSeparated) {
       const elevation = Math.min(1.0, ((ls.y - lw.y) / torsoHeight + (rs.y - rw.y) / torsoHeight) / 1.5);
@@ -157,44 +244,32 @@ export class GoofyPoseClassifier {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 3. DOUBLE BICEPS FLEX
-    // Shoulders up (~90°), elbows bent (~45°-110°), wrists higher than elbows
+    // STATIC POSE 3: ARMS CROSSED
+    // Forearms folded across the chest, wrists cross the torso midline
     // ─────────────────────────────────────────────────────────────
-    const flexShoulders = leftShoulder >= 60 && leftShoulder <= 130 && rightShoulder >= 60 && rightShoulder <= 130;
-    const flexElbows = leftElbow >= 40 && leftElbow <= 112 && rightElbow >= 40 && rightElbow <= 112;
-    const flexWristsUp = lw.y < le.y + torsoHeight * 0.08 && rw.y < re.y + torsoHeight * 0.08;
+    const wristsCrossed =
+      (lw.x > ls.x + 0.02 || this.dist3D(lw, re) < torsoHeight * 0.45) &&
+      (rw.x < rs.x - 0.02 || this.dist3D(rw, le) < torsoHeight * 0.45);
+    const wristsAtChest =
+      lw.y > midShoulder.y && lw.y < midHip.y &&
+      rw.y > midShoulder.y && rw.y < midHip.y &&
+      Math.abs(lw.y - rw.y) < torsoHeight * 0.25;
+    const elbowsBentArmsCrossed = leftElbow >= 45 && leftElbow <= 125 && rightElbow >= 45 && rightElbow <= 125;
+    const notPrayer = currentWristDist > torsoHeight * 0.12; // Prayer has palms together
 
-    if (flexShoulders && flexElbows && flexWristsUp) {
-      const bicepCloseness = Math.min(1.0, 1.2 - Math.abs(leftElbow - 80) / 60);
+    if (wristsCrossed && wristsAtChest && elbowsBentArmsCrossed && notPrayer) {
       candidates.push({
-        pose: 'DOUBLE_BICEPS_FLEX',
-        score: Math.min(0.97, 0.8 + bicepCloseness * 0.17),
+        pose: 'ARMS_CROSSED',
+        score: 0.93,
       });
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 4. SQUAT STANCE
-    // Knees flexed past 135°, hips lowered relative to knees
-    // ─────────────────────────────────────────────────────────────
-    const lowerBodyVisible = (lk.visibility ?? 0) > 0.45 && (rk.visibility ?? 0) > 0.45;
-    if (lowerBodyVisible) {
-      const squatKnees = leftKnee < 135 && rightKnee < 135;
-      const hipsLowered = midHip.y > midShoulder.y + torsoHeight * 0.6;
-      if (squatKnees && hipsLowered) {
-        const depth = Math.min(1.0, (135 - (leftKnee + rightKnee) / 2) / 45);
-        candidates.push({
-          pose: 'SQUAT_STANCE',
-          score: Math.min(0.96, 0.78 + depth * 0.18),
-        });
-      }
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // 5. HANDS ON HIPS (SUPERHERO)
+    // STATIC POSE 4: HANDS ON HIPS (SUPERHERO)
     // Wrists near respective hips, elbows flared outward
     // ─────────────────────────────────────────────────────────────
-    const lwNearHip = this.dist3D(lw, lh) < torsoHeight * 0.35;
-    const rwNearHip = this.dist3D(rw, rh) < torsoHeight * 0.35;
+    const lwNearHip = this.dist3D(lw, lh) < torsoHeight * 0.38;
+    const rwNearHip = this.dist3D(rw, rh) < torsoHeight * 0.38;
     const elbowsFlared = this.dist3D(le, re) > shoulderWidth * 1.35;
     const elbowsBent = leftElbow >= 55 && leftElbow <= 130 && rightElbow >= 55 && rightElbow <= 130;
 
@@ -206,7 +281,47 @@ export class GoofyPoseClassifier {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 6. THE DAB
+    // STATIC POSE 5: SQUAT (SQUAT_STANCE)
+    // Knees flexed past 135°, hips lowered relative to knees
+    // ─────────────────────────────────────────────────────────────
+    if (lowerBodyVisible) {
+      const squatKnees = leftKnee < 135 && rightKnee < 135;
+      const hipsLowered = midHip.y > midShoulder.y + torsoHeight * 0.6;
+      if (squatKnees && hipsLowered) {
+        const depth = Math.min(1.0, (135 - (leftKnee + rightKnee) / 2) / 45);
+        candidates.push({
+          pose: 'SQUAT',
+          score: Math.min(0.96, 0.78 + depth * 0.18),
+        });
+        candidates.push({
+          pose: 'SQUAT_STANCE',
+          score: Math.min(0.96, 0.78 + depth * 0.18),
+        });
+      }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // STATIC POSE 6: FLEX POSE (DOUBLE_BICEPS_FLEX)
+    // Shoulders up (~90°), elbows bent (~45°-112°), wrists higher than elbows
+    // ─────────────────────────────────────────────────────────────
+    const flexShoulders = leftShoulder >= 60 && leftShoulder <= 130 && rightShoulder >= 60 && rightShoulder <= 130;
+    const flexElbows = leftElbow >= 40 && leftElbow <= 112 && rightElbow >= 40 && rightElbow <= 112;
+    const flexWristsUp = lw.y < le.y + torsoHeight * 0.08 && rw.y < re.y + torsoHeight * 0.08;
+
+    if (flexShoulders && flexElbows && flexWristsUp) {
+      const bicepCloseness = Math.min(1.0, 1.2 - Math.abs(leftElbow - 80) / 60);
+      candidates.push({
+        pose: 'FLEX_POSE',
+        score: Math.min(0.97, 0.8 + bicepCloseness * 0.17),
+      });
+      candidates.push({
+        pose: 'DOUBLE_BICEPS_FLEX',
+        score: Math.min(0.97, 0.8 + bicepCloseness * 0.17),
+      });
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // STATIC POSE 7: THE DAB
     // One arm extended straight diagonally up, other bent across chest
     // ─────────────────────────────────────────────────────────────
     const leftDab =
@@ -229,7 +344,7 @@ export class GoofyPoseClassifier {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 7. DISCO FEVER
+    // STATIC POSE 8: DISCO FEVER
     // One arm pointing straight high up, other pointing down across hip
     // ─────────────────────────────────────────────────────────────
     const leftHighRightLow =
@@ -250,10 +365,10 @@ export class GoofyPoseClassifier {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 8. ZEN PRAYER
+    // STATIC POSE 9: ZEN PRAYER
     // Wrists touching at mid-chest sternum, elbows flared
     // ─────────────────────────────────────────────────────────────
-    const wristsTogether = this.dist3D(lw, rw) < torsoHeight * 0.22;
+    const wristsTogether = currentWristDist < torsoHeight * 0.22;
     const wristsAtSternum =
       lw.y > midShoulder.y + torsoHeight * 0.05 && lw.y < midHip.y &&
       rw.y > midShoulder.y + torsoHeight * 0.05 && rw.y < midHip.y;
@@ -267,8 +382,8 @@ export class GoofyPoseClassifier {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 9. THE THINKER
-    // One wrist right under chin/jaw, head tilted
+    // STATIC POSE 10: THE THINKER
+    // One wrist right under chin/jaw
     // ─────────────────────────────────────────────────────────────
     const lwAtChin = this.dist3D(lw, nose) < torsoHeight * 0.25 && leftElbow < 100;
     const rwAtChin = this.dist3D(rw, nose) < torsoHeight * 0.25 && rightElbow < 100;
@@ -281,13 +396,13 @@ export class GoofyPoseClassifier {
     }
 
     // ─────────────────────────────────────────────────────────────
-    // 10. ZOMBIE WALK
+    // STATIC POSE 11: ZOMBIE WALK
     // Both arms straight forward at shoulder height, wrists close
     // ─────────────────────────────────────────────────────────────
     const zombieElbows = leftElbow > 145 && rightElbow > 145;
     const zombieShoulders = leftShoulder >= 65 && leftShoulder <= 115 && rightShoulder >= 65 && rightShoulder <= 115;
-    const zombieWristsTogether = this.dist3D(lw, rw) < shoulderWidth * 1.35;
-    const zombieNotTPose = this.dist3D(lw, rw) < shoulderWidth * 1.8;
+    const zombieWristsTogether = currentWristDist < shoulderWidth * 1.35;
+    const zombieNotTPose = currentWristDist < shoulderWidth * 1.8;
 
     if (zombieElbows && zombieShoulders && zombieWristsTogether && zombieNotTPose) {
       candidates.push({
@@ -296,8 +411,13 @@ export class GoofyPoseClassifier {
       });
     }
 
-    // Sort by confidence score
-    candidates.sort((a, b) => b.score - a.score);
+    // Sort by priority: Dynamic actions take precedence if triggered, else highest confidence
+    candidates.sort((a, b) => {
+      if (a.isDynamic && !b.isDynamic) return -1;
+      if (!a.isDynamic && b.isDynamic) return 1;
+      return b.score - a.score;
+    });
+
     const top = candidates[0];
 
     if (top) {
@@ -307,6 +427,8 @@ export class GoofyPoseClassifier {
         confidence: Math.round(top.score * 100) / 100,
         label: meta.label,
         comicCaption: meta.defaultCaption,
+        isDynamicAction: Boolean(top.isDynamic),
+        actionCategory: top.isDynamic ? 'DYNAMIC_ACTION' : 'STATIC_POSE',
         jointMetrics,
       };
     }
@@ -315,7 +437,7 @@ export class GoofyPoseClassifier {
       pose: null,
       confidence: 0,
       label: 'NEUTRAL STANCE',
-      comicCaption: 'STRIKE A HEROIC, MEME, OR RIDICULOUS POSE!',
+      comicCaption: 'STRIKE A HEROIC POSE OR PERFORM A JUMP / CLAP!',
       jointMetrics,
     };
   }

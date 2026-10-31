@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractGazeFeatures, GazeCalibrationEngine, DEFAULT_9_TARGETS } from '../modules/gaze/calibration';
+import { extractGazeFeatures, GazeCalibrationEngine, DEFAULT_9_TARGETS, estimateGazeDirection } from '../modules/gaze/calibration';
 import { GazeFeatures } from '../modules/gaze/types';
 import { generateSyntheticEyeLandmarks } from '../modules/eye/synthetic-eye';
 import {
@@ -221,6 +221,128 @@ describe('Precision Eye Tracking & Calibration Architecture', () => {
       // Bottom-right gaze should map to bottom-right coordinates
       expect(pred.x).toBeGreaterThan(1200);
       expect(pred.y).toBeGreaterThan(600);
+    });
+
+    it('empirically validates calibration hold-out error across targets', () => {
+      const engine = new GazeCalibrationEngine();
+      engine.startCalibration();
+
+      let now = 3000;
+      for (let i = 0; i < 9; i++) {
+        const target = DEFAULT_9_TARGETS[i]!;
+        now += 250;
+        for (let s = 0; s < 45; s++) {
+          now += 20;
+          const features: GazeFeatures = {
+            leftRatioX: target.normX * 0.75 + 0.12,
+            leftRatioY: target.normY * 0.75 + 0.12,
+            rightRatioX: target.normX * 0.75 + 0.12,
+            rightRatioY: target.normY * 0.75 + 0.12,
+            headYaw: (target.normX - 0.5) * 16,
+            headPitch: (0.5 - target.normY) * 12,
+            eyeMidX: 0.5,
+            eyeMidY: 0.5,
+            isTracking: true,
+            confidence: 0.96,
+            isBilateral: true,
+            trackingQuality: 'OPTIMAL',
+          };
+          const prevIdx = engine.getActiveTargetIndex();
+          const isDone = engine.addSample(features, now);
+          if (isDone || engine.getActiveTargetIndex() !== prevIdx) break;
+        }
+      }
+
+      const val = engine.validateCalibration();
+      expect(val.isValid).toBe(true);
+      expect(val.r2Score).toBeGreaterThan(0.75);
+      expect(val.perTargetErrors).toHaveLength(9);
+      expect(val.meanErrorPx).toBeLessThan(75);
+    });
+
+    it('dynamically recalibrates pixel accuracy when viewport changes', () => {
+      const engine = new GazeCalibrationEngine();
+      engine.startCalibration();
+
+      let now = 4000;
+      for (let i = 0; i < 9; i++) {
+        const target = DEFAULT_9_TARGETS[i]!;
+        now += 250;
+        for (let s = 0; s < 45; s++) {
+          now += 20;
+          const features: GazeFeatures = {
+            leftRatioX: target.normX * 0.75 + 0.12,
+            leftRatioY: target.normY * 0.75 + 0.12,
+            rightRatioX: target.normX * 0.75 + 0.12,
+            rightRatioY: target.normY * 0.75 + 0.12,
+            headYaw: (target.normX - 0.5) * 16,
+            headPitch: (0.5 - target.normY) * 12,
+            eyeMidX: 0.5,
+            eyeMidY: 0.5,
+            isTracking: true,
+            confidence: 0.96,
+            isBilateral: true,
+            trackingQuality: 'OPTIMAL',
+          };
+          const prevIdx = engine.getActiveTargetIndex();
+          const isDone = engine.addSample(features, now);
+          if (isDone || engine.getActiveTargetIndex() !== prevIdx) break;
+        }
+      }
+
+      const initialAcc = engine.getAccuracy().errorPx;
+      // Rescale down to 1280x720
+      engine.recalibrateForViewport(1280, 720);
+      const scaledAcc = engine.getAccuracy().errorPx;
+      expect(scaledAcc).toBeLessThan(initialAcc);
+    });
+  });
+
+  describe('3D Gaze Direction Estimation (estimateGazeDirection)', () => {
+    it('estimates normalized forward gaze vector for straight-ahead gaze', () => {
+      const features: GazeFeatures = {
+        leftRatioX: 0.5,
+        leftRatioY: 0.5,
+        rightRatioX: 0.5,
+        rightRatioY: 0.5,
+        headYaw: 0,
+        headPitch: 0,
+        eyeMidX: 0.5,
+        eyeMidY: 0.5,
+        isTracking: true,
+        confidence: 0.99,
+      };
+
+      const gaze3D = estimateGazeDirection(features);
+      expect(gaze3D.yawDeg).toBeCloseTo(0, 1);
+      expect(gaze3D.pitchDeg).toBeCloseTo(0, 1);
+      // Unit vector pointing forward into screen (-z)
+      const norm = Math.hypot(gaze3D.vector.x, gaze3D.vector.y, gaze3D.vector.z);
+      expect(norm).toBeCloseTo(1.0, 3);
+      expect(gaze3D.vector.z).toBeCloseTo(-1.0, 3);
+      expect(Math.abs(gaze3D.vector.x)).toBeLessThan(0.01);
+    });
+
+    it('combines head yaw and ocular yaw in 3D direction vector', () => {
+      const features: GazeFeatures = {
+        leftRatioX: 0.75, // Looking right (+15 deg eye yaw)
+        leftRatioY: 0.5,
+        rightRatioX: 0.75,
+        rightRatioY: 0.5,
+        headYaw: 10, // Head turned right (+10 deg head yaw)
+        headPitch: 0,
+        eyeMidX: 0.5,
+        eyeMidY: 0.5,
+        isTracking: true,
+        confidence: 0.95,
+      };
+
+      const gaze3D = estimateGazeDirection(features);
+      // Combined yaw = 10 + (0.75 - 0.5) * 60 = 10 + 15 = 25 deg
+      expect(gaze3D.yawDeg).toBeCloseTo(25, 1);
+      expect(gaze3D.vector.x).toBeGreaterThan(0.35); // Positive X = pointing right
+      const norm = Math.hypot(gaze3D.vector.x, gaze3D.vector.y, gaze3D.vector.z);
+      expect(norm).toBeCloseTo(1.0, 3);
     });
   });
 

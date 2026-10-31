@@ -2,6 +2,7 @@ import {
   GoofyPoseType,
   GoofySoundId,
   GoofyModeConfig,
+  SoundDefinition,
   DEFAULT_GOOFY_CONFIG,
   DEFAULT_SOUND_LIBRARY,
 } from './goofy-types';
@@ -27,6 +28,10 @@ export class GoofyAudioEngine {
 
   getMappings() {
     return this.config.mappings;
+  }
+
+  getSoundLibrary(): SoundDefinition[] {
+    return DEFAULT_SOUND_LIBRARY;
   }
 
   setMapping(pose: GoofyPoseType, soundId: GoofySoundId): void {
@@ -148,6 +153,13 @@ export class GoofyAudioEngine {
   }
 
   /**
+   * Preview or play a sound directly on demand
+   */
+  playSound(soundId: GoofySoundId, volume = 0.8): void {
+    this.preview(soundId, undefined, volume);
+  }
+
+  /**
    * Preview a sound on demand (e.g. from the Sound Library editor)
    */
   preview(soundId: GoofySoundId, customUrl?: string, volume = 0.8): void {
@@ -215,9 +227,224 @@ export class GoofyAudioEngine {
       case 'CARTOON_SQUEAK':
         this.synthCartoonSqueak(ctx, now);
         break;
+      case 'CROWD_CHEER':
+        this.synthCrowdCheer(ctx, now);
+        break;
+      case 'CONFIDENT_ENTRANCE':
+        this.synthConfidentEntrance(ctx, now);
+        break;
+      case 'DRAMATIC_SUSPENSE':
+        this.synthDramaticSuspense(ctx, now);
+        break;
+      case 'CARTOON_IMPACT':
+        this.synthCartoonImpact(ctx, now);
+        break;
+      case 'CARTOON_JUMP':
+        this.synthCartoonJump(ctx, now);
+        break;
+      case 'CARTOON_CLAP':
+        this.synthCartoonClap(ctx, now);
+        break;
       default:
         this.synthAirHorn(ctx, now);
     }
+  }
+
+  // 11. CROWD CHEERING (Stadium applause & cheers)
+  private synthCrowdCheer(ctx: AudioContext, now: number): void {
+    const duration = 1.6;
+    const bufferSize = Math.floor(ctx.sampleRate * duration);
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      // Modulated noise simulating clapping density
+      const mod = Math.sin((i / ctx.sampleRate) * 15 * Math.PI) * 0.3 + 0.7;
+      data[i] = (Math.random() * 2 - 1) * mod;
+    }
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(1200, now);
+    filter.Q.setValueAtTime(1.8, now);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.01, now);
+    gain.gain.linearRampToValueAtTime(0.45, now + 0.15);
+    gain.gain.setValueAtTime(0.4, now + duration - 0.3);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.masterGain!);
+    noise.start(now);
+
+    // Harmonic crowd whistle / cheer tone
+    const osc = ctx.createOscillator();
+    const oscGain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(440, now);
+    osc.frequency.exponentialRampToValueAtTime(660, now + 0.4);
+    osc.frequency.exponentialRampToValueAtTime(520, now + duration);
+    oscGain.gain.setValueAtTime(0.01, now);
+    oscGain.gain.linearRampToValueAtTime(0.12, now + 0.2);
+    oscGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+    osc.connect(oscGain);
+    oscGain.connect(this.masterGain!);
+    osc.start(now);
+    osc.stop(now + duration);
+  }
+
+  // 12. CONFIDENT ENTRANCE (Punchy kick + bright swagger fanfare)
+  private synthConfidentEntrance(ctx: AudioContext, now: number): void {
+    // Punchy sub-kick
+    const kick = ctx.createOscillator();
+    const kickGain = ctx.createGain();
+    kick.type = 'sine';
+    kick.frequency.setValueAtTime(130, now);
+    kick.frequency.exponentialRampToValueAtTime(38, now + 0.25);
+    kickGain.gain.setValueAtTime(0.8, now);
+    kickGain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+    kick.connect(kickGain);
+    kickGain.connect(this.masterGain!);
+    kick.start(now);
+    kick.stop(now + 0.28);
+
+    // Staccato royal fanfare chord
+    const notes = [233.08, 293.66, 349.23, 466.16]; // Bb Major chord
+    notes.forEach((freq) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sawtooth';
+      osc.frequency.setValueAtTime(freq, now + 0.08);
+
+      gain.gain.setValueAtTime(0, now + 0.08);
+      gain.gain.linearRampToValueAtTime(0.28, now + 0.12);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 1.2);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain!);
+      osc.start(now + 0.08);
+      osc.stop(now + 1.2);
+    });
+  }
+
+  // 13. DRAMATIC SUSPENSE (Sinister low drone + dissonant sting)
+  private synthDramaticSuspense(ctx: AudioContext, now: number): void {
+    const duration = 1.5;
+    const osc1 = ctx.createOscillator();
+    const osc2 = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+
+    osc1.type = 'sawtooth';
+    osc1.frequency.setValueAtTime(55, now); // Low A1
+    osc2.type = 'sawtooth';
+    osc2.frequency.setValueAtTime(58.27, now); // Dissonant Bb1 clash
+
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(280, now);
+    filter.frequency.exponentialRampToValueAtTime(650, now + 0.6);
+    filter.frequency.exponentialRampToValueAtTime(180, now + duration);
+
+    gain.gain.setValueAtTime(0.01, now);
+    gain.gain.linearRampToValueAtTime(0.5, now + 0.15);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+    osc1.connect(filter);
+    osc2.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.masterGain!);
+
+    osc1.start(now);
+    osc2.start(now);
+    osc1.stop(now + duration);
+    osc2.stop(now + duration);
+  }
+
+  // 14. CARTOON IMPACT (Heavy comic thud)
+  private synthCartoonImpact(ctx: AudioContext, now: number): void {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(85, now);
+    osc.frequency.exponentialRampToValueAtTime(28, now + 0.35);
+
+    gain.gain.setValueAtTime(0.9, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain!);
+    osc.start(now);
+    osc.stop(now + 0.45);
+
+    // Wobble bounce
+    const bounce = ctx.createOscillator();
+    const bounceGain = ctx.createGain();
+    bounce.type = 'triangle';
+    bounce.frequency.setValueAtTime(220, now + 0.1);
+    bounce.frequency.linearRampToValueAtTime(110, now + 0.45);
+    bounceGain.gain.setValueAtTime(0.3, now + 0.1);
+    bounceGain.gain.exponentialRampToValueAtTime(0.001, now + 0.5);
+    bounce.connect(bounceGain);
+    bounceGain.connect(this.masterGain!);
+    bounce.start(now + 0.1);
+    bounce.stop(now + 0.5);
+  }
+
+  // 15. CARTOON JUMP (Rapid ascending pitch launch)
+  private synthCartoonJump(ctx: AudioContext, now: number): void {
+    const duration = 0.6;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(180, now);
+    osc.frequency.exponentialRampToValueAtTime(880, now + 0.22);
+    osc.frequency.linearRampToValueAtTime(540, now + duration);
+
+    gain.gain.setValueAtTime(0.01, now);
+    gain.gain.linearRampToValueAtTime(0.5, now + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain!);
+    osc.start(now);
+    osc.stop(now + duration);
+  }
+
+  // 16. CARTOON CLAP (Dual-transient acoustic hand slap)
+  private synthCartoonClap(ctx: AudioContext, now: number): void {
+    // Two rapid micro-transients
+    [0, 0.018].forEach((offset) => {
+      const t = now + offset;
+      const bufferSize = Math.floor(ctx.sampleRate * 0.18);
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      for (let i = 0; i < bufferSize; i++) {
+        data[i] = Math.random() * 2 - 1;
+      }
+
+      const noise = ctx.createBufferSource();
+      noise.buffer = buffer;
+
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(1400, t);
+      filter.Q.setValueAtTime(3.2, t);
+
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.6, t);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+
+      noise.connect(filter);
+      filter.connect(gain);
+      gain.connect(this.masterGain!);
+
+      noise.start(t);
+    });
   }
 
   // 1. MLG AIR HORN (Three rapid, detuned sawtooth bursts)

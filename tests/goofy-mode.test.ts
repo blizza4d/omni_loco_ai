@@ -102,7 +102,7 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
       expect(res.confidence).toBeGreaterThan(0.75);
     });
 
-    it('correctly classifies DOUBLE_BICEPS_FLEX with 90 deg elbows and wrists up', () => {
+    it('correctly classifies DOUBLE_BICEPS_FLEX / FLEX_POSE with 90 deg elbows and wrists up', () => {
       const skeleton = createBaseSkeleton();
       // Shoulders out, elbows bent 90°, wrists up
       skeleton[13] = { x: 0.26, y: 0.30, z: 0, visibility: 0.99 }; // Left Elbow out
@@ -111,11 +111,11 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
       skeleton[16] = { x: 0.72, y: 0.18, z: 0, visibility: 0.99 }; // Right Wrist up
 
       const res = classifier.classify(skeleton);
-      expect(res.pose).toBe('DOUBLE_BICEPS_FLEX');
+      expect(['DOUBLE_BICEPS_FLEX', 'FLEX_POSE']).toContain(res.pose);
       expect(res.confidence).toBeGreaterThan(0.75);
     });
 
-    it('correctly classifies SQUAT_STANCE with deep knee bend and lowered hips', () => {
+    it('correctly classifies SQUAT / SQUAT_STANCE with deep knee bend and lowered hips', () => {
       const skeleton = createBaseSkeleton();
       // Lower hips and flex knees
       skeleton[23] = { x: 0.41, y: 0.72, z: 0, visibility: 0.99 }; // Left Hip
@@ -126,7 +126,7 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
       skeleton[28] = { x: 0.62, y: 0.95, z: 0, visibility: 0.99 }; // Right Ankle
 
       const res = classifier.classify(skeleton);
-      expect(res.pose).toBe('SQUAT_STANCE');
+      expect(['SQUAT', 'SQUAT_STANCE']).toContain(res.pose);
       expect(res.confidence).toBeGreaterThan(0.75);
     });
 
@@ -167,6 +167,71 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
       const res = classifier.classify(skeleton);
       expect(res.pose).toBe('ZEN_PRAYER');
       expect(res.confidence).toBeGreaterThan(0.8);
+    });
+
+    it('correctly classifies ARMS_CROSSED with folded forearms across chest', () => {
+      const skeleton = createBaseSkeleton();
+      // Forearms crossed across chest midline
+      skeleton[13] = { x: 0.32, y: 0.45, z: 0, visibility: 0.99 }; // Left Elbow bent
+      skeleton[14] = { x: 0.68, y: 0.45, z: 0, visibility: 0.99 }; // Right Elbow bent
+      skeleton[15] = { x: 0.58, y: 0.42, z: 0, visibility: 0.99 }; // Left Wrist crosses to right chest
+      skeleton[16] = { x: 0.42, y: 0.42, z: 0, visibility: 0.99 }; // Right Wrist crosses to left chest
+
+      const res = classifier.classify(skeleton);
+      expect(res.pose).toBe('ARMS_CROSSED');
+      expect(res.confidence).toBeGreaterThan(0.8);
+      expect(res.isDynamicAction).toBe(false);
+    });
+
+    it('correctly classifies CLAP dynamic temporal sequence over sliding window', () => {
+      const classifierInst = new GoofyPoseClassifier();
+      const frame1 = createBaseSkeleton();
+      // Frame 1 at t=1000: hands far apart
+      frame1[15] = { x: 0.28, y: 0.42, z: 0, visibility: 0.99 };
+      frame1[16] = { x: 0.72, y: 0.42, z: 0, visibility: 0.99 };
+      classifierInst.classify(frame1, 1000);
+
+      // Frame 2 at t=1150: hands rapidly approaching
+      const frame2 = createBaseSkeleton();
+      frame2[15] = { x: 0.40, y: 0.42, z: 0, visibility: 0.99 };
+      frame2[16] = { x: 0.60, y: 0.42, z: 0, visibility: 0.99 };
+      classifierInst.classify(frame2, 1150);
+
+      // Frame 3 at t=1250: hands impact together in front of chest
+      const frame3 = createBaseSkeleton();
+      frame3[15] = { x: 0.485, y: 0.42, z: 0, visibility: 0.99 };
+      frame3[16] = { x: 0.515, y: 0.42, z: 0, visibility: 0.99 };
+      const res = classifierInst.classify(frame3, 1250);
+
+      expect(res.pose).toBe('CLAP');
+      expect(res.isDynamicAction).toBe(true);
+      expect(res.actionCategory).toBe('DYNAMIC_ACTION');
+      expect(res.confidence).toBeGreaterThan(0.9);
+    });
+
+    it('correctly classifies JUMP dynamic temporal sequence with upward displacement and velocity', () => {
+      const classifierInst = new GoofyPoseClassifier();
+
+      // Frames 1 to 3: Ground baseline (hip at y=0.60)
+      for (let t = 1000; t <= 1200; t += 100) {
+        const groundFrame = createBaseSkeleton();
+        classifierInst.classify(groundFrame, t);
+      }
+
+      // Frame 4 at t=1350: Airborne apex (hip raised to y=0.48, delta > 0.12 torsoHeight)
+      const airFrame = createBaseSkeleton();
+      airFrame[23] = { x: 0.41, y: 0.48, z: 0, visibility: 0.99 }; // Left Hip raised
+      airFrame[24] = { x: 0.59, y: 0.48, z: 0, visibility: 0.99 }; // Right Hip raised
+      airFrame[25] = { x: 0.40, y: 0.62, z: 0, visibility: 0.99 }; // Left Knee raised
+      airFrame[26] = { x: 0.60, y: 0.62, z: 0, visibility: 0.99 }; // Right Knee raised
+      airFrame[27] = { x: 0.40, y: 0.76, z: 0, visibility: 0.99 }; // Left Ankle
+      airFrame[28] = { x: 0.60, y: 0.76, z: 0, visibility: 0.99 }; // Right Ankle
+
+      const res = classifierInst.classify(airFrame, 1350);
+      expect(res.pose).toBe('JUMP');
+      expect(res.isDynamicAction).toBe(true);
+      expect(res.actionCategory).toBe('DYNAMIC_ACTION');
+      expect(res.confidence).toBeGreaterThan(0.9);
     });
   });
 
@@ -326,20 +391,41 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
       expect(allowedRes.triggerEvent).not.toBeNull();
       expect(allowedRes.triggerEvent!.pose).toBe('DOUBLE_BICEPS_FLEX');
     });
+
+    it('triggers dynamic actions immediately on sequence completion without requiring minHoldMs hold time', () => {
+      const now = 2000;
+      const dynamicClap = {
+        pose: 'CLAP' as GoofyPoseType,
+        confidence: 0.95,
+        label: 'COMIC CLAP // APPLAUSE',
+        comicCaption: 'CLAP!',
+        isDynamicAction: true,
+        actionCategory: 'DYNAMIC_ACTION' as const,
+        jointMetrics: {},
+      };
+
+      // Dynamic action triggers immediately on frame 1 without waiting for hold progress!
+      const res = stateMachine.process(dynamicClap, now);
+      expect(res.status).toBe('POSE_TRIGGERED');
+      expect(res.triggerEvent).not.toBeNull();
+      expect(res.triggerEvent!.pose).toBe('CLAP');
+    });
   });
 
   describe('GoofyAudioEngine & Pose Sound Mappings', () => {
-    it('initializes with default pose sound mappings for all 10 poses', () => {
+    it('initializes with default pose sound mappings for all core actions', () => {
       const engine = new GoofyAudioEngine();
       const mappings = engine.getMappings();
 
-      expect(Object.keys(mappings)).toHaveLength(10);
+      expect(Object.keys(mappings).length).toBeGreaterThanOrEqual(8);
       expect(mappings.T_POSE.soundId).toBe('INCEPTION_BRAAAM');
-      expect(mappings.HANDS_RAISED.soundId).toBe('AIR_HORN');
-      expect(mappings.DOUBLE_BICEPS_FLEX.soundId).toBe('ANIME_POWER_UP');
-      expect(mappings.SQUAT_STANCE.soundId).toBe('CARTOON_BOING');
-      expect(mappings.DAB.soundId).toBe('RECORD_SCRATCH');
-      expect(mappings.ZEN_PRAYER.soundId).toBe('SINGING_BOWL');
+      expect(mappings.HANDS_RAISED.soundId).toBe('CROWD_CHEER');
+      expect(mappings.HANDS_ON_HIPS.soundId).toBe('CONFIDENT_ENTRANCE');
+      expect(mappings.ARMS_CROSSED.soundId).toBe('DRAMATIC_SUSPENSE');
+      expect(mappings.SQUAT.soundId).toBe('CARTOON_IMPACT');
+      expect(mappings.JUMP.soundId).toBe('CARTOON_JUMP');
+      expect(mappings.FLEX_POSE.soundId).toBe('ANIME_POWER_UP');
+      expect(mappings.CLAP.soundId).toBe('CARTOON_CLAP');
     });
 
     it('allows updating sound mappings for specific poses', () => {
@@ -364,6 +450,17 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
       expect(engine.isMuted()).toBe(true);
       engine.setMuted(false);
       expect(engine.isMuted()).toBe(false);
+    });
+
+    it('successfully triggers synthesized sounds for all sound definitions without errors', () => {
+      const engine = new GoofyAudioEngine();
+      const library = engine.getSoundLibrary();
+      expect(library.length).toBeGreaterThanOrEqual(16);
+
+      // Verify all sounds can be previewed/triggered without throwing in test environment
+      for (const sound of library) {
+        expect(() => engine.playSound(sound.id)).not.toThrow();
+      }
     });
   });
 

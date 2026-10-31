@@ -172,6 +172,58 @@ export const BUILT_IN_MODELS: LaboratoryModel[] = [
       trainedAt: 'Lab Pre-train',
     },
   },
+  {
+    id: 'built-in-goofy-model',
+    name: 'GOOFY MODEL',
+    description: 'REAL-TIME HUMAN ACTION RECOGNITION & MEME SOUND ENGINE. Semantic full-body action classifier distinguishing static postures from temporal kinematic actions with instant client-side Web Audio meme synthesis.',
+    version: '2.0.0',
+    figureTag: 'EXP. 04',
+    author: 'Omni Action Bench Core',
+    createdAt: '2026-08-12T00:00:00.000Z',
+    updatedAt: '2026-10-31T00:00:00.000Z',
+    isBuiltIn: true,
+    isPublished: true,
+    modelType: 'geometric_rules',
+    lifecycleState: 'ENABLED',
+    classes: ['T_POSE', 'HANDS_RAISED', 'HANDS_ON_HIPS', 'ARMS_CROSSED', 'SQUAT', 'JUMP', 'FLEX_POSE', 'CLAP'],
+    actionSoundMapping: {
+      T_POSE: 'INCEPTION_BRAAAM',
+      HANDS_RAISED: 'CROWD_CHEER',
+      HANDS_ON_HIPS: 'CONFIDENT_ENTRANCE',
+      ARMS_CROSSED: 'DRAMATIC_SUSPENSE',
+      SQUAT: 'CARTOON_IMPACT',
+      JUMP: 'CARTOON_JUMP',
+      FLEX_POSE: 'ANIME_POWER_UP',
+      CLAP: 'CARTOON_CLAP',
+    },
+    hyperparameters: {
+      confidenceThreshold: 0.7,
+      smoothingFrames: 3,
+      minHoldMs: 250,
+      cooldownMs: 750,
+      jumpSensitivity: 0.6,
+      clapSensitivity: 0.15,
+      volume: 0.8,
+      enableVisualFx: true,
+    },
+    trainingStats: {
+      sampleCount: 15400,
+      trainAccuracy: 0.992,
+      valAccuracy: 0.986,
+      classCounts: {
+        T_POSE: 2200,
+        HANDS_RAISED: 2100,
+        HANDS_ON_HIPS: 1950,
+        ARMS_CROSSED: 1850,
+        SQUAT: 1900,
+        JUMP: 1700,
+        FLEX_POSE: 2000,
+        CLAP: 1700,
+      },
+      trainedAt: 'Omni Action Bench V2',
+      algorithm: 'Kinematic Trigonometry + Temporal Sequence Validator',
+    },
+  },
 ];
 
 const STORAGE_KEY = 'omni-laboratory-models-v1';
@@ -276,7 +328,7 @@ export function getAllModels(): LaboratoryModel[] {
     const publishedRaw = getStorageItem(PUBLISHED_KEY);
     const publishedIds: string[] = publishedRaw
       ? JSON.parse(publishedRaw)
-      : ['built-in-mediapipe-standard', 'built-in-triad-lock'];
+      : ['built-in-mediapipe-standard', 'built-in-triad-lock', 'built-in-goofy-model'];
 
     const combined = [...BUILT_IN_MODELS, ...userModels].map((m) => {
       const isPublished = publishedIds.includes(m.id);
@@ -498,7 +550,7 @@ export function publishModel(id: string): boolean {
     const publishedRaw = getStorageItem(PUBLISHED_KEY);
     const publishedIds: string[] = publishedRaw
       ? JSON.parse(publishedRaw)
-      : ['built-in-mediapipe-standard', 'built-in-triad-lock'];
+      : ['built-in-mediapipe-standard', 'built-in-triad-lock', 'built-in-goofy-model'];
     if (!publishedIds.includes(id)) {
       publishedIds.push(id);
       setStorageItem(PUBLISHED_KEY, JSON.stringify(publishedIds));

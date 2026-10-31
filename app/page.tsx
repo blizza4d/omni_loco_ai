@@ -493,37 +493,125 @@ export default function DashboardPage() {
         )}
 
         {/* Experimental Suites & Labs Showcase */}
-        <div className="p-3.5 border-2 border-charcoal-soft bg-paper-dark rounded-tactile flex flex-col md:flex-row md:items-center justify-between gap-3 shadow-tactile-sm">
-          <div className="flex items-center gap-2.5">
-            <span className="text-xl">⚡</span>
-            <div>
-              <span className="text-xs font-bold uppercase tracking-wider text-charcoal-soft block">
-                EXPERIMENTAL WORKSPACES & WORKFLOW RIGS
+        <div className="space-y-4">
+          <div className="flex items-center justify-between border-b-2 border-charcoal-soft pb-2">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-xs uppercase tracking-technical text-charcoal-soft">
+                SPECIALIZED AI MODELS & EXPERIMENTAL WORKSPACES
               </span>
-              <span className="text-[11px] text-ink-muted">
-                Explore custom gesture synthesis in Laboratory, multimodal cross-trigger pipelines in Forge, or pose-reactive meme sounds in Goofy Mode.
-              </span>
+              <StampBadge label="NEW MODEL ACTIVE" variant="brick" />
             </div>
+            <span className="text-[11px] font-mono text-ink-muted">MODEL RECOGNITION PIPELINES</span>
           </div>
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            <Link href="/goofy">
-              <Button variant="outline" size="sm" className="text-xs gap-1.5 border-amber-500 bg-amber-500/10 text-amber-700 dark:text-amber-400 font-bold hover:bg-amber-500/20">
-                <span>🤪</span>
-                <span>GOOFY MODE</span>
-              </Button>
-            </Link>
-            <Link href="/laboratory">
-              <Button variant="outline" size="sm" className="text-xs gap-1.5 border-cyan-500 bg-cyan-500/10 text-cyan-700 dark:text-cyan-400 font-bold hover:bg-cyan-500/20">
-                <Sparkles className="w-3.5 h-3.5 text-cyan-500" />
-                <span>LABORATORY</span>
-              </Button>
-            </Link>
-            <Link href="/forge">
-              <Button variant="outline" size="sm" className="text-xs gap-1.5 border-brick-red bg-brick-red/10 text-brick-red font-bold hover:bg-brick-red/20">
-                <Activity className="w-3.5 h-3.5 text-brick-red" />
-                <span>PROTOCOL FORGE</span>
-              </Button>
-            </Link>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+            {/* GOOFY MODEL CARD */}
+            <div className="md:col-span-2">
+              <DeskCard
+                figure="EXP. 04"
+                title="GOOFY MODEL"
+                highlight={false}
+                className="h-full flex flex-col justify-between"
+                headerAction={
+                  <div className="flex items-center gap-1">
+                    <span className="font-mono text-[9px] font-bold px-1.5 py-0.5 border border-charcoal-soft bg-paper-dark text-charcoal-soft">
+                      CAM
+                    </span>
+                    <span className="font-mono text-[9px] font-bold px-1.5 py-0.5 border border-amber-600 bg-amber-500/10 text-amber-600">
+                      AUDIO SYNTH
+                    </span>
+                  </div>
+                }
+              >
+                <div className="my-2">
+                  <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 block mb-1">
+                    REAL-TIME HUMAN ACTION RECOGNITION & MEME SOUND ENGINE
+                  </span>
+                  <p className="text-xs text-ink-muted leading-relaxed">
+                    Semantic full-body kinematic model distinguishing static postures (T-Pose, Hands Raised, Hands on Hips, Arms Crossed, Squat, Flex) from temporal actions (Jump, Clap) with client-side Web Audio synthesis.
+                  </p>
+                </div>
+
+                <div className="my-2 p-2.5 border border-charcoal-soft bg-paper-dark/60 rounded-[2px] flex items-center justify-between">
+                  <div className="space-y-1">
+                    <StampBadge label="WEBGPU / KINEMATICS" variant="charcoal" />
+                    <span className="block text-[10px] text-ink-muted">MODEL ID: built-in-goofy-model &bull; EST. SIZE: 9.4 MB</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[11px]">
+                    <span className="w-2 h-2 rounded-full bg-sage-green animate-pulse" />
+                    <span className="font-mono text-[10px] font-bold text-sage-green">ENGINE READY</span>
+                  </div>
+                </div>
+
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {['T-Pose', 'Hands Raised', 'Hands on Hips', 'Arms Crossed', 'Squat', 'Jump', 'Flex Pose', 'Clap'].map((action) => (
+                    <span
+                      key={action}
+                      className="text-[9px] font-mono font-bold px-1.5 py-0.5 bg-paper-dark/80 text-ink-muted border border-charcoal-soft/30 rounded-[2px]"
+                    >
+                      {action}
+                    </span>
+                  ))}
+                </div>
+
+                <div className="pt-3 mt-3 border-t border-charcoal-soft/20 flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-[10px] font-mono text-ink-muted">
+                    8 SUPPORTED CLASSES &bull; TEMPORAL VALIDATION
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <Link href="/laboratory">
+                      <Button variant="outline" size="sm" className="text-xs h-7">
+                        EDIT IN LAB
+                      </Button>
+                    </Link>
+                    <Link href="/goofy">
+                      <Button variant="default" size="sm" className="text-xs h-7 bg-amber-600 hover:bg-amber-700 text-white font-bold">
+                        LAUNCH GOOFY WORKSPACE &rarr;
+                      </Button>
+                    </Link>
+                  </div>
+                </div>
+              </DeskCard>
+            </div>
+
+            {/* LABORATORY & FORGE COMPANION RIGS */}
+            <div className="flex flex-col gap-4">
+              <DeskCard figure="EXP. 01-03" title="LABORATORY BENCH" highlight={false} className="flex-1 flex flex-col justify-between">
+                <div>
+                  <span className="text-[10px] font-mono text-cyan-600 dark:text-cyan-400 font-bold block mb-1">
+                    CUSTOM GESTURE & MODEL RIG
+                  </span>
+                  <p className="text-[11px] text-ink-muted leading-relaxed">
+                    Collect training samples, train custom KNN / centroid prototypes, tune action thresholds, and export model snapshots.
+                  </p>
+                </div>
+                <div className="pt-2 border-t border-charcoal-soft/20 mt-2">
+                  <Link href="/laboratory">
+                    <Button variant="outline" size="sm" className="w-full text-xs h-7">
+                      ENTER LABORATORY &rarr;
+                    </Button>
+                  </Link>
+                </div>
+              </DeskCard>
+
+              <DeskCard figure="EXP. 05" title="PROTOCOL FORGE" highlight={false} className="flex-1 flex flex-col justify-between">
+                <div>
+                  <span className="text-[10px] font-mono text-brick-red font-bold block mb-1">
+                    MULTIMODAL CROSS-TRIGGER BUS
+                  </span>
+                  <p className="text-[11px] text-ink-muted leading-relaxed">
+                    Automate reactive workflows wiring pose actions to sound synthesizers, laser eyes, and steering telemetry.
+                  </p>
+                </div>
+                <div className="pt-2 border-t border-charcoal-soft/20 mt-2">
+                  <Link href="/forge">
+                    <Button variant="outline" size="sm" className="w-full text-xs h-7">
+                      OPEN PROTOCOL FORGE &rarr;
+                    </Button>
+                  </Link>
+                </div>
+              </DeskCard>
+            </div>
           </div>
         </div>
 

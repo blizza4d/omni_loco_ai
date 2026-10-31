@@ -287,3 +287,24 @@ export function getCategorySummaries(): CategorySummary[] {
     },
   ];
 }
+
+export const GOOFY_MODEL_DEFINITION: ModuleDefinition = {
+  id: 'goofy',
+  figure: 'EXP. 04',
+  route: '/goofy',
+  title: 'GOOFY MODEL',
+  shortTitle: 'Goofy Model',
+  description: 'REAL-TIME HUMAN ACTION RECOGNITION & MEME SOUND ENGINE. Semantic full-body action classifier distinguishing static postures from temporal kinematic actions with instant client-side Web Audio meme synthesis.',
+  category: 'CLASSIFICATION',
+  categoryLabel: 'CLASSIFICATION & LABS',
+  icon: Activity,
+  permissions: ['CAM'],
+  modelUrl: '/models/pose_landmarker_full.task',
+  modelSize: '9.4 MB',
+  badge: 'WEBGPU / KINEMATICS',
+  accent: 'brick',
+  backend: 'WebGPU / WASM',
+  features: ['8 Semantic Actions', 'Temporal Sequence Engine', 'Web Audio Meme Synthesizer'],
+};
+
+export const EXPERIMENTAL_MODULES: ModuleDefinition[] = [GOOFY_MODEL_DEFINITION];

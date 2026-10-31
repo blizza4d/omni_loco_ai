@@ -147,6 +147,12 @@ export interface ModelHyperparameters {
   detectionConfidence?: number;
   trackingConfidence?: number;
   maxHands?: number;
+  minHoldMs?: number;
+  cooldownMs?: number;
+  jumpSensitivity?: number;
+  clapSensitivity?: number;
+  volume?: number;
+  enableVisualFx?: boolean;
 }
 
 export interface ModelVersionSnapshot {
@@ -158,6 +164,7 @@ export interface ModelVersionSnapshot {
   modelData?: PrototypeModelData;
   pipelineConfig?: LaboratoryPipeline;
   fxMapping?: Record<string, GestureFXType>;
+  actionSoundMapping?: Record<string, string>;
 }
 
 export interface LaboratoryModel {
@@ -179,6 +186,7 @@ export interface LaboratoryModel {
   modelData?: PrototypeModelData;
   pipelineConfig?: LaboratoryPipeline;
   fxMapping?: Record<string, GestureFXType>;
+  actionSoundMapping?: Record<string, string>;
   hyperparameters: ModelHyperparameters;
   versionHistory?: ModelVersionSnapshot[];
 }

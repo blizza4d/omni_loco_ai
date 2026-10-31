@@ -114,6 +114,15 @@ export const REGISTERED_MODELS: CachedModelMeta[] = [
   },
 ];
 
+export const GOOFY_MODEL_CACHE_ENTRY: CachedModelMeta = {
+  id: 'goofy-action-recognition',
+  name: 'GOOFY MODEL Action Recognition Core',
+  url: '/models/pose_landmarker_full.task',
+  sizeEstimateBytes: 9.4 * 1024 * 1024,
+  isCached: false,
+  module: 'goofy',
+};
+
 /**
  * Checks if a specific model URL is already stored in Cache Storage
  */

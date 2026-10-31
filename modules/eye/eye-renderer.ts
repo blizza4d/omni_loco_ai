@@ -41,11 +41,12 @@ export class EyeRenderer {
     } else {
       // Normal Tracking
       this.drawContour(ctx, landmarks, RIGHT_EYE_CONTOUR, toScreenX, toScreenY, 'rgba(6, 182, 212, 0.6)', 1.5);
-      if (config.showIrisContours) {
+      const odCenter = od.irisCenter || landmarks[468];
+      if (config.showIrisContours && odCenter) {
         this.drawIris(
           ctx,
           landmarks,
-          468,
+          odCenter,
           RIGHT_IRIS_RING,
           od.pupilDiameterMm,
           toScreenX,
@@ -54,14 +55,15 @@ export class EyeRenderer {
           isMirrored
         );
       }
-      if (config.showGazeVectors && landmarks[468] && landmarks[33] && landmarks[133]) {
+      if (config.showGazeVectors && odCenter && landmarks[33] && landmarks[133]) {
         this.drawGazeVector(
           ctx,
-          landmarks[468],
+          odCenter,
           landmarks[33],
           landmarks[133],
           toScreenX,
-          toScreenY
+          toScreenY,
+          isMirrored
         );
       }
     }
@@ -78,11 +80,12 @@ export class EyeRenderer {
     } else {
       // Normal Tracking
       this.drawContour(ctx, landmarks, LEFT_EYE_CONTOUR, toScreenX, toScreenY, 'rgba(6, 182, 212, 0.6)', 1.5);
-      if (config.showIrisContours) {
+      const osCenter = os.irisCenter || landmarks[473];
+      if (config.showIrisContours && osCenter) {
         this.drawIris(
           ctx,
           landmarks,
-          473,
+          osCenter,
           LEFT_IRIS_RING,
           os.pupilDiameterMm,
           toScreenX,
@@ -91,14 +94,15 @@ export class EyeRenderer {
           isMirrored
         );
       }
-      if (config.showGazeVectors && landmarks[473] && landmarks[362] && landmarks[263]) {
+      if (config.showGazeVectors && osCenter && landmarks[362] && landmarks[263]) {
         this.drawGazeVector(
           ctx,
-          landmarks[473],
+          osCenter,
           landmarks[362],
           landmarks[263],
           toScreenX,
-          toScreenY
+          toScreenY,
+          isMirrored
         );
       }
     }
@@ -151,7 +155,7 @@ export class EyeRenderer {
   private drawIris(
     ctx: CanvasRenderingContext2D,
     landmarks: Point3D[],
-    centerIdx: number,
+    centerPt: Point3D,
     contourIndices: number[],
     pupilDiameterMm: number,
     toScreenX: (x: number) => number,
@@ -159,10 +163,9 @@ export class EyeRenderer {
     label: string,
     isMirrored: boolean
   ) {
-    const center = landmarks[centerIdx];
-    if (!center) return;
-    const cx = toScreenX(center.x);
-    const cy = toScreenY(center.y);
+    if (!centerPt) return;
+    const cx = toScreenX(centerPt.x);
+    const cy = toScreenY(centerPt.y);
 
     // Outer Iris ring
     ctx.beginPath();
@@ -217,7 +220,8 @@ export class EyeRenderer {
     cornerA: Point3D,
     cornerB: Point3D,
     toScreenX: (x: number) => number,
-    toScreenY: (y: number) => number
+    toScreenY: (y: number) => number,
+    _isMirrored = false
   ) {
     const ix = toScreenX(iris.x);
     const iy = toScreenY(iris.y);
