@@ -2,9 +2,18 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { GoofyPoseClassifier } from '../modules/pose/goofy-pose-classifier';
 import { GoofyPoseStateMachine } from '../modules/pose/goofy-state-machine';
 import { GoofyAudioEngine } from '../modules/pose/goofy-audio-engine';
-import { GoofyParticleEmitter } from '../modules/pose/goofy-visual-fx';
+import { GoofyParticleEmitter, GoofyVisualFXEngine } from '../modules/pose/goofy-visual-fx';
+import { GoofyHandClassifier, GoofyHandStateMachine } from '../modules/pose/goofy-hand-classifier';
+import { GoofyEventEngine } from '../modules/pose/goofy-event-engine';
+import { DEFAULT_MEME_LIBRARY, getDefaultMemeForAction, getMemeById } from '../modules/pose/goofy-meme-library';
+import { Landmark3D } from '../modules/hand/types';
 import { PoseLandmark } from '../modules/pose/types';
-import { GoofyPoseType } from '../modules/pose/goofy-types';
+import {
+  GoofyPoseType,
+  GoofyHandGestureType,
+  DEFAULT_GOOFY_CONFIG,
+  DEFAULT_SOUND_LIBRARY,
+} from '../modules/pose/goofy-types';
 
 /**
  * Helper to build a canonical base skeleton with 33 landmarks
@@ -46,6 +55,57 @@ function createBaseSkeleton(): PoseLandmark[] {
     landmarks[i] = { x: cx + (i % 2 === 0 ? 0.11 : -0.11), y: 0.98, z: 0, visibility: 0.95 };
   }
   return landmarks;
+}
+
+/**
+ * Helper to build a canonical 21-point hand landmark array with all fingers extended
+ */
+function createBaseHandLandmarks(): Landmark3D[] {
+  const lm: Landmark3D[] = [];
+  const wx = 0.5;
+  const wy = 0.7;
+
+  // 0: Wrist
+  lm.push({ x: wx, y: wy, z: 0 });
+
+  // 1-4: Thumb (CMC, MCP, IP, TIP) - extended diagonally
+  lm.push({ x: wx - 0.04, y: wy - 0.05, z: 0 });
+  lm.push({ x: wx - 0.08, y: wy - 0.09, z: 0 });
+  lm.push({ x: wx - 0.12, y: wy - 0.13, z: 0 });
+  lm.push({ x: wx - 0.15, y: wy - 0.16, z: 0 });
+
+  // 5-8: Index (MCP, PIP, DIP, TIP) - extended straight up
+  lm.push({ x: wx - 0.04, y: wy - 0.12, z: 0 });
+  lm.push({ x: wx - 0.05, y: wy - 0.18, z: 0 });
+  lm.push({ x: wx - 0.05, y: wy - 0.22, z: 0 });
+  lm.push({ x: wx - 0.05, y: wy - 0.28, z: 0 });
+
+  // 9-12: Middle (MCP, PIP, DIP, TIP) - extended straight up
+  lm.push({ x: wx, y: wy - 0.13, z: 0 });
+  lm.push({ x: wx, y: wy - 0.19, z: 0 });
+  lm.push({ x: wx, y: wy - 0.25, z: 0 });
+  lm.push({ x: wx, y: wy - 0.31, z: 0 });
+
+  // 13-16: Ring (MCP, PIP, DIP, TIP) - extended straight up
+  lm.push({ x: wx + 0.04, y: wy - 0.12, z: 0 });
+  lm.push({ x: wx + 0.04, y: wy - 0.18, z: 0 });
+  lm.push({ x: wx + 0.04, y: wy - 0.23, z: 0 });
+  lm.push({ x: wx + 0.04, y: wy - 0.29, z: 0 });
+
+  // 17-20: Pinky (MCP, PIP, DIP, TIP) - extended straight up
+  lm.push({ x: wx + 0.07, y: wy - 0.10, z: 0 });
+  lm.push({ x: wx + 0.08, y: wy - 0.15, z: 0 });
+  lm.push({ x: wx + 0.08, y: wy - 0.20, z: 0 });
+  lm.push({ x: wx + 0.09, y: wy - 0.25, z: 0 });
+
+  return lm;
+}
+
+function curlFinger(lm: Landmark3D[], mcpIdx: number, pipIdx: number, dipIdx: number, tipIdx: number) {
+  const mcp = lm[mcpIdx]!;
+  // Pull tip closer to wrist than PIP
+  lm[dipIdx] = { x: mcp.x, y: mcp.y - 0.03, z: 0.02 };
+  lm[tipIdx] = { x: mcp.x, y: mcp.y - 0.01, z: 0.04 };
 }
 
 describe('Goofy Mode // Human Sound Effect Generator', () => {
@@ -128,6 +188,50 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
       const res = classifier.classify(skeleton);
       expect(['SQUAT', 'SQUAT_STANCE']).toContain(res.pose);
       expect(res.confidence).toBeGreaterThan(0.75);
+    });
+
+    it('rejects SQUAT when lower body is not visible (seated user), setting visibilityState to UPPER_BODY_ONLY', () => {
+      const skeleton = createBaseSkeleton();
+      // Lower hips and flex knees as if sitting at a desk
+      skeleton[23] = { x: 0.41, y: 0.72, z: 0, visibility: 0.99 };
+      skeleton[24] = { x: 0.59, y: 0.72, z: 0, visibility: 0.99 };
+      skeleton[25] = { x: 0.35, y: 0.82, z: 0.1, visibility: 0.99 };
+      skeleton[26] = { x: 0.65, y: 0.82, z: 0.1, visibility: 0.99 };
+      // Ankles cropped / out of frame
+      skeleton[27] = { x: 0.38, y: 1.15, z: 0, visibility: 0.1 };
+      skeleton[28] = { x: 0.62, y: 1.15, z: 0, visibility: 0.1 };
+
+      const res = classifier.classify(skeleton);
+      expect(res.pose).toBeNull();
+      expect(res.visibilityState).toBe('UPPER_BODY_ONLY');
+      expect(res.visibilityWarning).toContain('FULL BODY & LEGS REQUIRED FOR SQUAT');
+    });
+
+    it('permits upper body poses (T_POSE) even when user lower body is UPPER_BODY_ONLY', () => {
+      const skeleton = createBaseSkeleton();
+      // Cut off ankles
+      skeleton[27] = { x: 0.38, y: 1.15, z: 0, visibility: 0.1 };
+      skeleton[28] = { x: 0.62, y: 1.15, z: 0, visibility: 0.1 };
+      // Horizontal T-Pose arms
+      skeleton[13] = { x: 0.18, y: 0.30, z: 0, visibility: 0.99 };
+      skeleton[14] = { x: 0.82, y: 0.30, z: 0, visibility: 0.99 };
+      skeleton[15] = { x: 0.04, y: 0.30, z: 0, visibility: 0.99 };
+      skeleton[16] = { x: 0.96, y: 0.30, z: 0, visibility: 0.99 };
+
+      const res = classifier.classify(skeleton);
+      expect(res.pose).toBe('T_POSE');
+      expect(res.visibilityState).toBe('UPPER_BODY_ONLY');
+    });
+
+    it('returns PARTIAL VISIBILITY when upper body landmarks are occluded', () => {
+      const skeleton = createBaseSkeleton();
+      skeleton[11] = { x: 0.38, y: 0.30, z: 0, visibility: 0.1 };
+      skeleton[12] = { x: 0.62, y: 0.30, z: 0, visibility: 0.1 };
+
+      const res = classifier.classify(skeleton);
+      expect(res.pose).toBeNull();
+      expect(res.visibilityState).toBe('PARTIAL');
+      expect(res.label).toBe('PARTIAL VISIBILITY');
     });
 
     it('correctly classifies HANDS_ON_HIPS (Superhero stance)', () => {
@@ -455,9 +559,9 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
     it('successfully triggers synthesized sounds for all sound definitions without errors', () => {
       const engine = new GoofyAudioEngine();
       const library = engine.getSoundLibrary();
-      expect(library.length).toBeGreaterThanOrEqual(16);
+      expect(library.length).toBeGreaterThanOrEqual(22);
 
-      // Verify all sounds can be previewed/triggered without throwing in test environment
+      // Verify all 22 sounds (including new V2 sounds) can be previewed/triggered without throwing
       for (const sound of library) {
         expect(() => engine.playSound(sound.id)).not.toThrow();
       }
@@ -482,6 +586,297 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
       // Advance 2 full seconds: all particles should expire
       emitter.update(2.0);
       expect(emitter.getParticles()).toHaveLength(0);
+    });
+  });
+
+  describe('GoofyHandClassifier: 12 Target Hand Gestures', () => {
+    let handClassifier: GoofyHandClassifier;
+
+    beforeEach(() => {
+      handClassifier = new GoofyHandClassifier();
+    });
+
+    it('returns NO HAND DETECTED when landmarks are null or fewer than 21', () => {
+      const resNull = handClassifier.classify(null as any);
+      expect(resNull.gesture).toBeNull();
+      expect(resNull.label).toBe('NO HAND DETECTED');
+
+      const resShort = handClassifier.classify([]);
+      expect(resShort.gesture).toBeNull();
+    });
+
+    it('correctly classifies OPEN_PALM / FIVE_FINGERS when all fingers are extended', () => {
+      const hand = createBaseHandLandmarks();
+      const res = handClassifier.classify(hand, 'Right');
+      expect(['OPEN_PALM', 'FIVE_FINGERS']).toContain(res.gesture);
+      expect(res.confidence).toBeGreaterThan(0.85);
+    });
+
+    it('correctly classifies CLOSED_FIST when all fingers and thumb are curled', () => {
+      const hand = createBaseHandLandmarks();
+      curlFinger(hand, 5, 6, 7, 8); // index
+      curlFinger(hand, 9, 10, 11, 12); // middle
+      curlFinger(hand, 13, 14, 15, 16); // ring
+      curlFinger(hand, 17, 18, 19, 20); // pinky
+      // Thumb curled across palm
+      hand[4] = { x: 0.51, y: 0.63, z: 0 };
+
+      const res = handClassifier.classify(hand, 'Right');
+      expect(res.gesture).toBe('CLOSED_FIST');
+      expect(res.confidence).toBeGreaterThan(0.9);
+    });
+
+    it('correctly classifies THUMBS_UP when fingers are curled and thumb points upward', () => {
+      const hand = createBaseHandLandmarks();
+      curlFinger(hand, 5, 6, 7, 8);
+      curlFinger(hand, 9, 10, 11, 12);
+      curlFinger(hand, 13, 14, 15, 16);
+      curlFinger(hand, 17, 18, 19, 20);
+      // Thumb pointing up: y smaller than IP and indexMCP
+      hand[3] = { x: 0.44, y: 0.52, z: 0 };
+      hand[4] = { x: 0.44, y: 0.45, z: 0 };
+
+      const res = handClassifier.classify(hand, 'Right');
+      expect(res.gesture).toBe('THUMBS_UP');
+      expect(res.confidence).toBeGreaterThan(0.9);
+    });
+
+    it('correctly classifies THUMBS_DOWN when fingers are curled and thumb points downward', () => {
+      const hand = createBaseHandLandmarks();
+      curlFinger(hand, 5, 6, 7, 8);
+      curlFinger(hand, 9, 10, 11, 12);
+      curlFinger(hand, 13, 14, 15, 16);
+      curlFinger(hand, 17, 18, 19, 20);
+      // Thumb pointing down: y larger than IP and wrist (wrist.y = 0.70)
+      hand[3] = { x: 0.44, y: 0.72, z: 0 };
+      hand[4] = { x: 0.44, y: 0.78, z: 0 };
+
+      const res = handClassifier.classify(hand, 'Right');
+      expect(res.gesture).toBe('THUMBS_DOWN');
+      expect(res.confidence).toBeGreaterThan(0.9);
+    });
+
+    it('correctly classifies POINTING when index is extended and others are curled', () => {
+      const hand = createBaseHandLandmarks();
+      curlFinger(hand, 9, 10, 11, 12);
+      curlFinger(hand, 13, 14, 15, 16);
+      curlFinger(hand, 17, 18, 19, 20);
+      hand[4] = { x: 0.52, y: 0.62, z: 0 }; // thumb curled
+
+      const res = handClassifier.classify(hand, 'Right');
+      expect(res.gesture).toBe('POINTING');
+      expect(res.confidence).toBeGreaterThan(0.9);
+    });
+
+    it('correctly classifies PEACE_SIGN when index and middle are spread in V-shape', () => {
+      const hand = createBaseHandLandmarks();
+      hand[8] = { x: 0.42, y: 0.42, z: 0 }; // index tip left
+      hand[12] = { x: 0.58, y: 0.42, z: 0 }; // middle tip right
+      curlFinger(hand, 13, 14, 15, 16);
+      curlFinger(hand, 17, 18, 19, 20);
+      hand[4] = { x: 0.52, y: 0.62, z: 0 };
+
+      const res = handClassifier.classify(hand, 'Right');
+      expect(res.gesture).toBe('PEACE_SIGN');
+      expect(res.confidence).toBeGreaterThan(0.9);
+    });
+
+    it('correctly classifies PINCH when thumb tip and index tip are in close proximity', () => {
+      const hand = createBaseHandLandmarks();
+      hand[4] = { x: 0.46, y: 0.50, z: 0 };
+      hand[8] = { x: 0.47, y: 0.50, z: 0 };
+
+      const res = handClassifier.classify(hand, 'Right');
+      expect(res.gesture).toBe('PINCH');
+      expect(res.confidence).toBeGreaterThan(0.85);
+    });
+
+    it('correctly classifies THREE_FINGERS when index, middle, and ring are extended', () => {
+      const hand = createBaseHandLandmarks();
+      curlFinger(hand, 17, 18, 19, 20); // pinky curled
+      hand[4] = { x: 0.52, y: 0.62, z: 0 }; // thumb curled
+
+      const res = handClassifier.classify(hand, 'Right');
+      expect(res.gesture).toBe('THREE_FINGERS');
+    });
+
+    it('correctly classifies FOUR_FINGERS when all 4 non-thumb fingers are extended and thumb is tucked', () => {
+      const hand = createBaseHandLandmarks();
+      hand[4] = { x: 0.52, y: 0.62, z: 0 }; // thumb tucked
+
+      const res = handClassifier.classify(hand, 'Right');
+      expect(res.gesture).toBe('FOUR_FINGERS');
+    });
+
+    it('correctly classifies dynamic SWIPE_LEFT and SWIPE_RIGHT on rapid horizontal movement', () => {
+      const t0 = 1000;
+      const hand1 = createBaseHandLandmarks();
+      hand1[0] = { x: 0.30, y: 0.50, z: 0 };
+      handClassifier.classify(hand1, 'Right', t0);
+
+      const hand2 = createBaseHandLandmarks();
+      hand2[0] = { x: 0.45, y: 0.50, z: 0 };
+      handClassifier.classify(hand2, 'Right', t0 + 50);
+
+      const hand3 = createBaseHandLandmarks();
+      hand3[0] = { x: 0.65, y: 0.50, z: 0 };
+      const resRight = handClassifier.classify(hand3, 'Right', t0 + 100);
+
+      expect(resRight.gesture).toBe('SWIPE_RIGHT');
+      expect(resRight.isDynamic).toBe(true);
+    });
+  });
+
+  describe('GoofyHandStateMachine: Single-Trigger & Temporal Gating', () => {
+    it('enforces minHoldMs and emits single trigger on sustained static gesture', () => {
+      const sm = new GoofyHandStateMachine({ minHoldMs: 200, cooldownMs: 500 });
+      const classification = {
+        gesture: 'THUMBS_UP' as GoofyHandGestureType,
+        handedness: 'Right' as const,
+        confidence: 0.95,
+        label: 'THUMBS UP',
+        comicCaption: 'CHAD ENERGY DETECTED!',
+      };
+
+      // Frame 1: Candidate onset
+      const r1 = sm.process(classification, 1000);
+      expect(r1.triggered).toBe(false);
+
+      // Frame 2: 100ms held (still < minHoldMs)
+      const r2 = sm.process(classification, 1100);
+      expect(r2.triggered).toBe(false);
+
+      // Frame 3: 250ms held (>= minHoldMs) -> Fires single trigger!
+      const r3 = sm.process(classification, 1250);
+      expect(r3.triggered).toBe(true);
+      expect(r3.gesture).toBe('THUMBS_UP');
+
+      // Frame 4: 400ms held (sustained hold) -> Must NOT trigger again!
+      const r4 = sm.process(classification, 1400);
+      expect(r4.triggered).toBe(false);
+    });
+
+    it('fast-paths dynamic swipes immediately respecting cooldown', () => {
+      const sm = new GoofyHandStateMachine({ minHoldMs: 200, cooldownMs: 500 });
+      const classification = {
+        gesture: 'SWIPE_RIGHT' as GoofyHandGestureType,
+        handedness: 'Right' as const,
+        confidence: 0.95,
+        label: 'SWIPE RIGHT',
+        comicCaption: 'WHOOSH!',
+        isDynamic: true,
+      };
+
+      // Dynamic action triggers immediately without hold
+      const r1 = sm.process(classification, 1000);
+      expect(r1.triggered).toBe(true);
+
+      // Follow-up within cooldown is gated
+      const r2 = sm.process(classification, 1200);
+      expect(r2.triggered).toBe(false);
+
+      // After cooldown expires, can trigger again
+      const r3 = sm.process(classification, 1600);
+      expect(r3.triggered).toBe(true);
+    });
+  });
+
+  describe('GoofyEventEngine: Multimodal Arbitration & Meme Pop-up Lifecycle', () => {
+    it('ALLOW_BOTH policy allows both body and hand events and bounds active popups', () => {
+      const audio = new GoofyAudioEngine();
+      const vfx = new GoofyVisualFXEngine();
+      const config = { ...DEFAULT_GOOFY_CONFIG, simultaneousPolicy: 'ALLOW_BOTH' as const };
+      const engine = new GoofyEventEngine(config, audio, vfx);
+
+      const e1 = engine.dispatchActionTrigger('T_POSE', 'BODY');
+      expect(e1).not.toBeNull();
+      expect(engine.getActivePopups().length).toBe(1);
+
+      const e2 = engine.dispatchActionTrigger('THUMBS_UP', 'HAND', 'Right');
+      expect(e2).not.toBeNull();
+      expect(engine.getActivePopups().length).toBe(2);
+    });
+
+    it('HAND_PRIORITY policy suppresses body events while hand popup is active', () => {
+      const audio = new GoofyAudioEngine();
+      const vfx = new GoofyVisualFXEngine();
+      const config = { ...DEFAULT_GOOFY_CONFIG, simultaneousPolicy: 'HAND_PRIORITY' as const };
+      const engine = new GoofyEventEngine(config, audio, vfx);
+
+      // Hand event triggers first
+      engine.dispatchActionTrigger('THUMBS_UP', 'HAND', 'Right');
+      expect(engine.getActivePopups().length).toBe(1);
+
+      // Body event is suppressed
+      const bodyResult = engine.dispatchActionTrigger('T_POSE', 'BODY');
+      expect(bodyResult).toBeNull();
+      expect(engine.getActivePopups().length).toBe(1);
+    });
+
+    it('BODY_PRIORITY policy suppresses hand events while body popup is active', () => {
+      const audio = new GoofyAudioEngine();
+      const vfx = new GoofyVisualFXEngine();
+      const config = { ...DEFAULT_GOOFY_CONFIG, simultaneousPolicy: 'BODY_PRIORITY' as const };
+      const engine = new GoofyEventEngine(config, audio, vfx);
+
+      // Body event triggers first
+      engine.dispatchActionTrigger('T_POSE', 'BODY');
+      expect(engine.getActivePopups().length).toBe(1);
+
+      // Hand event is suppressed
+      const handResult = engine.dispatchActionTrigger('THUMBS_UP', 'HAND', 'Right');
+      expect(handResult).toBeNull();
+      expect(engine.getActivePopups().length).toBe(1);
+    });
+
+    it('REPLACE_OLDEST policy clears existing popups on new trigger', () => {
+      const audio = new GoofyAudioEngine();
+      const vfx = new GoofyVisualFXEngine();
+      const config = { ...DEFAULT_GOOFY_CONFIG, simultaneousPolicy: 'REPLACE_OLDEST' as const };
+      const engine = new GoofyEventEngine(config, audio, vfx);
+
+      engine.dispatchActionTrigger('T_POSE', 'BODY');
+      expect(engine.getActivePopups().length).toBe(1);
+      const firstId = engine.getActivePopups()[0]!.id;
+
+      engine.dispatchActionTrigger('POINTING', 'HAND');
+      expect(engine.getActivePopups().length).toBe(1);
+      expect(engine.getActivePopups()[0]!.id).not.toBe(firstId);
+      expect(engine.getActivePopups()[0]!.actionId).toBe('POINTING');
+    });
+
+    it('previewAction dispatches test popup and sound', () => {
+      const audio = new GoofyAudioEngine();
+      const vfx = new GoofyVisualFXEngine();
+      const engine = new GoofyEventEngine(DEFAULT_GOOFY_CONFIG, audio, vfx);
+
+      const previewPopup = engine.previewAction('PINCH', 'HAND');
+      expect(previewPopup).not.toBeNull();
+      expect(previewPopup!.isManualPreview).toBe(true);
+      expect(previewPopup!.caption).toContain('[PREVIEW]');
+      expect(engine.getActivePopups().length).toBe(1);
+    });
+  });
+
+  describe('GoofyMemeLibrary: Original Vector SVGs & Action Mappings', () => {
+    it('contains 21 original vector SVG memes with valid data URLs', () => {
+      expect(DEFAULT_MEME_LIBRARY.length).toBe(21);
+      for (const meme of DEFAULT_MEME_LIBRARY) {
+        expect(meme.id).toBeTruthy();
+        expect(meme.title).toBeTruthy();
+        expect(meme.dataUrl).toMatch(/^data:image\/svg\+xml;utf8,/);
+      }
+    });
+
+    it('returns appropriate default memes for body poses and hand gestures', () => {
+      const tPoseMeme = getDefaultMemeForAction('T_POSE');
+      expect(tPoseMeme.id).toBe('MEME_SURPRISED_PIKACHU');
+
+      const thumbsUpMeme = getDefaultMemeForAction('THUMBS_UP');
+      expect(thumbsUpMeme.id).toBe('MEME_CHAD_THUMBS_UP');
+
+      const pinchMeme = getDefaultMemeForAction('PINCH');
+      expect(pinchMeme.id).toBe('MEME_PINCH_GRAB');
     });
   });
 });

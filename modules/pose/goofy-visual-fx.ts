@@ -91,11 +91,24 @@ export class GoofyVisualFXEngine {
   }
 
   triggerPoseReaction(
-    pose: GoofyPoseType,
-    canvasWidth: number,
-    canvasHeight: number,
+    poseOrColor: GoofyPoseType | string = '#FFE600',
+    canvasWidthOrShake: number | boolean = 640,
+    canvasHeight = 480,
     caption?: string
   ): void {
+    if (typeof canvasWidthOrShake === 'boolean') {
+      const color = typeof poseOrColor === 'string' ? poseOrColor : '#FFE600';
+      this.burst(320, 240, color, 30);
+      if (canvasWidthOrShake) {
+        this.isShaking = true;
+        this.shakeIntensity = 8;
+        this.lastTriggerTime = performance.now();
+      }
+      return;
+    }
+
+    const pose = poseOrColor as GoofyPoseType;
+    const canvasWidth = canvasWidthOrShake;
     const meta = GOOFY_POSE_METADATA[pose];
     const burstText = meta?.label || pose;
     const finalCaption = caption || meta?.defaultCaption || '';
@@ -183,6 +196,12 @@ export class GoofyVisualFXEngine {
   /**
    * Render comic particles and visual effects at full 60 FPS
    */
+  updateAndRender(ctx: CanvasRenderingContext2D, _timeMs?: number): void {
+    const width = ctx.canvas?.width || 640;
+    const height = ctx.canvas?.height || 480;
+    this.render(ctx, width, height);
+  }
+
   render(ctx: CanvasRenderingContext2D, width: number, height: number): void {
     // 1. Update and render particles
     for (let i = this.particles.length - 1; i >= 0; i--) {

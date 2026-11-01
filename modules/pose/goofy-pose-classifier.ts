@@ -82,14 +82,53 @@ export class GoofyPoseClassifier {
     const la = landmarks[27]!; // Left Ankle
     const ra = landmarks[28]!; // Right Ankle
 
-    // Visibility guard: upper body must be reliably tracked
+    // ─────────────────────────────────────────────────────────────
+    // 1. ACTION-SPECIFIC VISIBILITY AUDIT
+    // ─────────────────────────────────────────────────────────────
+    // Upper body visibility: shoulders, elbows, wrists
     const upperBodyVisible =
-      (ls.visibility ?? 1) > 0.4 &&
-      (rs.visibility ?? 1) > 0.4 &&
-      (le.visibility ?? 1) > 0.4 &&
-      (re.visibility ?? 1) > 0.4 &&
+      (ls.visibility ?? 1) > 0.45 &&
+      (rs.visibility ?? 1) > 0.45 &&
+      (le.visibility ?? 1) > 0.45 &&
+      (re.visibility ?? 1) > 0.45 &&
       (lw.visibility ?? 1) > 0.35 &&
       (rw.visibility ?? 1) > 0.35;
+
+    // Strict Lower Body Visibility: Hips, Knees, and Ankles
+    const hipsVisible =
+      (lh.visibility ?? 0) > 0.45 &&
+      (rh.visibility ?? 0) > 0.45 &&
+      lh.y < 0.90 &&
+      rh.y < 0.90;
+
+    const kneesVisible =
+      (lk.visibility ?? 0) > 0.45 &&
+      (rk.visibility ?? 0) > 0.45 &&
+      lk.y < 0.98 &&
+      rk.y < 0.98;
+
+    const anklesVisible =
+      (la.visibility ?? 0) > 0.40 &&
+      (ra.visibility ?? 0) > 0.40 &&
+      la.y <= 1.05 &&
+      ra.y <= 1.05;
+
+    const legSpanSufficient =
+      anklesVisible &&
+      kneesVisible &&
+      hipsVisible &&
+      (la.y + ra.y) / 2 - (lh.y + rh.y) / 2 > 0.16 &&
+      la.y > lk.y + 0.03 &&
+      ra.y > rk.y + 0.03;
+
+    const fullLowerBodyVisible = hipsVisible && kneesVisible && anklesVisible && legSpanSufficient;
+
+    let visibilityState: 'FULL_BODY' | 'UPPER_BODY_ONLY' | 'PARTIAL' | 'NO_BODY' = 'PARTIAL';
+    if (upperBodyVisible && fullLowerBodyVisible) {
+      visibilityState = 'FULL_BODY';
+    } else if (upperBodyVisible) {
+      visibilityState = 'UPPER_BODY_ONLY';
+    }
 
     if (!upperBodyVisible) {
       return {
@@ -97,6 +136,8 @@ export class GoofyPoseClassifier {
         confidence: 0,
         label: 'PARTIAL VISIBILITY',
         comicCaption: 'ENSURE SHOULDERS AND ARMS ARE CLEARLY VISIBLE',
+        visibilityState: 'PARTIAL',
+        visibilityWarning: 'UPPER BODY PARTIALLY OCCLUDED',
         jointMetrics: {},
       };
     }
@@ -181,9 +222,9 @@ export class GoofyPoseClassifier {
     // ─────────────────────────────────────────────────────────────
     // DYNAMIC ACTION 2: JUMP
     // Temporal sequence: pre-jump ground baseline, rapid upward displacement, apex
+    // Requires full lower body visibility!
     // ─────────────────────────────────────────────────────────────
-    const lowerBodyVisible = (lk.visibility ?? 0) > 0.4 && (rk.visibility ?? 0) > 0.4;
-    if (lowerBodyVisible && now - this.lastJumpTriggerTime > 750 && this.history.length >= 4) {
+    if (fullLowerBodyVisible && now - this.lastJumpTriggerTime > 750 && this.history.length >= 4) {
       // Baseline hip Y in past 300ms - 900ms (larger Y = lower on screen / ground level)
       const pastGroundFrames = this.history.filter((h) => now - h.timestamp >= 250 && now - h.timestamp <= 800);
       if (pastGroundFrames.length > 0) {
@@ -282,9 +323,11 @@ export class GoofyPoseClassifier {
 
     // ─────────────────────────────────────────────────────────────
     // STATIC POSE 5: SQUAT (SQUAT_STANCE)
-    // Knees flexed past 135°, hips lowered relative to knees
+    // Full lower body MUST be visible: hips, knees, and ankles!
+    // Prevents false-positives when user is seated at a desk or lower body is out of frame.
     // ─────────────────────────────────────────────────────────────
-    if (lowerBodyVisible) {
+    let lowerBodyWarning: string | undefined;
+    if (fullLowerBodyVisible) {
       const squatKnees = leftKnee < 135 && rightKnee < 135;
       const hipsLowered = midHip.y > midShoulder.y + torsoHeight * 0.6;
       if (squatKnees && hipsLowered) {
@@ -297,6 +340,10 @@ export class GoofyPoseClassifier {
           pose: 'SQUAT_STANCE',
           score: Math.min(0.96, 0.78 + depth * 0.18),
         });
+      }
+    } else {
+      if (leftKnee < 135 || rightKnee < 135) {
+        lowerBodyWarning = 'FULL BODY & LEGS REQUIRED FOR SQUAT';
       }
     }
 
@@ -429,6 +476,8 @@ export class GoofyPoseClassifier {
         comicCaption: meta.defaultCaption,
         isDynamicAction: Boolean(top.isDynamic),
         actionCategory: top.isDynamic ? 'DYNAMIC_ACTION' : 'STATIC_POSE',
+        visibilityState,
+        visibilityWarning: lowerBodyWarning,
         jointMetrics,
       };
     }
@@ -436,8 +485,12 @@ export class GoofyPoseClassifier {
     return {
       pose: null,
       confidence: 0,
-      label: 'NEUTRAL STANCE',
-      comicCaption: 'STRIKE A HEROIC POSE OR PERFORM A JUMP / CLAP!',
+      label: visibilityState === 'UPPER_BODY_ONLY' ? 'UPPER BODY READY' : 'NEUTRAL STANCE',
+      comicCaption: visibilityState === 'UPPER_BODY_ONLY'
+        ? 'UPPER BODY ACTIVE // FULL BODY NEEDED FOR SQUAT & JUMP'
+        : 'STRIKE A HEROIC POSE OR PERFORM A JUMP / CLAP!',
+      visibilityState,
+      visibilityWarning: lowerBodyWarning,
       jointMetrics,
     };
   }

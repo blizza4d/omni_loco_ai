@@ -10,6 +10,7 @@ export interface HandRenderOptions {
   activeRegion?: { minX: number; maxX: number; minY: number; maxY: number };
   cursor?: { x: number; y: number; isPinching: boolean; dwellProgress: number };
   isMirrored?: boolean;
+  clearBeforeRender?: boolean;
 }
 
 export function renderHandOverlay(
@@ -27,9 +28,12 @@ export function renderHandOverlay(
     activeRegion = { minX: 0.15, maxX: 0.85, minY: 0.15, maxY: 0.85 },
     cursor,
     isMirrored = true,
+    clearBeforeRender = true,
   } = options;
 
-  ctx.clearRect(0, 0, width, height);
+  if (clearBeforeRender) {
+    ctx.clearRect(0, 0, width, height);
+  }
 
   // 1. Draw Active Spatial Interaction Bounding Box (Technical Dashed Outline)
   if (showActiveRegion) {

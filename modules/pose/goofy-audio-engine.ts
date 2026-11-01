@@ -245,6 +245,24 @@ export class GoofyAudioEngine {
       case 'CARTOON_CLAP':
         this.synthCartoonClap(ctx, now);
         break;
+      case 'LASER_BEAM':
+        this.synthLaserBeam(ctx, now);
+        break;
+      case 'SWIPE_WHOOSH':
+        this.synthSwipeWhoosh(ctx, now);
+        break;
+      case 'VICTORY_BELL':
+        this.synthVictoryBell(ctx, now);
+        break;
+      case 'CHAD_GONG':
+        this.synthChadGong(ctx, now);
+        break;
+      case 'SUCTION_POP':
+        this.synthSuctionPop(ctx, now);
+        break;
+      case 'LEVEL_UP_NOTIFICATION':
+        this.synthLevelUpNotification(ctx, now);
+        break;
       default:
         this.synthAirHorn(ctx, now);
     }
@@ -725,5 +743,157 @@ export class GoofyAudioEngine {
 
     osc.start(now);
     osc.stop(now + 0.3);
+  }
+
+  // 17. LASER BEAM (Sci-Fi Targeting Stinger)
+  private synthLaserBeam(ctx: AudioContext, now: number): void {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sawtooth';
+    osc.frequency.setValueAtTime(1400, now);
+    osc.frequency.exponentialRampToValueAtTime(120, now + 0.25);
+
+    gain.gain.setValueAtTime(0.3, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.28);
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(2400, now);
+    filter.frequency.exponentialRampToValueAtTime(400, now + 0.25);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.masterGain!);
+
+    osc.start(now);
+    osc.stop(now + 0.3);
+  }
+
+  // 18. SWIPE WHOOSH (Dynamic Motion Filtered Noise)
+  private synthSwipeWhoosh(ctx: AudioContext, now: number): void {
+    const duration = 0.35;
+    const bufferSize = Math.floor(ctx.sampleRate * duration);
+    const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+
+    const noise = ctx.createBufferSource();
+    noise.buffer = buffer;
+
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(350, now);
+    filter.frequency.exponentialRampToValueAtTime(2200, now + 0.15);
+    filter.frequency.exponentialRampToValueAtTime(250, now + duration);
+    filter.Q.setValueAtTime(2.5, now);
+
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0.01, now);
+    gain.gain.linearRampToValueAtTime(0.35, now + 0.12);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.masterGain!);
+
+    noise.start(now);
+    noise.stop(now + duration);
+  }
+
+  // 19. VICTORY BELL (Sparkling Harmonic Chime)
+  private synthVictoryBell(ctx: AudioContext, now: number): void {
+    const duration = 1.1;
+    const freqs = [880, 1320, 1760]; // A5, E6, A6
+
+    freqs.forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now);
+
+      const amp = 0.28 / (idx + 1);
+      gain.gain.setValueAtTime(amp, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain!);
+
+      osc.start(now);
+      osc.stop(now + duration);
+    });
+  }
+
+  // 20. CHAD GONG (Low Resonant Metallic Strike)
+  private synthChadGong(ctx: AudioContext, now: number): void {
+    const duration = 1.4;
+    const freqs = [110, 168, 245, 412];
+
+    freqs.forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = idx === 0 ? 'sine' : 'triangle';
+      osc.frequency.setValueAtTime(freq, now);
+
+      const amp = 0.35 / (idx + 1);
+      gain.gain.setValueAtTime(amp, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain!);
+
+      osc.start(now);
+      osc.stop(now + duration);
+    });
+  }
+
+  // 21. SUCTION POP (Cartoon Pop)
+  private synthSuctionPop(ctx: AudioContext, now: number): void {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(90, now);
+    osc.frequency.exponentialRampToValueAtTime(620, now + 0.05);
+
+    gain.gain.setValueAtTime(0.01, now);
+    gain.gain.linearRampToValueAtTime(0.4, now + 0.04);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+
+    osc.connect(gain);
+    gain.connect(this.masterGain!);
+
+    osc.start(now);
+    osc.stop(now + 0.15);
+  }
+
+  // 22. LEVEL UP NOTIFICATION (Ascending 3-Note Arpeggio)
+  private synthLevelUpNotification(ctx: AudioContext, now: number): void {
+    const notes = [
+      { freq: 440, delay: 0 },
+      { freq: 554, delay: 0.1 },
+      { freq: 659, delay: 0.2 },
+    ];
+
+    notes.forEach(({ freq, delay }) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, now + delay);
+
+      gain.gain.setValueAtTime(0.3, now + delay);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.35);
+
+      osc.connect(gain);
+      gain.connect(this.masterGain!);
+
+      osc.start(now + delay);
+      osc.stop(now + delay + 0.4);
+    });
   }
 }
