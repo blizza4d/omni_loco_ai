@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { GlobalNav } from '@/components/ui/GlobalNav';
 import { DeskCard } from '@/components/ui/DeskCard';
@@ -46,9 +46,14 @@ import {
   getDefaultMemeForAction,
   loadCustomMemesFromDB,
   saveCustomMemeToDB,
+  saveCustomMemeDefinitionToDB,
   deleteCustomMemeFromDB,
+  searchMemes,
+  filterMemesByCategory,
 } from '@/modules/pose/goofy-meme-library';
 import { MemePopupOverlay } from '@/modules/pose/components/MemePopupOverlay';
+import { CustomMemeCreatorModal } from '@/modules/pose/components/CustomMemeCreatorModal';
+import { AssignMemeModal } from '@/modules/pose/components/AssignMemeModal';
 import { useSystemStore } from '@/core/store';
 import { ProtocolEventBus } from '@/modules/forge/event-bus';
 import { unlockAchievement } from '@/modules/easter-eggs/achievements';
@@ -79,9 +84,23 @@ import {
   Trash2,
   Layers,
   HelpCircle,
+  Star,
+  Search,
+  Dices,
+  Plus,
+  Wand2,
+  Check,
+  Filter,
 } from 'lucide-react';
+import {
+  PopupAnimationStyle,
+  MemePresetId,
+  MemeCategory,
+  BUILTIN_MEME_PRESETS,
+  GOOFY_ACTION_RECOMMENDED_MEMES,
+} from '@/modules/pose/goofy-types';
 
-const STORAGE_KEY = 'omni-goofy-config-v2-full';
+const STORAGE_KEY = 'omni-goofy-config-v3-full';
 
 export default function GoofyModePage() {
   const [config, setConfig] = useState<GoofyModeConfig>(() => {
@@ -138,6 +157,15 @@ export default function GoofyModePage() {
   const [lastTriggeredEvent, setLastTriggeredEvent] = useState<UnifiedMemeEvent | null>(null);
   const [customMemes, setCustomMemes] = useState<MemeVisualDefinition[]>([]);
   const [memeModalAction, setMemeModalAction] = useState<string | null>(null);
+
+  // Meme Discovery, Search & Category States
+  const [memeSearchQuery, setMemeSearchQuery] = useState('');
+  const [selectedMemeCategory, setSelectedMemeCategory] = useState<string>('ALL');
+
+  // Modal Dialogs
+  const [creatorModalOpen, setCreatorModalOpen] = useState(false);
+  const [creatorTargetAction, setCreatorTargetAction] = useState<string | null>(null);
+  const [assignModalMeme, setAssignModalMeme] = useState<MemeVisualDefinition | null>(null);
 
   // System states
   const [audioUnlocked, setAudioUnlocked] = useState(false);
@@ -291,7 +319,7 @@ export default function GoofyModePage() {
 
   useEffect(() => {
     setPerfStats({
-      activeModule: 'GOOFY MODEL V2',
+      activeModule: 'GOOFY MODEL V3',
       activeModel: 'pose_landmarker_full + hand_landmarker',
       fps,
       p50Ms: 16,
@@ -502,6 +530,123 @@ export default function GoofyModePage() {
     return () => cancelAnimationFrame(animId);
   }, [tick]);
 
+  // All combined memes (custom uploads first, followed by built-in vector pack)
+  const allMemes: MemeVisualDefinition[] = useMemo(() => {
+    return [...customMemes, ...DEFAULT_MEME_LIBRARY];
+  }, [customMemes]);
+
+  // Star / Favorite toggle
+  const toggleFavoriteMeme = (memeId: string) => {
+    setConfig((prev) => {
+      const favs = prev.favoriteMemes || [];
+      const isFav = favs.includes(memeId);
+      const nextFavs = isFav ? favs.filter((id) => id !== memeId) : [...favs, memeId];
+      return { ...prev, favoriteMemes: nextFavs };
+    });
+  };
+
+  // Preset Applicator
+  const handleApplyPreset = (presetId: MemePresetId) => {
+    const preset = BUILTIN_MEME_PRESETS.find((p) => p.id === presetId);
+    if (!preset) return;
+    setConfig((prev) => ({
+      ...prev,
+      activePresetId: presetId,
+      actionMemeMappings: {
+        ...prev.actionMemeMappings,
+        ...preset.actionMemeMappings,
+      },
+      popupAnimationStyle: preset.animationStyle || prev.popupAnimationStyle,
+    }));
+  };
+
+  // Random Dice Roll Preview
+  const handleDiceRoll = () => {
+    if (allMemes.length === 0) return;
+    const picked = allMemes[Math.floor(Math.random() * allMemes.length)];
+    if (picked) {
+      eventEngineRef.current.previewAction('T_POSE', 'BODY', undefined, picked.id);
+    }
+  };
+
+  // Helper to discover actions that currently use a specific meme
+  const getAssignedActionsForMeme = (memeId: string): string[] => {
+    const assigned: string[] = [];
+    // Check explicit overrides in config
+    for (const [actionKey, mappedMemeId] of Object.entries(config.actionMemeMappings)) {
+      if (mappedMemeId === memeId) {
+        assigned.push(actionKey);
+      }
+    }
+    return assigned;
+  };
+
+  // Assign meme to specific action handler
+  const handleAssignToAction = (actionId: string, memeId: string) => {
+    setConfig((prev) => ({
+      ...prev,
+      actionMemeMappings: {
+        ...prev.actionMemeMappings,
+        [actionId]: memeId,
+      },
+    }));
+  };
+
+  // Callback when user creates a new meme in Canvas Creator
+  const handleSaveCreatedMeme = (meme: MemeVisualDefinition, targetAction?: string) => {
+    const updated = [meme, ...customMemes];
+    setCustomMemes(updated);
+    eventEngineRef.current.setCustomMemes(updated);
+
+    if (targetAction) {
+      handleAssignToAction(targetAction, meme.id);
+    }
+  };
+
+  // Filtered memes for discovery library
+  const filteredMemes: MemeVisualDefinition[] = useMemo(() => {
+    let list = allMemes;
+
+    if (memeSearchQuery.trim()) {
+      list = searchMemes(memeSearchQuery, list);
+    }
+
+    if (selectedMemeCategory === 'FAVORITES') {
+      const favSet = new Set(config.favoriteMemes || []);
+      list = list.filter((m: MemeVisualDefinition) => favSet.has(m.id) || m.isFavorite);
+    } else if (selectedMemeCategory === 'CUSTOM') {
+      list = list.filter((m: MemeVisualDefinition) => m.isCustom);
+    } else if (selectedMemeCategory !== 'ALL') {
+      list = filterMemesByCategory(selectedMemeCategory as MemeCategory, list);
+    }
+
+    return list;
+  }, [allMemes, memeSearchQuery, selectedMemeCategory, config.favoriteMemes]);
+
+  // Category counts
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      CONFUSION: 0,
+      SHOCK: 0,
+      CONFIDENCE: 0,
+      FAILURE: 0,
+      SUSPICIOUS: 0,
+      CELEBRATION: 0,
+      SPECIAL: 0,
+    };
+    for (const m of allMemes) {
+      if (m.category && counts[m.category] !== undefined) {
+        counts[m.category] = (counts[m.category] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [allMemes]);
+
+  const favCount = useMemo(() => {
+    const favSet = new Set(config.favoriteMemes || []);
+    return allMemes.filter((m: MemeVisualDefinition) => favSet.has(m.id) || m.isFavorite).length;
+  }, [allMemes, config.favoriteMemes]);
+
   // Reset to Built-in Defaults
   const handleResetDefaults = () => {
     setConfig(DEFAULT_GOOFY_CONFIG);
@@ -586,11 +731,11 @@ export default function GoofyModePage() {
               </Link>
               <StampBadge label="EXP. 04" variant="sage" />
               <h1 className="text-xl md:text-2xl font-black uppercase tracking-wider text-charcoal-dark">
-                GOOFY MODEL V2
+                GOOFY MODEL V3
               </h1>
             </div>
             <p className="text-xs text-ink-muted">
-              MULTIMODAL MEME POP-UP ENGINE // REAL-TIME BODY POSE + HAND GESTURE RECOGNITION
+              ADVANCED MEME LIBRARY // REACTION COLLECTIONS // PERSONALISATION &amp; MULTIMODAL EVENT ENGINE
             </p>
           </div>
 
@@ -956,6 +1101,30 @@ export default function GoofyModePage() {
                 </div>
               </div>
 
+              {/* Animation Style Selector */}
+              <div className="space-y-1 pt-1 border-t border-charcoal-soft/10">
+                <div className="flex justify-between items-center text-[11px]">
+                  <span className="font-bold">POPUP ANIMATION STYLE</span>
+                  <span className="text-amber-600 font-bold uppercase">{config.popupAnimationStyle || 'CLASSIC'}</span>
+                </div>
+                <select
+                  value={config.popupAnimationStyle || 'CLASSIC'}
+                  onChange={(e) =>
+                    setConfig((p) => ({
+                      ...p,
+                      popupAnimationStyle: e.target.value as PopupAnimationStyle,
+                    }))
+                  }
+                  className="w-full p-1 border border-charcoal-soft/40 rounded bg-paper-cream text-xs font-bold font-mono"
+                >
+                  <option value="CLASSIC">CLASSIC (COMIC POP &amp; BOUNCE)</option>
+                  <option value="EXPLOSIVE">EXPLOSIVE (STARBURST RAYS &amp; ZOOM)</option>
+                  <option value="RETRO_ARCADE">RETRO ARCADE (CRT SCANLINES &amp; FLICKER)</option>
+                  <option value="MINIMAL">MINIMAL (CLEAN FADE &amp; GLIDE)</option>
+                  <option value="NO_ANIMATION">NO ANIMATION (INSTANT POP)</option>
+                </select>
+              </div>
+
               {/* Toggles Strip */}
               <div className="grid grid-cols-3 gap-2 pt-1 border-t border-charcoal-soft/10">
                 <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-bold">
@@ -981,13 +1150,72 @@ export default function GoofyModePage() {
                 <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-bold">
                   <input
                     type="checkbox"
+                    checked={config.enableScreenShake}
+                    onChange={(e) => setConfig((p) => ({ ...p, enableScreenShake: e.target.checked }))}
+                    className="accent-charcoal-soft"
+                  />
+                  <span>SCREEN SHAKE</span>
+                </label>
+              </div>
+
+              {/* Advanced Reaction Mode Toggles */}
+              <div className="grid grid-cols-3 gap-2 pt-1 border-t border-charcoal-soft/10">
+                <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-bold" title="Randomizes reaction from compatible memes with anti-repetition memory">
+                  <input
+                    type="checkbox"
+                    checked={config.randomMemeMode}
+                    onChange={(e) => setConfig((p) => ({ ...p, randomMemeMode: e.target.checked }))}
+                    className="accent-purple-600"
+                  />
+                  <span className="text-purple-700">RANDOM MEME</span>
+                </label>
+
+                <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-bold">
+                  <input
+                    type="checkbox"
                     checked={config.randomSoundMode}
                     onChange={(e) => setConfig((p) => ({ ...p, randomSoundMode: e.target.checked }))}
                     className="accent-charcoal-soft"
                   />
                   <span>RANDOM SOUND</span>
                 </label>
+
+                <label className="flex items-center gap-1.5 cursor-pointer text-[11px] font-bold" title="Enables rare legendary easter egg meme pop-ups">
+                  <input
+                    type="checkbox"
+                    checked={config.enableRareReactions}
+                    onChange={(e) => setConfig((p) => ({ ...p, enableRareReactions: e.target.checked }))}
+                    className="accent-fuchsia-600"
+                  />
+                  <span className="text-fuchsia-700">RARE MEMES</span>
+                </label>
               </div>
+
+              {/* Rare Reaction Probability Slider */}
+              {config.enableRareReactions && (
+                <div className="space-y-1 pt-1 border-t border-charcoal-soft/10">
+                  <div className="flex justify-between text-[10px] font-bold">
+                    <span className="text-fuchsia-800">RARE REACTION PROBABILITY</span>
+                    <span className="tabular-nums font-bold text-fuchsia-700">
+                      {Math.round((config.rareReactionProbability ?? 0.1) * 100)}%
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min="0.02"
+                    max="0.40"
+                    step="0.02"
+                    value={config.rareReactionProbability ?? 0.1}
+                    onChange={(e) =>
+                      setConfig((p) => ({
+                        ...p,
+                        rareReactionProbability: parseFloat(e.target.value),
+                      }))
+                    }
+                    className="w-full accent-fuchsia-600 h-1.5"
+                  />
+                </div>
+              )}
 
               {/* Simultaneous Event Arbitration Policy */}
               <div className="flex items-center justify-between pt-1 border-t border-charcoal-soft/10 text-[11px]">
@@ -1234,6 +1462,41 @@ export default function GoofyModePage() {
                           {memeDef.category}
                         </span>
                       </div>
+
+                      {/* Quick Recommended Memes */}
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-charcoal-soft/10">
+                        <span className="text-[9px] font-black text-ink-muted uppercase flex items-center gap-1">
+                          <Wand2 className="w-2.5 h-2.5 text-amber-500" />
+                          REC:
+                        </span>
+                        {(GOOFY_ACTION_RECOMMENDED_MEMES[poseKey] || []).map((recId) => {
+                          const recMeme = getMemeById(recId, customMemes);
+                          if (!recMeme) return null;
+                          const isCurrent = assignedMemeId === recId;
+                          return (
+                            <button
+                              key={recId}
+                              onClick={() =>
+                                setConfig((p) => ({
+                                  ...p,
+                                  actionMemeMappings: {
+                                    ...p.actionMemeMappings,
+                                    [poseKey]: recId,
+                                  },
+                                }))
+                              }
+                              className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold transition-all ${
+                                isCurrent
+                                  ? 'bg-amber-500 text-charcoal-dark ring-1 ring-amber-600'
+                                  : 'bg-paper-dark/30 hover:bg-paper-dark/60 text-charcoal-dark'
+                              }`}
+                              title={`Assign "${recMeme.title}"`}
+                            >
+                              {recMeme.title}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   );
                 })}
@@ -1429,85 +1692,337 @@ export default function GoofyModePage() {
                           {meta.cues[0]}
                         </span>
                       </div>
+
+                      {/* Quick Recommended Memes */}
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1.5 border-t border-charcoal-soft/10">
+                        <span className="text-[9px] font-black text-ink-muted uppercase flex items-center gap-1">
+                          <Wand2 className="w-2.5 h-2.5 text-cyan-600" />
+                          REC:
+                        </span>
+                        {(GOOFY_ACTION_RECOMMENDED_MEMES[gestureKey] || []).map((recId) => {
+                          const recMeme = getMemeById(recId, customMemes);
+                          if (!recMeme) return null;
+                          const isCurrent = assignedMemeId === recId;
+                          return (
+                            <button
+                              key={recId}
+                              onClick={() =>
+                                setConfig((p) => ({
+                                  ...p,
+                                  actionMemeMappings: {
+                                    ...p.actionMemeMappings,
+                                    [gestureKey]: recId,
+                                  },
+                                }))
+                              }
+                              className={`px-1.5 py-0.5 rounded text-[9px] font-mono font-bold transition-all ${
+                                isCurrent
+                                  ? 'bg-cyan-500 text-charcoal-dark ring-1 ring-cyan-600'
+                                  : 'bg-paper-dark/30 hover:bg-paper-dark/60 text-charcoal-dark'
+                              }`}
+                              title={`Assign "${recMeme.title}"`}
+                            >
+                              {recMeme.title}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   );
                 })}
               </div>
             )}
 
-            {/* TAB 3: MEME LIBRARY (BROWSER & UPLOADER) */}
+            {/* TAB 3: MEME DISCOVERY LIBRARY */}
             {activeTab === 'MEMES' && (
-              <div className="space-y-4 max-h-[560px] overflow-y-auto pr-1">
-                {/* Upload Banner */}
-                <div className="border-2 border-dashed border-charcoal-soft rounded-tactile p-3 bg-paper-dark/20 text-center space-y-2">
-                  <div className="flex items-center justify-center gap-1.5 font-bold text-xs">
-                    <Upload className="w-4 h-4 text-emerald-600" />
-                    <span>UPLOAD CUSTOM MEME (PNG, JPEG, WebP, GIF &le; 8MB)</span>
+              <div className="space-y-3.5 max-h-[580px] overflow-y-auto pr-1">
+                {/* 1. Presets Bar */}
+                <div className="space-y-1.5 border border-charcoal-soft/30 rounded p-2.5 bg-paper-dark/15">
+                  <div className="flex items-center justify-between text-[10px] font-black uppercase text-charcoal-soft">
+                    <span className="flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-amber-500" />
+                      REACTION PRESETS &amp; COLLECTIONS
+                    </span>
+                    <span className="text-ink-muted">{BUILTIN_MEME_PRESETS.length} PRESETS</span>
                   </div>
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp,image/gif"
-                    onChange={handleFileUpload}
-                    className="text-xs file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-mono file:bg-charcoal-soft file:text-paper-cream cursor-pointer"
-                  />
-                  {uploadError && (
-                    <p className="text-[11px] text-rose-600 font-bold">{uploadError}</p>
-                  )}
+                  <div className="flex flex-wrap gap-1.5">
+                    {BUILTIN_MEME_PRESETS.map((p) => {
+                      const isActive = config.activePresetId === p.id;
+                      return (
+                        <button
+                          key={p.id}
+                          onClick={() => handleApplyPreset(p.id)}
+                          className={`px-2 py-1 rounded text-[10px] font-bold font-mono transition-all uppercase flex items-center gap-1 ${
+                            isActive
+                              ? 'bg-amber-500 text-charcoal-dark ring-2 ring-amber-600 font-black shadow-sm'
+                              : 'bg-paper-cream hover:bg-paper-dark/30 text-charcoal-dark border border-charcoal-soft/30'
+                          }`}
+                          title={p.description}
+                        >
+                          {isActive && <Check className="w-3 h-3 text-charcoal-dark" />}
+                          <span>{p.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
-                {/* Meme Grid */}
-                <div className="grid grid-cols-2 gap-2.5">
-                  {[...customMemes, ...DEFAULT_MEME_LIBRARY].map((meme) => (
-                    <div
-                      key={meme.id}
-                      className="border border-charcoal-soft rounded p-2 bg-paper-cream space-y-1.5 shadow-sm"
+                {/* 2. Action Toolbar */}
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-charcoal-soft/20 pb-2">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setCreatorTargetAction(null);
+                        setCreatorModalOpen(true);
+                      }}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] h-7 gap-1"
                     >
-                      <div className="relative aspect-[4/3] bg-black rounded overflow-hidden flex items-center justify-center">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={meme.dataUrl}
-                          alt={meme.title}
-                          className="w-full h-full object-contain"
-                        />
-                        {meme.isCustom && (
-                          <span className="absolute top-1 right-1 text-[8px] font-bold px-1 py-0.5 rounded bg-emerald-500 text-black">
-                            CUSTOM
-                          </span>
-                        )}
-                      </div>
+                      <Plus className="w-3 h-3" />
+                      <span>CREATE MEME</span>
+                    </Button>
 
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-[11px] truncate">{meme.title}</span>
-                        {meme.isCustom && (
-                          <button
-                            onClick={() => handleDeleteCustomMeme(meme.id)}
-                            className="text-rose-500 hover:text-rose-700 p-0.5"
-                            title="Delete custom meme"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        )}
-                      </div>
+                    <label className="border border-charcoal-soft rounded px-2 py-1 bg-paper-cream hover:bg-paper-dark/30 cursor-pointer flex items-center gap-1 text-[10px] font-bold h-7 text-charcoal-dark">
+                      <Upload className="w-3 h-3 text-amber-600" />
+                      <span>UPLOAD FILE</span>
+                      <input
+                        type="file"
+                        accept="image/png,image/jpeg,image/webp,image/gif"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                      />
+                    </label>
 
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() =>
-                          eventEngineRef.current.previewAction(
-                            'T_POSE',
-                            'BODY',
-                            'INCEPTION_BRAAAM',
-                            meme.id
-                          )
-                        }
-                        className="w-full text-[10px] h-6 gap-1"
-                      >
-                        <Sparkles className="w-2.5 h-2.5 text-amber-500" />
-                        <span>PREVIEW POP-UP</span>
-                      </Button>
-                    </div>
-                  ))}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDiceRoll}
+                      className="text-[10px] h-7 gap-1"
+                      title="Roll a random meme pop-up"
+                    >
+                      <Dices className="w-3 h-3 text-purple-600" />
+                      <span>RANDOM ROLL</span>
+                    </Button>
+                  </div>
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleResetDefaults}
+                    className="text-[10px] h-7 text-ink-muted hover:text-charcoal-dark gap-1"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>RESET DEFAULTS</span>
+                  </Button>
                 </div>
+
+                {uploadError && (
+                  <p className="text-[11px] text-rose-600 font-bold p-1 bg-rose-50 border border-rose-300 rounded">
+                    {uploadError}
+                  </p>
+                )}
+
+                {/* 3. Search and Category Filter Deck */}
+                <div className="space-y-2">
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-muted" />
+                    <input
+                      type="text"
+                      value={memeSearchQuery}
+                      onChange={(e) => setMemeSearchQuery(e.target.value)}
+                      placeholder="Search 60+ memes by title, caption, tags..."
+                      className="w-full pl-8 pr-8 py-1.5 border border-charcoal-soft rounded bg-paper-cream text-xs font-mono font-bold"
+                    />
+                    {memeSearchQuery && (
+                      <button
+                        onClick={() => setMemeSearchQuery('')}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-ink-muted hover:text-charcoal-dark"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap gap-1 text-[10px] font-bold font-mono">
+                    {[
+                      { id: 'ALL', label: `ALL (${allMemes.length})` },
+                      { id: 'FAVORITES', label: `★ FAVOURITES (${favCount})` },
+                      { id: 'CONFUSION', label: `CONFUSION (${categoryCounts['CONFUSION'] || 0})` },
+                      { id: 'SHOCK', label: `SHOCK (${categoryCounts['SHOCK'] || 0})` },
+                      { id: 'CONFIDENCE', label: `CONFIDENCE (${categoryCounts['CONFIDENCE'] || 0})` },
+                      { id: 'FAILURE', label: `FAILURE (${categoryCounts['FAILURE'] || 0})` },
+                      { id: 'SUSPICIOUS', label: `SUSPICIOUS (${categoryCounts['SUSPICIOUS'] || 0})` },
+                      { id: 'CELEBRATION', label: `CELEBRATION (${categoryCounts['CELEBRATION'] || 0})` },
+                      { id: 'SPECIAL', label: `SPECIAL (${categoryCounts['SPECIAL'] || 0})` },
+                      { id: 'CUSTOM', label: `CUSTOM (${customMemes.length})` },
+                    ].map((cat) => (
+                      <button
+                        key={cat.id}
+                        onClick={() => setSelectedMemeCategory(cat.id)}
+                        className={`px-2 py-0.5 rounded transition-all ${
+                          selectedMemeCategory === cat.id
+                            ? 'bg-charcoal-dark text-paper-cream font-black shadow-xs'
+                            : 'bg-paper-dark/30 hover:bg-paper-dark/60 text-charcoal-dark'
+                        }`}
+                      >
+                        {cat.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* 4. Meme Grid */}
+                {filteredMemes.length === 0 ? (
+                  <div className="p-8 text-center text-ink-muted text-xs border border-dashed border-charcoal-soft rounded">
+                    No memes found matching &quot;{memeSearchQuery}&quot; in category {selectedMemeCategory}.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2.5">
+                    {filteredMemes.map((meme: MemeVisualDefinition) => {
+                      const isFav = (config.favoriteMemes || []).includes(meme.id) || meme.isFavorite;
+                      const assignedActions = getAssignedActionsForMeme(meme.id);
+
+                      // Category Border Color
+                      const borderCol =
+                        meme.category === 'CONFUSION'
+                          ? 'hover:border-purple-500'
+                          : meme.category === 'SHOCK'
+                          ? 'hover:border-cyan-500'
+                          : meme.category === 'CONFIDENCE'
+                          ? 'hover:border-amber-500'
+                          : meme.category === 'FAILURE'
+                          ? 'hover:border-rose-500'
+                          : meme.category === 'SUSPICIOUS'
+                          ? 'hover:border-emerald-500'
+                          : meme.category === 'CELEBRATION'
+                          ? 'hover:border-yellow-500'
+                          : meme.category === 'SPECIAL'
+                          ? 'hover:border-fuchsia-500'
+                          : 'hover:border-charcoal-soft';
+
+                      return (
+                        <div
+                          key={meme.id}
+                          className={`border-2 border-charcoal-soft/50 ${borderCol} rounded p-2 bg-paper-cream space-y-1.5 shadow-sm transition-all flex flex-col justify-between`}
+                        >
+                          <div className="space-y-1.5">
+                            {/* Thumbnail Container */}
+                            <div className="relative aspect-[4/3] bg-black rounded overflow-hidden flex items-center justify-center">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={meme.dataUrl}
+                                alt={meme.title}
+                                className="w-full h-full object-contain"
+                              />
+
+                              {/* Top Left Badges */}
+                              <div className="absolute top-1 left-1 flex flex-col gap-1 items-start">
+                                {meme.rarity && meme.rarity !== 'COMMON' && (
+                                  <span
+                                    className={`text-[8px] font-black px-1 py-0.5 rounded ${
+                                      meme.rarity === 'LEGENDARY'
+                                        ? 'bg-amber-400 text-charcoal-dark ring-1 ring-amber-600'
+                                        : 'bg-purple-600 text-white'
+                                    }`}
+                                  >
+                                    ★ {meme.rarity}
+                                  </span>
+                                )}
+                                {meme.isCustom && (
+                                  <span className="text-[8px] font-black px-1 py-0.5 rounded bg-emerald-500 text-black">
+                                    CUSTOM
+                                  </span>
+                                )}
+                              </div>
+
+                              {/* Top Right Favorite Star */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleFavoriteMeme(meme.id);
+                                }}
+                                className={`absolute top-1 right-1 p-1 rounded-full ${
+                                  isFav
+                                    ? 'bg-amber-400 text-charcoal-dark'
+                                    : 'bg-black/60 text-white/70 hover:text-white'
+                                }`}
+                                title={isFav ? 'Remove from favorites' : 'Mark as favorite'}
+                              >
+                                <Star className={`w-3 h-3 ${isFav ? 'fill-current' : ''}`} />
+                              </button>
+                            </div>
+
+                            {/* Title & Category */}
+                            <div className="flex items-center justify-between">
+                              <span className="font-extrabold text-[11px] truncate uppercase text-charcoal-dark block">
+                                {meme.title}
+                              </span>
+                              {meme.isCustom && (
+                                <button
+                                  onClick={() => handleDeleteCustomMeme(meme.id)}
+                                  className="text-rose-500 hover:text-rose-700 p-0.5"
+                                  title="Delete custom meme"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Caption preview */}
+                            <p className="text-[10px] text-ink-muted italic truncate">
+                              &quot;{meme.caption}&quot;
+                            </p>
+
+                            {/* Assigned Actions Badges */}
+                            {assignedActions.length > 0 && (
+                              <div className="flex flex-wrap gap-1">
+                                {assignedActions.map((act) => (
+                                  <span
+                                    key={act}
+                                    className="px-1.5 py-0.5 bg-amber-400/90 text-charcoal-dark font-black text-[8px] rounded uppercase"
+                                  >
+                                    ASSIGNED: {act}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Action Buttons */}
+                          <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-charcoal-soft/10">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() =>
+                                eventEngineRef.current.previewAction(
+                                  'T_POSE',
+                                  'BODY',
+                                  undefined,
+                                  meme.id
+                                )
+                              }
+                              className="text-[9px] h-6 px-1 gap-1"
+                              title="Preview meme pop-up in camera"
+                            >
+                              <Sparkles className="w-2.5 h-2.5 text-amber-500" />
+                              <span>PREVIEW</span>
+                            </Button>
+
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setAssignModalMeme(meme)}
+                              className="text-[9px] h-6 px-1 gap-1 bg-paper-dark/20 hover:bg-paper-dark/50"
+                              title="Assign this meme to a body or hand action"
+                            >
+                              <span>ASSIGN TO...</span>
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1517,7 +2032,7 @@ export default function GoofyModePage() {
       {/* MODAL 1: MEME SELECTOR DIALOG */}
       {memeModalAction && (
         <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-paper-cream border-4 border-charcoal-soft rounded-tactile max-w-2xl w-full p-4 space-y-4 shadow-tactile-lg max-h-[85vh] flex flex-col font-mono">
+          <div className="bg-paper-cream border-4 border-charcoal-soft rounded-tactile max-w-2xl w-full p-4 space-y-3 shadow-tactile-lg max-h-[85vh] flex flex-col font-mono text-xs">
             <div className="flex items-center justify-between border-b-2 border-charcoal-soft pb-2">
               <div className="flex items-center gap-2">
                 <ImageIcon className="w-5 h-5 text-amber-500" />
@@ -1535,38 +2050,24 @@ export default function GoofyModePage() {
               </Button>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 overflow-y-auto flex-1 pr-1">
-              {[...customMemes, ...DEFAULT_MEME_LIBRARY].map((meme) => (
-                <button
-                  key={meme.id}
-                  onClick={() => {
-                    setConfig((prev) => ({
-                      ...prev,
-                      actionMemeMappings: {
-                        ...prev.actionMemeMappings,
-                        [memeModalAction]: meme.id,
-                      },
-                    }));
-                    setMemeModalAction(null);
-                  }}
-                  className="border-2 border-charcoal-soft rounded p-2 text-left hover:border-amber-500 hover:bg-amber-50/50 transition-all group"
-                >
-                  <div className="aspect-[4/3] bg-black rounded overflow-hidden mb-1 flex items-center justify-center">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={meme.dataUrl} alt={meme.title} className="w-full h-full object-contain" />
-                  </div>
-                  <span className="text-[11px] font-bold uppercase truncate block group-hover:text-amber-600">
-                    {meme.title}
-                  </span>
-                  <span className="text-[9px] text-ink-muted block">{meme.category}</span>
-                </button>
-              ))}
-            </div>
+            {/* Quick Action Bar inside Modal */}
+            <div className="flex items-center justify-between gap-2">
+              <Button
+                size="sm"
+                onClick={() => {
+                  setCreatorTargetAction(memeModalAction);
+                  setCreatorModalOpen(true);
+                  setMemeModalAction(null);
+                }}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] h-7 gap-1"
+              >
+                <Plus className="w-3 h-3" />
+                <span>CREATE CUSTOM FOR THIS ACTION</span>
+              </Button>
 
-            <div className="border-t border-charcoal-soft/20 pt-2 flex justify-between items-center text-xs">
-              <label className="cursor-pointer text-amber-600 font-bold underline flex items-center gap-1 text-xs">
+              <label className="cursor-pointer text-amber-600 font-bold underline flex items-center gap-1 text-[11px]">
                 <Upload className="w-3.5 h-3.5" />
-                <span>Upload new image / GIF</span>
+                <span>Upload image / GIF</span>
                 <input
                   type="file"
                   accept="image/png,image/jpeg,image/webp,image/gif"
@@ -1574,7 +2075,44 @@ export default function GoofyModePage() {
                   className="hidden"
                 />
               </label>
+            </div>
 
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 overflow-y-auto flex-1 pr-1">
+              {[...customMemes, ...DEFAULT_MEME_LIBRARY].map((meme) => {
+                const isSelected = config.actionMemeMappings[memeModalAction] === meme.id;
+                return (
+                  <button
+                    key={meme.id}
+                    onClick={() => {
+                      setConfig((prev) => ({
+                        ...prev,
+                        actionMemeMappings: {
+                          ...prev.actionMemeMappings,
+                          [memeModalAction]: meme.id,
+                        },
+                      }));
+                      setMemeModalAction(null);
+                    }}
+                    className={`border-2 rounded p-2 text-left transition-all group ${
+                      isSelected
+                        ? 'border-amber-500 bg-amber-100/60 ring-2 ring-amber-500'
+                        : 'border-charcoal-soft/40 hover:border-amber-500 hover:bg-amber-50/50'
+                    }`}
+                  >
+                    <div className="aspect-[4/3] bg-black rounded overflow-hidden mb-1 flex items-center justify-center">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={meme.dataUrl} alt={meme.title} className="w-full h-full object-contain" />
+                    </div>
+                    <span className="text-[11px] font-bold uppercase truncate block group-hover:text-amber-600">
+                      {meme.title}
+                    </span>
+                    <span className="text-[9px] text-ink-muted block truncate">{meme.caption}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="border-t border-charcoal-soft/20 pt-2 flex justify-end items-center">
               <Button size="sm" onClick={() => setMemeModalAction(null)}>
                 DONE
               </Button>
@@ -1591,7 +2129,7 @@ export default function GoofyModePage() {
               <div className="flex items-center gap-2">
                 <BookOpen className="w-5 h-5 text-amber-500" />
                 <h3 className="font-black text-sm uppercase">
-                  GOOFY MODEL V2 // ACTION MANUAL
+                  GOOFY MODEL V3 // ACTION &amp; MEME MANUAL
                 </h3>
               </div>
               <Button
@@ -1605,6 +2143,18 @@ export default function GoofyModePage() {
             </div>
 
             <div className="space-y-4">
+              {/* Presets and Features Summary */}
+              <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded">
+                <h4 className="font-black text-amber-700 uppercase mb-1">GOOFY V3 UPGRADE FEATURES</h4>
+                <ul className="list-disc list-inside space-y-0.5 text-[11px] text-charcoal-dark">
+                  <li>62 built-in original vector SVG memes across 7 reaction packs.</li>
+                  <li>In-browser Canvas Custom Meme Creator with text outlines, comic stamps, and borders.</li>
+                  <li>7 one-click Curated Meme Presets: Balanced, Chaos, Clean Comedy, Ultra Drama, Maximum Aura, Failure, Unhinged.</li>
+                  <li>5 Visual Animation Styles: Classic, Explosive, Retro Arcade, Minimal, No Animation.</li>
+                  <li>Anti-repetition memory prevents duplicate reactions on sustained actions.</li>
+                </ul>
+              </div>
+
               <div>
                 <h4 className="font-extrabold text-amber-600 uppercase border-b border-charcoal-soft/20 pb-1 mb-2">
                   BODY ACTIONS (8)
@@ -1678,6 +2228,25 @@ export default function GoofyModePage() {
           </div>
         </div>
       )}
+
+      {/* MODAL 3: IN-BROWSER CUSTOM MEME CREATOR */}
+      <CustomMemeCreatorModal
+        isOpen={creatorModalOpen}
+        onClose={() => {
+          setCreatorModalOpen(false);
+          setCreatorTargetAction(null);
+        }}
+        onSaveMeme={handleSaveCreatedMeme}
+        targetAction={creatorTargetAction}
+      />
+
+      {/* MODAL 4: QUICK ASSIGN MEME TO ACTION */}
+      <AssignMemeModal
+        meme={assignModalMeme}
+        currentMappings={config.actionMemeMappings}
+        onClose={() => setAssignModalMeme(null)}
+        onAssignToAction={handleAssignToAction}
+      />
     </div>
   );
 }

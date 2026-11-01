@@ -5,7 +5,16 @@ import { GoofyAudioEngine } from '../modules/pose/goofy-audio-engine';
 import { GoofyParticleEmitter, GoofyVisualFXEngine } from '../modules/pose/goofy-visual-fx';
 import { GoofyHandClassifier, GoofyHandStateMachine } from '../modules/pose/goofy-hand-classifier';
 import { GoofyEventEngine } from '../modules/pose/goofy-event-engine';
-import { DEFAULT_MEME_LIBRARY, getDefaultMemeForAction, getMemeById } from '../modules/pose/goofy-meme-library';
+import {
+  DEFAULT_MEME_LIBRARY,
+  getDefaultMemeForAction,
+  getMemeById,
+  filterMemesByCategory,
+  searchMemes,
+  getRandomMemeForAction,
+  getRareMeme,
+  getPresetById,
+} from '../modules/pose/goofy-meme-library';
 import { Landmark3D } from '../modules/hand/types';
 import { PoseLandmark } from '../modules/pose/types';
 import {
@@ -13,6 +22,10 @@ import {
   GoofyHandGestureType,
   DEFAULT_GOOFY_CONFIG,
   DEFAULT_SOUND_LIBRARY,
+  BUILTIN_MEME_PRESETS,
+  GOOFY_ACTION_RECOMMENDED_MEMES,
+  MemeCategory,
+  MemePresetId,
 } from '../modules/pose/goofy-types';
 
 /**
@@ -858,13 +871,24 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
     });
   });
 
-  describe('GoofyMemeLibrary: Original Vector SVGs & Action Mappings', () => {
-    it('contains 21 original vector SVG memes with valid data URLs', () => {
-      expect(DEFAULT_MEME_LIBRARY.length).toBe(21);
+  describe('GoofyMemeLibrary: Original Vector SVGs & Action Mappings (V3 Upgrade)', () => {
+    it('contains at least 50 (specifically 62) original vector SVG memes with valid data URLs and stable IDs', () => {
+      expect(DEFAULT_MEME_LIBRARY.length).toBe(62);
+      expect(DEFAULT_MEME_LIBRARY.length).toBeGreaterThanOrEqual(50);
+
+      const idSet = new Set<string>();
       for (const meme of DEFAULT_MEME_LIBRARY) {
         expect(meme.id).toBeTruthy();
+        expect(idSet.has(meme.id)).toBe(false);
+        idSet.add(meme.id);
+
         expect(meme.title).toBeTruthy();
+        expect(meme.caption).toBeTruthy();
+        expect(meme.category).toBeTruthy();
         expect(meme.dataUrl).toMatch(/^data:image\/svg\+xml;utf8,/);
+        const decodedSvg = decodeURIComponent(meme.dataUrl);
+        expect(decodedSvg).toContain('<svg');
+        expect(decodedSvg).toContain('</svg>');
       }
     });
 
@@ -877,6 +901,143 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
 
       const pinchMeme = getDefaultMemeForAction('PINCH');
       expect(pinchMeme.id).toBe('MEME_PINCH_GRAB');
+    });
+
+    it('filters memes accurately across all requested reaction categories', () => {
+      const categories: MemeCategory[] = [
+        'CONFUSION',
+        'SHOCK',
+        'CONFIDENCE',
+        'FAILURE',
+        'SUSPICIOUS',
+        'CELEBRATION',
+        'SPECIAL',
+      ];
+
+      for (const cat of categories) {
+        const filtered = filterMemesByCategory(cat);
+        expect(filtered.length).toBeGreaterThanOrEqual(6);
+        for (const m of filtered) {
+          expect(m.category).toBe(cat);
+        }
+      }
+    });
+
+    it('performs keyword search across title, caption, category, and description', () => {
+      const brainResults = searchMemes('brain');
+      expect(brainResults.length).toBeGreaterThan(0);
+      expect(brainResults.some((m) => m.title.toLowerCase().includes('brain'))).toBe(true);
+
+      const auraResults = searchMemes('AURA');
+      expect(auraResults.length).toBeGreaterThan(0);
+      expect(auraResults.some((m) => m.id === 'MEME_MAXIMUM_AURA')).toBe(true);
+
+      const emptyQuery = searchMemes('   ');
+      expect(emptyQuery.length).toBe(DEFAULT_MEME_LIBRARY.length);
+    });
+
+    it('getRandomMemeForAction applies anti-repetition memory and selects valid memes', () => {
+      const firstPick = getRandomMemeForAction('T_POSE');
+      expect(firstPick).toBeDefined();
+
+      // Consecutive pick with excludeMemeId MUST avoid repeating the same meme
+      const secondPick = getRandomMemeForAction('T_POSE', firstPick.id);
+      expect(secondPick).toBeDefined();
+      expect(secondPick.id).not.toBe(firstPick.id);
+    });
+
+    it('getRareMeme returns high-rarity reactions (RARE or LEGENDARY)', () => {
+      const rare = getRareMeme();
+      expect(rare).toBeDefined();
+      expect(['RARE', 'LEGENDARY']).toContain(rare.rarity);
+    });
+
+    it('BUILTIN_MEME_PRESETS contains 7 curated presets all mapping to valid meme IDs', () => {
+      expect(BUILTIN_MEME_PRESETS.length).toBe(7);
+      const presetIds: MemePresetId[] = [
+        'DEFAULT',
+        'CHAOS_MODE',
+        'CLEAN_COMEDY',
+        'ULTRA_DRAMA',
+        'MAXIMUM_AURA',
+        'FAILURE_COMPILATION',
+        'UNHINGED_MODE',
+      ];
+
+      for (const pid of presetIds) {
+        const preset = getPresetById(pid);
+        expect(preset).toBeDefined();
+        expect(preset!.name).toBeTruthy();
+        expect(preset!.actionMemeMappings).toBeDefined();
+
+        // Check that every mapped meme ID in preset exists in DEFAULT_MEME_LIBRARY
+        for (const [, memeId] of Object.entries(preset!.actionMemeMappings)) {
+          if (memeId) {
+            const found = getMemeById(memeId);
+            expect(found).toBeDefined();
+          }
+        }
+      }
+    });
+
+    it('GOOFY_ACTION_RECOMMENDED_MEMES provides valid recommendations for all 20 actions', () => {
+      const bodyActions: GoofyPoseType[] = [
+        'T_POSE',
+        'HANDS_RAISED',
+        'HANDS_ON_HIPS',
+        'ARMS_CROSSED',
+        'SQUAT',
+        'JUMP',
+        'FLEX_POSE',
+        'CLAP',
+      ];
+
+      const handGestures: GoofyHandGestureType[] = [
+        'OPEN_PALM',
+        'CLOSED_FIST',
+        'THUMBS_UP',
+        'THUMBS_DOWN',
+        'PEACE_SIGN',
+        'POINTING',
+        'PINCH',
+        'THREE_FINGERS',
+        'FOUR_FINGERS',
+        'FIVE_FINGERS',
+        'SWIPE_LEFT',
+        'SWIPE_RIGHT',
+      ];
+
+      for (const action of [...bodyActions, ...handGestures]) {
+        const recs = GOOFY_ACTION_RECOMMENDED_MEMES[action];
+        expect(recs).toBeDefined();
+        expect(recs!.length).toBeGreaterThanOrEqual(2);
+
+        // Every recommended meme ID must exist
+        for (const memeId of recs!) {
+          const meme = getMemeById(memeId);
+          expect(meme).toBeDefined();
+        }
+      }
+    });
+
+    it('GoofyEventEngine respects randomMemeMode and tracks recent meme IDs', () => {
+      const audio = new GoofyAudioEngine();
+      const vfx = new GoofyVisualFXEngine();
+      const config = {
+        ...DEFAULT_GOOFY_CONFIG,
+        randomMemeMode: true,
+      };
+      const engine = new GoofyEventEngine(config, audio, vfx);
+
+      const evt1 = engine.dispatchActionTrigger('T_POSE', 'BODY');
+      expect(evt1).not.toBeNull();
+      expect(engine.getRecentMemeIds().length).toBe(1);
+
+      const evt2 = engine.dispatchActionTrigger('T_POSE', 'BODY');
+      expect(evt2).not.toBeNull();
+      expect(engine.getRecentMemeIds().length).toBe(2);
+      // Anti-repetition check
+      expect(evt2!.memeId).not.toBe(evt1!.memeId);
     });
   });
 });

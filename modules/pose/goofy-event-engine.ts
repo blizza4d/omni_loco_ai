@@ -11,7 +11,12 @@ import {
 } from './goofy-types';
 import { GoofyAudioEngine } from './goofy-audio-engine';
 import { GoofyVisualFXEngine } from './goofy-visual-fx';
-import { getDefaultMemeForAction, getMemeById } from './goofy-meme-library';
+import {
+  getDefaultMemeForAction,
+  getMemeById,
+  getRandomMemeForAction,
+  getRareMeme,
+} from './goofy-meme-library';
 
 export type EventEngineListener = (
   event: UnifiedMemeEvent,
@@ -28,6 +33,8 @@ export class GoofyEventEngine {
   private eventHistory: UnifiedMemeEvent[] = [];
   private listeners: Set<EventEngineListener> = new Set();
   private maxHistorySize = 50;
+  private lastMemeIdByAction: Map<string, string> = new Map();
+  private recentMemeIds: string[] = [];
 
   constructor(
     config: GoofyModeConfig,
@@ -46,6 +53,10 @@ export class GoofyEventEngine {
 
   setCustomMemes(memes: MemeVisualDefinition[]): void {
     this.customMemes = memes;
+  }
+
+  getRecentMemeIds(): string[] {
+    return this.recentMemeIds;
   }
 
   subscribe(listener: EventEngineListener): () => void {
@@ -130,14 +141,32 @@ export class GoofyEventEngine {
     }
 
     // 4. Resolve meme visual
-    const assignedMemeId =
-      (mapping && mapping.memeId) ||
-      this.config.actionMemeMappings[actionId] ||
-      getDefaultMemeForAction(actionId).id;
+    let memeDef: MemeVisualDefinition;
 
-    const memeDef =
-      getMemeById(assignedMemeId, this.customMemes) ||
-      getDefaultMemeForAction(actionId);
+    if (
+      this.config.enableRareReactions &&
+      Math.random() < (this.config.rareReactionProbability ?? 0.10)
+    ) {
+      memeDef = getRareMeme(this.customMemes);
+    } else if (this.config.randomMemeMode) {
+      const lastId = this.lastMemeIdByAction.get(actionId);
+      memeDef = getRandomMemeForAction(actionId, this.customMemes, lastId);
+    } else {
+      const assignedMemeId =
+        (mapping && mapping.memeId) ||
+        this.config.actionMemeMappings[actionId] ||
+        getDefaultMemeForAction(actionId).id;
+
+      memeDef =
+        getMemeById(assignedMemeId, this.customMemes) ||
+        getDefaultMemeForAction(actionId);
+    }
+
+    this.lastMemeIdByAction.set(actionId, memeDef.id);
+    this.recentMemeIds = [
+      memeDef.id,
+      ...this.recentMemeIds.filter((id) => id !== memeDef.id),
+    ].slice(0, 15);
 
     // 5. Simultaneous Event Arbitration
     const now = performance.now();
@@ -201,6 +230,9 @@ export class GoofyEventEngine {
         durationMs,
         rotationDeg,
         isManualPreview: false,
+        category: memeDef.category,
+        rarity: memeDef.rarity,
+        animationStyle: this.config.popupAnimationStyle || 'CLASSIC',
       };
 
       this.activePopups.push(popup);
@@ -226,6 +258,8 @@ export class GoofyEventEngine {
       memeTitle: memeDef.title,
       confidence,
       isManualPreview: false,
+      category: memeDef.category,
+      rarity: memeDef.rarity,
     };
 
     this.eventHistory.unshift(unifiedEvent);
@@ -317,6 +351,9 @@ export class GoofyEventEngine {
       durationMs,
       rotationDeg,
       isManualPreview: true,
+      category: memeDef.category,
+      rarity: memeDef.rarity,
+      animationStyle: this.config.popupAnimationStyle || 'CLASSIC',
     };
 
     this.activePopups = [popup]; // Clear existing and show preview
@@ -338,6 +375,8 @@ export class GoofyEventEngine {
       memeTitle: memeDef.title,
       confidence: 1.0,
       isManualPreview: true,
+      category: memeDef.category,
+      rarity: memeDef.rarity,
     };
 
     this.notify(dummyEvent);

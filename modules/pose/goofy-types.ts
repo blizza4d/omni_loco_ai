@@ -112,16 +112,55 @@ export interface SoundDefinition {
   durationSec: number;
 }
 
+export type MemeCategory =
+  | 'CONFUSION'
+  | 'SHOCK'
+  | 'CONFIDENCE'
+  | 'FAILURE'
+  | 'SUSPICIOUS'
+  | 'CELEBRATION'
+  | 'SPECIAL'
+  | 'REACTION'
+  | 'CLASSIC'
+  | 'CARTOON'
+  | 'ANIME'
+  | 'CUSTOM';
+
+export type MemeRarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'LEGENDARY';
+
+export type PopupAnimationStyle =
+  | 'CLASSIC'
+  | 'MINIMAL'
+  | 'EXPLOSIVE'
+  | 'RETRO_ARCADE'
+  | 'NO_ANIMATION';
+
+export type MemePresetId =
+  | 'DEFAULT'
+  | 'CHAOS_MODE'
+  | 'CLEAN_COMEDY'
+  | 'ULTRA_DRAMA'
+  | 'MAXIMUM_AURA'
+  | 'FAILURE_COMPILATION'
+  | 'UNHINGED_MODE'
+  | 'CUSTOM_USER_PRESET';
+
 export interface MemeVisualDefinition {
   id: string;
   title: string;
-  category: 'REACTION' | 'CELEBRATION' | 'CLASSIC' | 'CARTOON' | 'ANIME' | 'CUSTOM';
+  category: MemeCategory;
   description: string;
+  caption?: string; // Default comic caption
   dataUrl: string; // SVG data URL or image/GIF data/blob URL
   aspectRatio?: number;
   tags?: string[];
   isCustom?: boolean;
   fileName?: string;
+  soundId?: GoofySoundId;
+  suggestedActions?: GoofyActionId[];
+  rarity?: MemeRarity;
+  isFavorite?: boolean;
+  createdAt?: number;
 }
 
 export interface PoseSoundMapping {
@@ -153,6 +192,9 @@ export interface ActiveMemePopup {
   durationMs: number;
   rotationDeg: number;
   isManualPreview?: boolean;
+  category?: MemeCategory;
+  rarity?: MemeRarity;
+  animationStyle?: PopupAnimationStyle;
 }
 
 export interface UnifiedMemeEvent {
@@ -169,6 +211,8 @@ export interface UnifiedMemeEvent {
   memeTitle: string;
   confidence: number;
   isManualPreview?: boolean;
+  category?: MemeCategory;
+  rarity?: MemeRarity;
 }
 
 export interface GoofyModeConfig {
@@ -188,6 +232,14 @@ export interface GoofyModeConfig {
   handMappings: Record<GoofyHandGestureType, PoseSoundMapping>;
   actionMemeMappings: Record<string, string>; // action/gesture ID -> memeId
   actionCustomCaptions: Record<string, string>; // action/gesture ID -> custom caption
+  // V3 Advanced Meme Additions
+  randomMemeMode?: boolean; // When true, genuine action selects a random eligible meme
+  enableRareReactions?: boolean; // When true, rare/legendary reactions can occasionally trigger
+  rareReactionProbability?: number; // 0.01 to 0.30 (default 0.10)
+  popupAnimationStyle?: PopupAnimationStyle; // 'CLASSIC' | 'MINIMAL' | 'EXPLOSIVE' | 'RETRO_ARCADE' | 'NO_ANIMATION'
+  activePresetId?: string; // Current preset ID
+  favoriteMemes?: string[]; // Array of favorite meme IDs
+  recentMemes?: string[]; // Array of last-triggered meme IDs
 }
 
 export interface GoofyTriggerEvent {
@@ -839,4 +891,162 @@ export const DEFAULT_GOOFY_CONFIG: GoofyModeConfig = {
     SWIPE_RIGHT: 'MEME_SWIPE_RIGHT',
   },
   actionCustomCaptions: {},
+  randomMemeMode: false,
+  enableRareReactions: true,
+  rareReactionProbability: 0.10,
+  popupAnimationStyle: 'CLASSIC',
+  activePresetId: 'DEFAULT',
+  favoriteMemes: [],
+  recentMemes: [],
+};
+
+export interface MemePresetDefinition {
+  id: MemePresetId;
+  name: string;
+  description: string;
+  icon: string;
+  animationStyle: PopupAnimationStyle;
+  randomMemeMode: boolean;
+  randomSoundMode: boolean;
+  enableRareReactions: boolean;
+  actionMemeMappings: Partial<Record<GoofyActionId, string>>;
+}
+
+export const BUILTIN_MEME_PRESETS: MemePresetDefinition[] = [
+  {
+    id: 'DEFAULT',
+    name: 'BALANCED COMEDY',
+    description: 'Curated blend of classic memes, sound effects, and comic reactions.',
+    icon: '⚡',
+    animationStyle: 'CLASSIC',
+    randomMemeMode: false,
+    randomSoundMode: false,
+    enableRareReactions: true,
+    actionMemeMappings: {},
+  },
+  {
+    id: 'CHAOS_MODE',
+    name: 'CHAOS MODE',
+    description: 'High volatility, explosive screen popups, random reactions, and wild sound triggers.',
+    icon: '🔥',
+    animationStyle: 'EXPLOSIVE',
+    randomMemeMode: true,
+    randomSoundMode: true,
+    enableRareReactions: true,
+    actionMemeMappings: {
+      T_POSE: 'MEME_CHAOS_UNLEASHED',
+      JUMP: 'MEME_EXPLODING_HEAD',
+      CLAP: 'MEME_PARTY_MODE',
+      CLOSED_FIST: 'MEME_FINAL_BOSS_ENERGY',
+    },
+  },
+  {
+    id: 'CLEAN_COMEDY',
+    name: 'CLEAN COMEDY',
+    description: 'Family-friendly cartoon boings, wholesome memes, and playful reactions.',
+    icon: '✨',
+    animationStyle: 'CLASSIC',
+    randomMemeMode: false,
+    randomSoundMode: false,
+    enableRareReactions: false,
+    actionMemeMappings: {
+      T_POSE: 'MEME_SURPRISED_PIKACHU',
+      HANDS_RAISED: 'MEME_SUCCESS_KID',
+      CLAP: 'MEME_CLAPPING_AWARD',
+      THUMBS_UP: 'MEME_CHAD_THUMBS_UP',
+      PEACE_SIGN: 'MEME_PEACE_OUT',
+    },
+  },
+  {
+    id: 'ULTRA_DRAMA',
+    name: 'ULTRA DRAMA',
+    description: 'Shock, suspense, jaw drops, unexpected plot twists, and dramatic brass fanfares.',
+    icon: '🎭',
+    animationStyle: 'EXPLOSIVE',
+    randomMemeMode: false,
+    randomSoundMode: false,
+    enableRareReactions: true,
+    actionMemeMappings: {
+      T_POSE: 'MEME_ABSOLUTE_CINEMA',
+      OPEN_PALM: 'MEME_PLOT_TWIST',
+      ARMS_CROSSED: 'MEME_JUDGMENTAL_STARE',
+      POINTING: 'MEME_CAUGHT_IN_ACT',
+      ZEN_PRAYER: 'MEME_THIS_IS_FINE',
+    },
+  },
+  {
+    id: 'MAXIMUM_AURA',
+    name: 'MAXIMUM AURA',
+    description: 'Unstoppable confidence, Chad jawlines, golden crowns, and +100,000 aura moments.',
+    icon: '👑',
+    animationStyle: 'CLASSIC',
+    randomMemeMode: false,
+    randomSoundMode: false,
+    enableRareReactions: true,
+    actionMemeMappings: {
+      T_POSE: 'MEME_MAIN_CHARACTER',
+      HANDS_RAISED: 'MEME_VICTORY_CROWN',
+      HANDS_ON_HIPS: 'MEME_MAXIMUM_AURA',
+      FLEX_POSE: 'MEME_ABSOLUTE_CHAD_CHIN',
+      THUMBS_UP: 'MEME_PERFECT_EXECUTION',
+    },
+  },
+  {
+    id: 'FAILURE_COMPILATION',
+    name: 'FAILURE COMPILATION',
+    description: 'Skill issues, critical failures, emotional damage, and sad trombone regret.',
+    icon: '💀',
+    animationStyle: 'RETRO_ARCADE',
+    randomMemeMode: false,
+    randomSoundMode: false,
+    enableRareReactions: false,
+    actionMemeMappings: {
+      T_POSE: 'MEME_SKILL_ISSUE',
+      SQUAT: 'MEME_CRITICAL_FAILURE',
+      ZOMBIE_WALK: 'MEME_FACEPALM',
+      THUMBS_DOWN: 'MEME_EMOTIONAL_DAMAGE',
+      CLOSED_FIST: 'MEME_MISSION_FAILED',
+    },
+  },
+  {
+    id: 'UNHINGED_MODE',
+    name: 'UNHINGED MODE',
+    description: 'Rapid-fire chaotic triggers, retro arcade styling, random sounds, and maximum rare spawns.',
+    icon: '🌀',
+    animationStyle: 'RETRO_ARCADE',
+    randomMemeMode: true,
+    randomSoundMode: true,
+    enableRareReactions: true,
+    actionMemeMappings: {},
+  },
+];
+
+export const GOOFY_ACTION_RECOMMENDED_MEMES: Record<GoofyActionId, string[]> = {
+  T_POSE: ['MEME_ABSOLUTE_CINEMA', 'MEME_MAIN_CHARACTER', 'MEME_SURPRISED_PIKACHU', 'MEME_FINAL_BOSS_ENERGY'],
+  HANDS_RAISED: ['MEME_VICTORY_ACHIEVED', 'MEME_VICTORY_CROWN', 'MEME_SUCCESS_KID', 'MEME_CROWD_GOES_WILD'],
+  HANDS_ON_HIPS: ['MEME_ABSOLUTE_CHAD_CHIN', 'MEME_MAXIMUM_AURA', 'MEME_CHAD_THUMBS_UP', 'MEME_PERFECT_EXECUTION'],
+  ARMS_CROSSED: ['MEME_JUDGMENTAL_STARE', 'MEME_SIDE_EYE', 'MEME_VERY_SUSPICIOUS', 'MEME_QUESTIONABLE_DECISION'],
+  SQUAT: ['MEME_SUPERHERO_LANDING', 'MEME_MISSION_FAILED', 'MEME_POW_IMPACT', 'MEME_CRITICAL_FAILURE'],
+  SQUAT_STANCE: ['MEME_SUPERHERO_LANDING', 'MEME_SKILL_ISSUE', 'MEME_POW_IMPACT'],
+  JUMP: ['MEME_EXPLODING_HEAD', 'MEME_LEVEL_UP', 'MEME_CHAOS_UNLEASHED', 'MEME_PARTY_MODE'],
+  FLEX_POSE: ['MEME_MAIN_CHARACTER', 'MEME_MAXIMUM_AURA', 'MEME_ABSOLUTE_CHAD_CHIN', 'MEME_UNSTOPPABLE'],
+  DOUBLE_BICEPS_FLEX: ['MEME_MAIN_CHARACTER', 'MEME_MAXIMUM_AURA', 'MEME_ABSOLUTE_CHAD_CHIN'],
+  CLAP: ['MEME_CLAPPING_AWARD', 'MEME_CROWD_GOES_WILD', 'MEME_PERFECT_EXECUTION', 'MEME_ABSOLUTE_CINEMA'],
+  DAB: ['MEME_DOGE_WOW', 'MEME_SKILL_ISSUE', 'MEME_PARTY_MODE', 'MEME_VICTORY_DANCE'],
+  DISCO_FEVER: ['MEME_VICTORY_DANCE', 'MEME_PARTY_MODE', 'MEME_PEACE_OUT', 'MEME_CHAOS_UNLEASHED'],
+  ZEN_PRAYER: ['MEME_THIS_IS_FINE', 'MEME_NO_THOUGHTS', 'MEME_BRAIN_LEFT_CHAT', 'MEME_CALCULATING'],
+  THE_THINKER: ['MEME_BRO_IS_THINKING', 'MEME_CALCULATING', 'MEME_UNEXPECTED_GENIUS', 'MEME_CONFUSED_BRAIN'],
+  ZOMBIE_WALK: ['MEME_FACEPALM', 'MEME_NPC_MODE', 'MEME_NO_THOUGHTS', 'MEME_NOT_PROUDEST_MOMENT'],
+  OPEN_PALM: ['MEME_STOP_SIGN', 'MEME_WAIT_WHAT', 'MEME_BRO_WHAT', 'MEME_WHAT_JUST_HAPPENED'],
+  CLOSED_FIST: ['MEME_POW_IMPACT', 'MEME_EMOTIONAL_DAMAGE', 'MEME_CRITICAL_FAILURE', 'MEME_FINAL_BOSS_ENERGY'],
+  THUMBS_UP: ['MEME_CHAD_THUMBS_UP', 'MEME_ABSOLUTE_CHAD_CHIN', 'MEME_MAXIMUM_AURA', 'MEME_PERFECT_EXECUTION'],
+  THUMBS_DOWN: ['MEME_THUMBS_DOWN_FAIL', 'MEME_SKILL_ISSUE', 'MEME_EMOTIONAL_DAMAGE', 'MEME_MISSION_FAILED'],
+  PEACE_SIGN: ['MEME_PEACE_OUT', 'MEME_VICTORY_DANCE', 'MEME_PARTY_MODE', 'MEME_LEGENDARY_MOMENT'],
+  POINTING: ['MEME_TARGET_LOCKED', 'MEME_CAUGHT_IN_ACT', 'MEME_INNOCENT_MAYBE_NOT', 'MEME_SIDE_EYE'],
+  PINCH: ['MEME_PINCH_GRAB', 'MEME_VERY_SUSPICIOUS', 'MEME_QUESTIONABLE_DECISION'],
+  THREE_FINGERS: ['MEME_THREE_FINGER_SALUTE', 'MEME_CALCULATING', 'MEME_LEVEL_UP'],
+  FOUR_FINGERS: ['MEME_FOUR_FINGER_POWER', 'MEME_ERROR_404_LOGIC', 'MEME_UNSTOPPABLE'],
+  FIVE_FINGERS: ['MEME_SUCCESS_KID', 'MEME_CROWD_GOES_WILD', 'MEME_LEVEL_UP', 'MEME_VICTORY_ACHIEVED'],
+  SWIPE_LEFT: ['MEME_SWIPE_LEFT', 'MEME_MISSION_FAILED', 'MEME_SKILL_ISSUE'],
+  SWIPE_RIGHT: ['MEME_SWIPE_RIGHT', 'MEME_LEVEL_UP', 'MEME_UNSTOPPABLE'],
 };

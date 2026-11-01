@@ -1,4 +1,12 @@
-import { MemeVisualDefinition } from './goofy-types';
+import {
+  MemeVisualDefinition,
+  MemeCategory,
+  MemeRarity,
+  MemePresetId,
+  MemePresetDefinition,
+  BUILTIN_MEME_PRESETS,
+  GOOFY_ACTION_RECOMMENDED_MEMES,
+} from './goofy-types';
 
 /**
  * Encodes SVG string into a clean, safe Data URL
@@ -16,7 +24,10 @@ export const DEFAULT_MEME_LIBRARY: MemeVisualDefinition[] = [
   {
     id: 'MEME_SURPRISED_PIKACHU',
     title: 'Surprised Shock Face',
-    category: 'REACTION',
+    category: 'SHOCK',
+    caption: "WHAT JUST HAPPENED?!",
+    rarity: 'COMMON',
+    suggestedActions: ["T_POSE","OPEN_PALM"],
     description: 'Electric yellow surprised reaction with wide mouth and shocked eyes.',
     aspectRatio: 4 / 3,
     tags: ['shocked', 'surprised', 't-pose', 'unexpected'],
@@ -65,7 +76,10 @@ export const DEFAULT_MEME_LIBRARY: MemeVisualDefinition[] = [
   {
     id: 'MEME_CHAD_THUMBS_UP',
     title: 'Absolute Chad Thumbs Up',
-    category: 'CELEBRATION',
+    category: 'CONFIDENCE',
+    caption: "ABSOLUTE CHAD // APPROVED",
+    rarity: 'COMMON',
+    suggestedActions: ["THUMBS_UP","HANDS_ON_HIPS"],
     description: 'Sharp jawline silhouette with sunglasses and glowing thumbs up approval.',
     aspectRatio: 4 / 3,
     tags: ['chad', 'thumbs_up', 'based', 'approved', 'hands_on_hips'],
@@ -106,7 +120,10 @@ export const DEFAULT_MEME_LIBRARY: MemeVisualDefinition[] = [
   {
     id: 'MEME_SUCCESS_KID',
     title: 'Success Kid Victory',
-    category: 'CELEBRATION',
+    category: 'CONFIDENCE',
+    caption: "MISSION SUCCESS // YES!!",
+    rarity: 'COMMON',
+    suggestedActions: ["CLOSED_FIST","HANDS_RAISED"],
     description: 'Determined champion clenching fist on the beach.',
     aspectRatio: 4 / 3,
     tags: ['success', 'fist', 'hands_raised', 'victory', 'nailed_it'],
@@ -155,7 +172,10 @@ export const DEFAULT_MEME_LIBRARY: MemeVisualDefinition[] = [
   {
     id: 'MEME_POW_IMPACT',
     title: 'Comic POW Explosion',
-    category: 'CARTOON',
+    category: 'CELEBRATION',
+    caption: "BOOOM // MAXIMUM POWER!",
+    rarity: 'COMMON',
+    suggestedActions: ["JUMP","SWIPE_RIGHT"],
     description: 'Vintage comic action burst bubble with explosive energy.',
     aspectRatio: 4 / 3,
     tags: ['punch', 'pow', 'impact', 'fist', 'power_up'],
@@ -189,7 +209,10 @@ export const DEFAULT_MEME_LIBRARY: MemeVisualDefinition[] = [
   {
     id: 'MEME_EXPLODING_HEAD',
     title: 'Galaxy Brain Exploding Head',
-    category: 'REACTION',
+    category: 'SHOCK',
+    caption: "BRAIN EXPANSION OVERLOAD",
+    rarity: 'UNCOMMON',
+    suggestedActions: ["T_POSE","OPEN_PALM"],
     description: 'Silhouette whose head blossoms into cosmic nebula and mind blown sparkles.',
     aspectRatio: 4 / 3,
     tags: ['mind_blown', 'jump', 'thinker', 'cosmic', 'galaxy_brain'],
@@ -238,7 +261,10 @@ export const DEFAULT_MEME_LIBRARY: MemeVisualDefinition[] = [
   {
     id: 'MEME_STOP_SIGN',
     title: 'Neon Halt Stop Sign',
-    category: 'CLASSIC',
+    category: 'CONFUSION',
+    caption: "HALT // CEASE ALL ACTIVITY",
+    rarity: 'COMMON',
+    suggestedActions: ["OPEN_PALM","ARMS_CROSSED"],
     description: 'High-visibility octagonal STOP sign with open palm warning.',
     aspectRatio: 4 / 3,
     tags: ['stop', 'open_palm', 'halt', 'warning', 'wait'],
@@ -268,6 +294,9 @@ export const DEFAULT_MEME_LIBRARY: MemeVisualDefinition[] = [
     id: 'MEME_CLAPPING_AWARD',
     title: 'Standing Ovation Applause',
     category: 'CELEBRATION',
+    caption: "STANDING OVATION // 10/10",
+    rarity: 'COMMON',
+    suggestedActions: ["CLAP","HANDS_RAISED"],
     description: 'Golden hands vigorously clapping with impact stars and confetti celebration.',
     aspectRatio: 4 / 3,
     tags: ['clap', 'applause', 'celebration', 'cheer', 'award'],
@@ -307,7 +336,10 @@ export const DEFAULT_MEME_LIBRARY: MemeVisualDefinition[] = [
   {
     id: 'MEME_TARGET_LOCKED',
     title: 'Tactical Target Locked',
-    category: 'CARTOON',
+    category: 'CONFIDENCE',
+    caption: "TARGET ACQUIRED // LOCKED IN",
+    rarity: 'COMMON',
+    suggestedActions: ["POINTING","HANDS_ON_HIPS"],
     description: 'High-tech tactical crosshair acquiring target with red dot laser.',
     aspectRatio: 4 / 3,
     tags: ['pointing', 'target', 'laser', 'aim', 'locked'],
@@ -343,7 +375,10 @@ export const DEFAULT_MEME_LIBRARY: MemeVisualDefinition[] = [
   {
     id: 'MEME_PEACE_OUT',
     title: 'Retro Vaporwave Peace Out',
-    category: 'REACTION',
+    category: 'CONFIDENCE',
+    caption: "PEACE OUT // ZERO STRESS",
+    rarity: 'COMMON',
+    suggestedActions: ["PEACE_SIGN","HANDS_ON_HIPS"],
     description: 'Glowing neon peace sign with retro synthwave grid horizon.',
     aspectRatio: 4 / 3,
     tags: ['peace_sign', 'retro', 'chill', 'victory', 'disco'],
@@ -384,7 +419,10 @@ export const DEFAULT_MEME_LIBRARY: MemeVisualDefinition[] = [
   {
     id: 'MEME_SUPERHERO_LANDING',
     title: 'Superhero Impact Landing',
-    category: 'CARTOON',
+    category: 'CONFIDENCE',
+    caption: "SUPERHERO LANDING // 10/10",
+    rarity: 'RARE',
+    suggestedActions: ["SQUAT","FLEX_POSE"],
     description: 'Ground crack crater with comic shockwave and superhero stance.',
     aspectRatio: 4 / 3,
     tags: ['squat', 'landing', 'impact', 'superhero', 'heavy'],
@@ -429,7 +467,10 @@ export const DEFAULT_MEME_LIBRARY: MemeVisualDefinition[] = [
   {
     id: 'MEME_JUDGMENTAL_STARE',
     title: 'Judgmental Suspicious Stare',
-    category: 'REACTION',
+    category: 'SUSPICIOUS',
+    caption: "VERY SUSPICIOUS // EXTREME DOUBT",
+    rarity: 'UNCOMMON',
+    suggestedActions: ["ARMS_CROSSED","POINTING"],
     description: 'Skeptical squinting eyes peering out of shadows with magnifying glass.',
     aspectRatio: 4 / 3,
     tags: ['arms_crossed', 'stare', 'judgment', 'suspicious', 'doubt'],
@@ -468,7 +509,10 @@ export const DEFAULT_MEME_LIBRARY: MemeVisualDefinition[] = [
   {
     id: 'MEME_THIS_IS_FINE',
     title: 'This Is Fine Dog',
-    category: 'CLASSIC',
+    category: 'FAILURE',
+    caption: "THIS IS COMPLETELY FINE",
+    rarity: 'UNCOMMON',
+    suggestedActions: ["THUMBS_DOWN","ARMS_CROSSED"],
     description: 'Calm dog in fedora sipping coffee inside roaring cartoon flames.',
     aspectRatio: 4 / 3,
     tags: ['this_is_fine', 'dog', 'flames', 'zen_prayer', 'flex_pose', 'calm'],
@@ -523,7 +567,10 @@ export const DEFAULT_MEME_LIBRARY: MemeVisualDefinition[] = [
   {
     id: 'MEME_DOGE_WOW',
     title: 'Classic Doge Much Wow',
-    category: 'CLASSIC',
+    category: 'SPECIAL',
+    caption: "MUCH CODE // VERY TALENT // WOW",
+    rarity: 'LEGENDARY',
+    suggestedActions: ["T_POSE","FIVE_FINGERS"],
     description: 'Iconic Shiba Inu surrounded by colorful Comic Sans meme phrases.',
     aspectRatio: 4 / 3,
     tags: ['doge', 'wow', 'dab', 'shiba', 'classic'],
@@ -565,7 +612,10 @@ export const DEFAULT_MEME_LIBRARY: MemeVisualDefinition[] = [
   {
     id: 'MEME_PINCH_GRAB',
     title: 'Yoink Pinch Grab',
-    category: 'CARTOON',
+    category: 'CONFUSION',
+    caption: "HOLDING TINY BRAIN CELLS",
+    rarity: 'COMMON',
+    suggestedActions: ["PINCH","POINTING"],
     description: 'Precision pinch lifting microscopic trophy with comic motion lines.',
     aspectRatio: 4 / 3,
     tags: ['pinch', 'grab', 'yoink', 'precision', 'lift'],
@@ -595,7 +645,10 @@ export const DEFAULT_MEME_LIBRARY: MemeVisualDefinition[] = [
   {
     id: 'MEME_THUMBS_DOWN_FAIL',
     title: 'Disapproval Thumbs Down',
-    category: 'REACTION',
+    category: 'FAILURE',
+    caption: "DISAPPROVED // MAJOR L",
+    rarity: 'COMMON',
+    suggestedActions: ["THUMBS_DOWN","ARMS_CROSSED"],
     description: 'Giant downward thumb with comedy broken heart and fail buzzer.',
     aspectRatio: 4 / 3,
     tags: ['thumbs_down', 'fail', 'disapproval', 'cringe', 'reject'],
@@ -628,7 +681,10 @@ export const DEFAULT_MEME_LIBRARY: MemeVisualDefinition[] = [
   {
     id: 'MEME_THREE_FINGER_SALUTE',
     title: 'Three Finger Power',
-    category: 'CELEBRATION',
+    category: 'CONFIDENCE',
+    caption: "TRIFORCE SQUAD ASSEMBLE",
+    rarity: 'COMMON',
+    suggestedActions: ["THREE_FINGERS","HANDS_RAISED"],
     description: 'Three fingers held up in heroic triangle with golden rays.',
     aspectRatio: 4 / 3,
     tags: ['three_fingers', 'salute', 'trinity', 'power'],
@@ -662,7 +718,10 @@ export const DEFAULT_MEME_LIBRARY: MemeVisualDefinition[] = [
   {
     id: 'MEME_FOUR_FINGER_POWER',
     title: 'Quad Core Overclock',
-    category: 'CELEBRATION',
+    category: 'CONFIDENCE',
+    caption: "FOUR ELEMENTS // QUAD POWER",
+    rarity: 'COMMON',
+    suggestedActions: ["FOUR_FINGERS","FLEX_POSE"],
     description: 'Four fingers glowing with neon elemental energy rings.',
     aspectRatio: 4 / 3,
     tags: ['four_fingers', 'quad', 'overclock', 'power'],
@@ -691,7 +750,10 @@ export const DEFAULT_MEME_LIBRARY: MemeVisualDefinition[] = [
   {
     id: 'MEME_SWIPE_LEFT',
     title: 'Swipe Left Nope',
-    category: 'REACTION',
+    category: 'CONFUSION',
+    caption: "REJECTED // SWIPED OUT",
+    rarity: 'COMMON',
+    suggestedActions: ["SWIPE_LEFT","OPEN_PALM"],
     description: 'Dynamic aerodynamic cyan air whoosh speeding to the left.',
     aspectRatio: 4 / 3,
     tags: ['swipe_left', 'nope', 'reject', 'fast', 'whoosh'],
@@ -717,6 +779,9 @@ export const DEFAULT_MEME_LIBRARY: MemeVisualDefinition[] = [
     id: 'MEME_SWIPE_RIGHT',
     title: 'Swipe Right Match',
     category: 'CELEBRATION',
+    caption: "SUPER MATCH // SWIPED RIGHT",
+    rarity: 'COMMON',
+    suggestedActions: ["SWIPE_RIGHT","PEACE_SIGN"],
     description: 'Neon emerald motion blur speeding to the right with floating hearts.',
     aspectRatio: 4 / 3,
     tags: ['swipe_right', 'match', 'yes', 'approved', 'whoosh'],
@@ -743,7 +808,10 @@ export const DEFAULT_MEME_LIBRARY: MemeVisualDefinition[] = [
   {
     id: 'MEME_FACEPALM',
     title: 'Classic Facepalm',
-    category: 'REACTION',
+    category: 'FAILURE',
+    caption: "WHY ARE YOU LIKE THIS?!",
+    rarity: 'COMMON',
+    suggestedActions: ["THUMBS_DOWN","ARMS_CROSSED"],
     description: 'Classic hand slapping forehead in utter disbelief.',
     aspectRatio: 4 / 3,
     tags: ['facepalm', 'zombie_walk', 'disbelief', 'fail'],
@@ -774,6 +842,9 @@ export const DEFAULT_MEME_LIBRARY: MemeVisualDefinition[] = [
     id: 'MEME_VICTORY_CROWN',
     title: 'Golden Victory Crown',
     category: 'CELEBRATION',
+    caption: "ABSOLUTE MONARCH // PEAK",
+    rarity: 'RARE',
+    suggestedActions: ["HANDS_RAISED","FLEX_POSE"],
     description: 'Shining golden crown adorned with jewels and celebration rays.',
     aspectRatio: 4 / 3,
     tags: ['crown', 'champion', 'victory', 'gold', 'winner'],
@@ -819,6 +890,541 @@ export const DEFAULT_MEME_LIBRARY: MemeVisualDefinition[] = [
         <text x="160" y="215" text-anchor="middle" font-family="monospace" font-weight="900" font-size="12" fill="#FDE047" letter-spacing="3">ABSOLUTE CHAMPION</text>
       </svg>
     `),
+  },
+
+  // ─── V3 ADVANCED MEME ADDITIONS (41 NEW MEMES) ───
+  {
+    id: 'MEME_WHAT_JUST_HAPPENED',
+    title: "What Just Happened?",
+    category: 'CONFUSION',
+    description: "Swirling spiral eyes and question marks floating around a bewildered cartoon face.",
+    caption: "WAIT... WHAT JUST HAPPENED?!",
+    aspectRatio: 1.3333333333333333,
+    tags: ["confusion","spiral","bewildered","open_palm","dazed"],
+    soundId: 'SAD_TROMBONE',
+    suggestedActions: ["OPEN_PALM","ZOMBIE_WALK","PINCH"],
+    rarity: 'COMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%23312E81%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22160%22%20cy%3D%22120%22%20r%3D%22100%22%20fill%3D%22%234338CA%22%20opacity%3D%220.4%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Floating%20Question%20Marks%20--%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%2240%22%20y%3D%2260%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2232%22%20fill%3D%22%23A5B4FC%22%20opacity%3D%220.6%22%3E%3F%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22260%22%20y%3D%2270%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2240%22%20fill%3D%22%23A5B4FC%22%20opacity%3D%220.8%22%3E%3F%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22280%22%20y%3D%22160%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2228%22%20fill%3D%22%23A5B4FC%22%20opacity%3D%220.5%22%3E%3F%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%2235%22%20y%3D%22170%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2236%22%20fill%3D%22%23A5B4FC%22%20opacity%3D%220.7%22%3E%3F%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Head%20--%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22160%22%20cy%3D%22115%22%20rx%3D%2265%22%20ry%3D%2260%22%20fill%3D%22%23FED7AA%22%20stroke%3D%22%23111827%22%20stroke-width%3D%225%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Spiral%20Eyes%20--%3E%0A%20%20%20%20%20%20%20%20%3Cg%20stroke%3D%22%23111827%22%20stroke-width%3D%223%22%20fill%3D%22none%22%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20135%20105%20A%206%206%200%200%201%20141%20111%20A%2012%2012%200%200%201%20129%20111%20A%2018%2018%200%200%201%20147%20111%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20185%20105%20A%206%206%200%200%201%20191%20111%20A%2012%2012%200%200%201%20179%20111%20A%2018%2018%200%200%201%20197%20111%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C%2Fg%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Wiggly%20Mouth%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20140%20145%20Q%20150%20152%20160%20145%20Q%20170%20138%20180%20145%22%20fill%3D%22none%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Dizzy%20Stars%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22120%2C45%20123%2C53%20131%2C53%20125%2C58%20127%2C66%20120%2C61%20113%2C66%20115%2C58%20109%2C53%20117%2C53%22%20fill%3D%22%23FACC15%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22200%2C45%20203%2C53%20211%2C53%20205%2C58%20207%2C66%20200%2C61%20193%2C66%20195%2C58%20189%2C53%20197%2C53%22%20fill%3D%22%23FACC15%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%23111827%22%20stroke%3D%22%23A5B4FC%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2212%22%20fill%3D%22%23A5B4FC%22%20letter-spacing%3D%222%22%3EWHAT%20JUST%20HAPPENED%3F!%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_CONFUSED_BRAIN',
+    title: "Confused Brain",
+    category: 'CONFUSION',
+    description: "Cartoon pink brain tangled with tangled electrical sparks and knots.",
+    caption: "BRAIN NOT BRAINING RIGHT NOW",
+    aspectRatio: 1.3333333333333333,
+    tags: ["brain","thinking","overload","knots","the_thinker"],
+    soundId: 'CARTOON_SQUEAK',
+    suggestedActions: ["THE_THINKER","ZEN_PRAYER"],
+    rarity: 'UNCOMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%231E1B4B%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Tangled%20Sparks%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%2040%2080%20Q%2080%2030%20110%2080%20T%20170%2040%20T%20240%2090%20T%20280%2060%22%20fill%3D%22none%22%20stroke%3D%22%23F43F5E%22%20stroke-width%3D%222%22%20stroke-dasharray%3D%224%2C4%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%2050%20160%20Q%2090%20200%20130%20150%20T%20210%20180%20T%20270%20140%22%20fill%3D%22none%22%20stroke%3D%22%2338BDF8%22%20stroke-width%3D%222%22%20stroke-dasharray%3D%224%2C4%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Pink%20Brain%20Lobes%20--%3E%0A%20%20%20%20%20%20%20%20%3Cg%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22125%22%20cy%3D%22110%22%20rx%3D%2245%22%20ry%3D%2240%22%20fill%3D%22%23F472B6%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22195%22%20cy%3D%22110%22%20rx%3D%2245%22%20ry%3D%2240%22%20fill%3D%22%23F472B6%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22160%22%20cy%3D%2295%22%20r%3D%2235%22%20fill%3D%22%23FB7185%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20120%2090%20C%20110%20110%20135%20125%20120%20140%20C%20145%20130%20150%20110%20160%20120%20C%20170%20110%20175%20130%20200%20140%20C%20185%20125%20210%20110%20200%2090%22%20fill%3D%22none%22%20stroke%3D%22%23BE185D%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C%2Fg%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Dizzy%20X%20Eyes%20--%3E%0A%20%20%20%20%20%20%20%20%3Cg%20stroke%3D%22%23111827%22%20stroke-width%3D%223%22%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22135%22%20y1%3D%22105%22%20x2%3D%22147%22%20y2%3D%22117%22%2F%3E%3Cline%20x1%3D%22147%22%20y1%3D%22105%22%20x2%3D%22135%22%20y2%3D%22117%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22173%22%20y1%3D%22105%22%20x2%3D%22185%22%20y2%3D%22117%22%2F%3E%3Cline%20x1%3D%22185%22%20y1%3D%22105%22%20x2%3D%22173%22%20y2%3D%22117%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C%2Fg%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Drooping%20Sweat%20Drop%20--%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22230%22%20cy%3D%22100%22%20rx%3D%226%22%20ry%3D%2210%22%20fill%3D%22%2338BDF8%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%230F172A%22%20stroke%3D%22%23F472B6%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2212%22%20fill%3D%22%23F472B6%22%20letter-spacing%3D%221%22%3EBRAIN%20NOT%20BRAINING%20RIGHT%20NOW%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_CALCULATING',
+    title: "Calculating...",
+    category: 'CONFUSION',
+    description: "Complex math formulas, trigonometry, and a spinning loading circle around a confused face.",
+    caption: "CALCULATING COMPLEXITY (0% DONE)",
+    aspectRatio: 1.3333333333333333,
+    tags: ["math","calculating","formulas","the_thinker","geometry"],
+    soundId: 'SINGING_BOWL',
+    suggestedActions: ["THE_THINKER","THREE_FINGERS","ZEN_PRAYER"],
+    rarity: 'COMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%230F172A%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Math%20Formulas%20Floating%20--%3E%0A%20%20%20%20%20%20%20%20%3Cg%20fill%3D%22%2338BDF8%22%20font-family%3D%22monospace%22%20font-size%3D%2211%22%20opacity%3D%220.6%22%3E%0A%20%20%20%20%20%20%20%20%20%20%3Ctext%20x%3D%2230%22%20y%3D%2245%22%3Esin%C2%B2%CE%B8%20%2B%20cos%C2%B2%CE%B8%20%3D%201%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22190%22%20y%3D%2245%22%3EE%20%3D%20mc%C2%B2%20%3F%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%20%20%3Ctext%20x%3D%2225%22%20y%3D%22105%22%3E%E2%88%AB%20x%C2%B2%20dx%20%3D%20x%C2%B3%2F3%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22210%22%20y%3D%22115%22%3Ef'(x)%20%3D%20lim%20%CE%94x%E2%86%920%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%20%20%3Ctext%20x%3D%2235%22%20y%3D%22165%22%3E%CF%80%20%E2%89%88%203.14159...%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22205%22%20y%3D%22170%22%3E%E2%88%9A(-1)%20%3D%202%20%2B%202%20%3D%205%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%3C%2Fg%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Confused%20Character%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22160%22%20cy%3D%22115%22%20r%3D%2245%22%20fill%3D%22%23FEF08A%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22145%22%20cy%3D%22108%22%20rx%3D%226%22%20ry%3D%228%22%20fill%3D%22%23111827%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22175%22%20cy%3D%22108%22%20rx%3D%226%22%20ry%3D%228%22%20fill%3D%22%23111827%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20One%20Raised%20Eyebrow%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20138%2095%20Q%20145%2090%20152%2095%22%20fill%3D%22none%22%20stroke%3D%22%23111827%22%20stroke-width%3D%223%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20168%2090%20Q%20175%2080%20182%2090%22%20fill%3D%22none%22%20stroke%3D%22%23111827%22%20stroke-width%3D%223%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22160%22%20cy%3D%22130%22%20rx%3D%225%22%20ry%3D%226%22%20fill%3D%22%23111827%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Spinning%20Dashed%20Wheel%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22160%22%20cy%3D%22115%22%20r%3D%2258%22%20fill%3D%22none%22%20stroke%3D%22%23F59E0B%22%20stroke-width%3D%223%22%20stroke-dasharray%3D%2216%2C8%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%230284C7%22%20stroke%3D%22%23FFF%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2211%22%20fill%3D%22%23FFF%22%20letter-spacing%3D%221%22%3ECALCULATING%20COMPLEXITY%20(0%25%20DONE)%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_ERROR_404_LOGIC',
+    title: "Error 404: Logic Not Found",
+    category: 'CONFUSION',
+    description: "Retro CRT blue-screen terminal with giant flashing 404 block text.",
+    caption: "ERROR 404: REASON NOT FOUND",
+    aspectRatio: 1.3333333333333333,
+    tags: ["404","error","terminal","glitch","retro","four_fingers"],
+    soundId: 'RECORD_SCRATCH',
+    suggestedActions: ["FOUR_FINGERS","ZOMBIE_WALK"],
+    rarity: 'UNCOMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%231E3A8A%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Scanlines%20--%3E%0A%20%20%20%20%20%20%20%20%3Cg%20stroke%3D%22%231D4ED8%22%20stroke-width%3D%221%22%20opacity%3D%220.3%22%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cline%20x1%3D%220%22%20y1%3D%2220%22%20x2%3D%22320%22%20y2%3D%2220%22%2F%3E%3Cline%20x1%3D%220%22%20y1%3D%2240%22%20x2%3D%22320%22%20y2%3D%2240%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cline%20x1%3D%220%22%20y1%3D%2260%22%20x2%3D%22320%22%20y2%3D%2260%22%2F%3E%3Cline%20x1%3D%220%22%20y1%3D%2280%22%20x2%3D%22320%22%20y2%3D%2280%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cline%20x1%3D%220%22%20y1%3D%22100%22%20x2%3D%22320%22%20y2%3D%22100%22%2F%3E%3Cline%20x1%3D%220%22%20y1%3D%22120%22%20x2%3D%22320%22%20y2%3D%22120%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cline%20x1%3D%220%22%20y1%3D%22140%22%20x2%3D%22320%22%20y2%3D%22140%22%2F%3E%3Cline%20x1%3D%220%22%20y1%3D%22160%22%20x2%3D%22320%22%20y2%3D%22160%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cline%20x1%3D%220%22%20y1%3D%22180%22%20x2%3D%22320%22%20y2%3D%22180%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C%2Fg%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Blue%20Screen%20Sad%20Face%20--%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%2250%22%20y%3D%2285%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2252%22%20fill%3D%22%23FFF%22%3E%3A(%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22135%22%20y%3D%2285%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2244%22%20fill%3D%22%23F87171%22%3E404%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Terminal%20Body%20Lines%20--%3E%0A%20%20%20%20%20%20%20%20%3Cg%20fill%3D%22%2393C5FD%22%20font-family%3D%22monospace%22%20font-size%3D%2211%22%3E%0A%20%20%20%20%20%20%20%20%20%20%3Ctext%20x%3D%2235%22%20y%3D%22120%22%3E%3E%20SYSTEM_HALT%3A%20BRAIN_THREAD_CRASH%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%20%20%3Ctext%20x%3D%2235%22%20y%3D%22140%22%3E%3E%20ATTEMPTING%20TO%20REBOOT%20COGNITION...%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%20%20%3Ctext%20x%3D%2235%22%20y%3D%22160%22%3E%3E%20STATUS%3A%20LOGIC_MODULE_NOT_FOUND%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%3C%2Fg%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%224%22%20fill%3D%22%23000%22%20stroke%3D%22%23F87171%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2212%22%20fill%3D%22%23F87171%22%20letter-spacing%3D%222%22%3EERROR%20404%3A%20REASON%20NOT%20FOUND%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_WAIT_WHAT',
+    title: "Wait, What?",
+    category: 'CONFUSION',
+    description: "Cartoon double-take expression with oversized magnifying glass and tilted head.",
+    caption: "EXCUSE ME... WAIT, WHAT?",
+    aspectRatio: 1.3333333333333333,
+    tags: ["magnifying_glass","double_take","pinch","open_palm"],
+    soundId: 'CARTOON_BOING',
+    suggestedActions: ["OPEN_PALM","PINCH"],
+    rarity: 'COMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%23475569%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Giant%20Monocle%20%2F%20Magnifying%20Glass%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22130%22%20cy%3D%22105%22%20r%3D%2248%22%20fill%3D%22%23BAE6FD%22%20stroke%3D%22%23F59E0B%22%20stroke-width%3D%227%22%20opacity%3D%220.9%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cline%20x1%3D%2295%22%20y1%3D%22140%22%20x2%3D%2260%22%20y2%3D%22175%22%20stroke%3D%22%23F59E0B%22%20stroke-width%3D%228%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Giant%20Eye%20inside%20glass%20--%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22130%22%20cy%3D%22105%22%20rx%3D%2222%22%20ry%3D%2226%22%20fill%3D%22%23111827%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22136%22%20cy%3D%2298%22%20r%3D%228%22%20fill%3D%22%23FFF%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Normal%20Eye%20Outside%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22215%22%20cy%3D%22105%22%20r%3D%2214%22%20fill%3D%22%23FEF08A%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22215%22%20cy%3D%22105%22%20r%3D%225%22%20fill%3D%22%23111827%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Raised%20Eyebrows%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20105%2055%20Q%20130%2040%20155%2055%22%20fill%3D%22none%22%20stroke%3D%22%23F59E0B%22%20stroke-width%3D%225%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20200%2080%20Q%20215%2070%20230%2080%22%20fill%3D%22none%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Tiny%20Shock%20Mouth%20--%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22175%22%20cy%3D%22155%22%20rx%3D%228%22%20ry%3D%2212%22%20fill%3D%22%23111827%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%230F172A%22%20stroke%3D%22%23F59E0B%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2213%22%20fill%3D%22%23F59E0B%22%20letter-spacing%3D%222%22%3EEXCUSE%20ME...%20WAIT%2C%20WHAT%3F%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_QUESTION_MARK_OVERLOAD',
+    title: "Question Mark Overload",
+    category: 'CONFUSION',
+    description: "Gigantic glowing neon 3D question mark bursting from a cloud of comic confusion.",
+    caption: "???????????????",
+    aspectRatio: 1.3333333333333333,
+    tags: ["question","neon","overload","clouds","the_thinker"],
+    soundId: 'DRAMATIC_SUSPENSE',
+    suggestedActions: ["THE_THINKER","PINCH"],
+    rarity: 'UNCOMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Cdefs%3E%0A%20%20%20%20%20%20%20%20%20%20%3ClinearGradient%20id%3D%22q-grad%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23C084FC%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%237E22CE%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%20%20%20%20%20%20%3C%2Fdefs%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%23171717%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Comic%20Puff%20Clouds%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%2280%22%20cy%3D%22150%22%20r%3D%2235%22%20fill%3D%22%23404040%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22240%22%20cy%3D%22150%22%20r%3D%2235%22%20fill%3D%22%23404040%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22160%22%20cy%3D%22170%22%20r%3D%2245%22%20fill%3D%22%23525252%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Giant%20Glowing%20Question%20Mark%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20125%2075%20C%20125%2045%20195%2045%20195%2075%20C%20195%2095%20160%20105%20160%20130%22%20fill%3D%22none%22%20stroke%3D%22url(%23q-grad)%22%20stroke-width%3D%2222%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22160%22%20cy%3D%22158%22%20r%3D%2211%22%20fill%3D%22url(%23q-grad)%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Outer%20Glow%20Outline%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20125%2075%20C%20125%2045%20195%2045%20195%2075%20C%20195%2095%20160%20105%20160%20130%22%20fill%3D%22none%22%20stroke%3D%22%23E9D5FF%22%20stroke-width%3D%226%22%20stroke-linecap%3D%22round%22%20opacity%3D%220.7%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22160%22%20cy%3D%22158%22%20r%3D%224%22%20fill%3D%22%23FFF%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2225%22%20y%3D%22195%22%20width%3D%22270%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%233B0764%22%20stroke%3D%22%23C084FC%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22217%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2216%22%20fill%3D%22%23F3E8FF%22%20letter-spacing%3D%224%22%3E%3F%3F%3F%3F%3F%3F%3F%3F%3F%3F%3F%3F%3F%3F%3F%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_JAW_DROP',
+    title: "Jaw Drop",
+    category: 'SHOCK',
+    description: "Cartoon face with an elastic jaw stretched all the way to the floor in disbelief.",
+    caption: "JAW PHYSICALLY DETACHED",
+    aspectRatio: 1.3333333333333333,
+    tags: ["jaw_drop","shock","stunned","t_pose","open_palm"],
+    soundId: 'CARTOON_BOING',
+    suggestedActions: ["T_POSE","OPEN_PALM"],
+    rarity: 'COMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%23881337%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Head%20Top%20--%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22160%22%20cy%3D%2270%22%20rx%3D%2260%22%20ry%3D%2245%22%20fill%3D%22%23FED7AA%22%20stroke%3D%22%23111827%22%20stroke-width%3D%225%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Staring%20Huge%20Eyes%20--%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22140%22%20cy%3D%2265%22%20rx%3D%2216%22%20ry%3D%2220%22%20fill%3D%22%23FFF%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22142%22%20cy%3D%2265%22%20r%3D%227%22%20fill%3D%22%23111827%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22180%22%20cy%3D%2265%22%20rx%3D%2216%22%20ry%3D%2220%22%20fill%3D%22%23FFF%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22178%22%20cy%3D%2265%22%20r%3D%227%22%20fill%3D%22%23111827%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Dropping%20Jaw%20Tube%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%22135%22%20y%3D%2285%22%20width%3D%2250%22%20height%3D%2295%22%20fill%3D%22%234C0519%22%20stroke%3D%22%23111827%22%20stroke-width%3D%225%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22160%22%20cy%3D%22180%22%20rx%3D%2228%22%20ry%3D%2212%22%20fill%3D%22%23FED7AA%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Teeth%20Visible%20in%20Chasm%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%22142%22%20y%3D%2288%22%20width%3D%228%22%20height%3D%2210%22%20fill%3D%22%23FFF%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%22154%22%20y%3D%2288%22%20width%3D%228%22%20height%3D%2210%22%20fill%3D%22%23FFF%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%22166%22%20y%3D%2288%22%20width%3D%228%22%20height%3D%2210%22%20fill%3D%22%23FFF%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Impact%20Sparkles%20at%20Floor%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22120%2C180%20125%2C170%20130%2C180%22%20fill%3D%22%23FACC15%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22190%2C180%20195%2C170%20200%2C180%22%20fill%3D%22%23FACC15%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%23111827%22%20stroke%3D%22%23FDA4AF%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2212%22%20fill%3D%22%23FDA4AF%22%20letter-spacing%3D%222%22%3EJAW%20PHYSICALLY%20DETACHED%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_ABSOLUTE_SHOCK',
+    title: "Absolute Shock",
+    category: 'SHOCK',
+    description: "High voltage comic lightning strike with electric skeleton flash and upright hair.",
+    caption: "ABSOLUTE UNFILTERED SHOCK",
+    aspectRatio: 1.3333333333333333,
+    tags: ["electric","lightning","shock","jump","open_palm"],
+    soundId: 'INCEPTION_BRAAAM',
+    suggestedActions: ["JUMP","OPEN_PALM"],
+    rarity: 'COMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%23020617%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Big%20Lightning%20Bolt%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22175%2C10%20130%2C95%20165%2C95%20125%2C185%20190%2C85%20155%2C85%22%20fill%3D%22%23FACC15%22%20stroke%3D%22%23FEF08A%22%20stroke-width%3D%223%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Electrified%20Silhouette%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22160%22%20cy%3D%22115%22%20r%3D%2245%22%20fill%3D%22%2338BDF8%22%20opacity%3D%220.3%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22160%22%20cy%3D%22115%22%20rx%3D%2235%22%20ry%3D%2232%22%20fill%3D%22%230F172A%22%20stroke%3D%22%2338BDF8%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Spiky%20Hair%20standing%20straight%20up%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22135%2C85%20130%2C55%20145%2C80%20155%2C45%20165%2C80%20175%2C50%20185%2C85%22%20fill%3D%22%23FACC15%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Shocked%20Eyes%20%26%20Mouth%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22148%22%20cy%3D%22112%22%20r%3D%228%22%20fill%3D%22%23FFF%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22172%22%20cy%3D%22112%22%20r%3D%228%22%20fill%3D%22%23FFF%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22160%22%20cy%3D%22132%22%20rx%3D%2210%22%20ry%3D%228%22%20fill%3D%22%23F87171%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Sparks%20--%3E%0A%20%20%20%20%20%20%20%20%3Cg%20stroke%3D%22%23FACC15%22%20stroke-width%3D%222%22%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cline%20x1%3D%2270%22%20y1%3D%2290%22%20x2%3D%2290%22%20y2%3D%22100%22%2F%3E%3Cline%20x1%3D%22250%22%20y1%3D%2290%22%20x2%3D%22230%22%20y2%3D%22100%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cline%20x1%3D%2280%22%20y1%3D%22140%22%20x2%3D%22105%22%20y2%3D%22135%22%2F%3E%3Cline%20x1%3D%22240%22%20y1%3D%22140%22%20x2%3D%22215%22%20y2%3D%22135%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C%2Fg%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%230F172A%22%20stroke%3D%22%23FACC15%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2212%22%20fill%3D%22%23FACC15%22%20letter-spacing%3D%222%22%3EABSOLUTE%20UNFILTERED%20SHOCK%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_PLOT_TWIST',
+    title: "Unexpected Plot Twist",
+    category: 'SHOCK',
+    description: "Dramatic vintage cinema projector with bold top 10 anime plot twist warning.",
+    caption: "NOBODY PREDICTED THIS PLOT TWIST",
+    aspectRatio: 1.3333333333333333,
+    tags: ["plot_twist","cinema","dramatic","open_palm","arms_crossed"],
+    soundId: 'DRAMATIC_SUSPENSE',
+    suggestedActions: ["OPEN_PALM","ARMS_CROSSED"],
+    rarity: 'UNCOMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%2309090B%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Dramatic%20Red%20Spotlight%20Cone%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22160%2C25%2030%2C190%20290%2C190%22%20fill%3D%22%23DC2626%22%20opacity%3D%220.25%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Film%20Reel%20Circles%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22160%22%20cy%3D%2265%22%20r%3D%2230%22%20fill%3D%22%2327272A%22%20stroke%3D%22%23E4E4E7%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22160%22%20cy%3D%2265%22%20r%3D%228%22%20fill%3D%22%23E4E4E7%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Dramatic%20Warning%20Stamp%20Card%20--%3E%0A%20%20%20%20%20%20%20%20%3Cg%20transform%3D%22translate(45%2C%20105)%20rotate(-3)%22%3E%0A%20%20%20%20%20%20%20%20%20%20%3Crect%20width%3D%22230%22%20height%3D%2250%22%20rx%3D%224%22%20fill%3D%22%23FEF08A%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22115%22%20y%3D%2228%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2214%22%20fill%3D%22%23DC2626%22%3ETOP%2010%20ANIME%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22115%22%20y%3D%2244%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2215%22%20fill%3D%22%23111827%22%20letter-spacing%3D%222%22%3EPLOT%20TWISTS%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%3C%2Fg%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%2318181B%22%20stroke%3D%22%23DC2626%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2211%22%20fill%3D%22%23FEF08A%22%20letter-spacing%3D%221%22%3ENOBODY%20PREDICTED%20THIS%20PLOT%20TWIST%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_EYES_WIDE_OPEN',
+    title: "Eyes Wide Open",
+    category: 'SHOCK',
+    description: "Massive cartoon eyeballs popping straight out on steel spring coils.",
+    caption: "CANNOT UNSEE WHAT WAS SEEN",
+    aspectRatio: 1.3333333333333333,
+    tags: ["eyes","springs","cartoon","pointing","open_palm"],
+    soundId: 'CARTOON_SQUEAK',
+    suggestedActions: ["POINTING","OPEN_PALM"],
+    rarity: 'COMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%231C1917%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Spring%20Coils%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20120%20140%20Q%20110%20120%20120%20100%20Q%20130%2080%20120%2060%22%20fill%3D%22none%22%20stroke%3D%22%23A8A29E%22%20stroke-width%3D%226%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20200%20140%20Q%20210%20120%20200%20100%20Q%20190%2080%20200%2060%22%20fill%3D%22none%22%20stroke%3D%22%23A8A29E%22%20stroke-width%3D%226%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Popped%20Giant%20Eyeballs%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22120%22%20cy%3D%2265%22%20r%3D%2235%22%20fill%3D%22%23FFF%22%20stroke%3D%22%23111827%22%20stroke-width%3D%225%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22120%22%20cy%3D%2265%22%20r%3D%2214%22%20fill%3D%22%230284C7%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22120%22%20cy%3D%2265%22%20r%3D%226%22%20fill%3D%22%23111827%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22125%22%20cy%3D%2260%22%20r%3D%224%22%20fill%3D%22%23FFF%22%2F%3E%0A%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22200%22%20cy%3D%2265%22%20r%3D%2235%22%20fill%3D%22%23FFF%22%20stroke%3D%22%23111827%22%20stroke-width%3D%225%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22200%22%20cy%3D%2265%22%20r%3D%2214%22%20fill%3D%22%230284C7%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22200%22%20cy%3D%2265%22%20r%3D%226%22%20fill%3D%22%23111827%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22205%22%20cy%3D%2260%22%20r%3D%224%22%20fill%3D%22%23FFF%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Open%20Gaping%20Mouth%20at%20Base%20--%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22160%22%20cy%3D%22160%22%20rx%3D%2230%22%20ry%3D%2220%22%20fill%3D%22%23DC2626%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%230C0A09%22%20stroke%3D%22%2338BDF8%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2212%22%20fill%3D%22%2338BDF8%22%20letter-spacing%3D%221%22%3ECANNOT%20UNSEE%20WHAT%20WAS%20SEEN%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_BRO_WHAT',
+    title: "Bro What?",
+    category: 'SHOCK',
+    description: "High contrast dramatic skull / stunned face bathed in moody half-tone shadows.",
+    caption: "BRO... ARE YOU SERIOUS RIGHT NOW?",
+    aspectRatio: 1.3333333333333333,
+    tags: ["bro_what","skull","serious","open_palm","arms_crossed"],
+    soundId: 'CHAD_GONG',
+    suggestedActions: ["OPEN_PALM","ARMS_CROSSED"],
+    rarity: 'UNCOMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%23000%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Comic%20Half-tone%20Stunned%20Silhouette%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22160%22%20cy%3D%22100%22%20r%3D%2260%22%20fill%3D%22%231E293B%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Deep%20Shadow%20Face%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20120%2075%20Q%20160%2065%20200%2075%20L%20195%20140%20Q%20160%20160%20125%20140%20Z%22%20fill%3D%22%23334155%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Staring%20Black%20Hollow%20Eye%20Sockets%20--%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22140%22%20cy%3D%2295%22%20rx%3D%2214%22%20ry%3D%2218%22%20fill%3D%22%23000%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22180%22%20cy%3D%2295%22%20rx%3D%2214%22%20ry%3D%2218%22%20fill%3D%22%23000%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Tiny%20white%20pupil%20glint%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22140%22%20cy%3D%2295%22%20r%3D%223%22%20fill%3D%22%23FFF%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22180%22%20cy%3D%2295%22%20r%3D%223%22%20fill%3D%22%23FFF%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Flat%20Unimpressed%20Line%20Mouth%20--%3E%0A%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22140%22%20y1%3D%22135%22%20x2%3D%22180%22%20y2%3D%22135%22%20stroke%3D%22%23000%22%20stroke-width%3D%225%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bold%20Comic%20Vignette%20Lines%20--%3E%0A%20%20%20%20%20%20%20%20%3Cline%20x1%3D%2220%22%20y1%3D%2220%22%20x2%3D%2270%22%20y2%3D%2260%22%20stroke%3D%22%23475569%22%20stroke-width%3D%223%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22300%22%20y1%3D%2220%22%20x2%3D%22250%22%20y2%3D%2260%22%20stroke%3D%22%23475569%22%20stroke-width%3D%223%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%230F172A%22%20stroke%3D%22%23E2E8F0%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2212%22%20fill%3D%22%23FFF%22%20letter-spacing%3D%221%22%3EBRO...%20ARE%20YOU%20SERIOUS%20RIGHT%20NOW%3F%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_SYSTEM_OVERLOAD',
+    title: "System Overload",
+    category: 'SHOCK',
+    description: "Robot head with exploding steam vents and emergency meter redlined at 999%.",
+    caption: "CRITICAL SYSTEM OVERLOAD!",
+    aspectRatio: 1.3333333333333333,
+    tags: ["robot","overload","critical","closed_fist","jump"],
+    soundId: 'AIR_HORN',
+    suggestedActions: ["CLOSED_FIST","JUMP"],
+    rarity: 'COMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%23450A0A%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Steam%20Clouds%20--%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%2280%22%20cy%3D%2270%22%20rx%3D%2235%22%20ry%3D%2225%22%20fill%3D%22%23E2E8F0%22%20opacity%3D%220.6%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22240%22%20cy%3D%2270%22%20rx%3D%2235%22%20ry%3D%2225%22%20fill%3D%22%23E2E8F0%22%20opacity%3D%220.6%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Robot%20Head%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%22110%22%20y%3D%2260%22%20width%3D%22100%22%20height%3D%2295%22%20rx%3D%228%22%20fill%3D%22%2371717A%22%20stroke%3D%22%23111827%22%20stroke-width%3D%225%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Antenna%20with%20Sparks%20--%3E%0A%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22160%22%20y1%3D%2260%22%20x2%3D%22160%22%20y2%3D%2230%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22160%22%20cy%3D%2225%22%20r%3D%228%22%20fill%3D%22%23EF4444%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Red%20Glowing%20Eyes%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%22125%22%20y%3D%2285%22%20width%3D%2228%22%20height%3D%2218%22%20fill%3D%22%23EF4444%22%20stroke%3D%22%23111827%22%20stroke-width%3D%223%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%22167%22%20y%3D%2285%22%20width%3D%2228%22%20height%3D%2218%22%20fill%3D%22%23EF4444%22%20stroke%3D%22%23111827%22%20stroke-width%3D%223%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Gauge%20at%20999%25%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%22125%22%20y%3D%22120%22%20width%3D%2270%22%20height%3D%2222%22%20rx%3D%223%22%20fill%3D%22%23000%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22136%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2212%22%20fill%3D%22%23EF4444%22%3E999%25%20HEAT%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%2318181B%22%20stroke%3D%22%23EF4444%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2213%22%20fill%3D%22%23EF4444%22%20letter-spacing%3D%222%22%3ECRITICAL%20SYSTEM%20OVERLOAD!%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_MAIN_CHARACTER',
+    title: "Main Character Energy",
+    category: 'CONFIDENCE',
+    description: "Dramatic golden sunburst backlighting with heroic windblown anime silhouette.",
+    caption: "MAIN CHARACTER ENERGY UNLOCKED",
+    aspectRatio: 1.3333333333333333,
+    tags: ["main_character","aura","anime","t_pose","flex_pose"],
+    soundId: 'CONFIDENT_ENTRANCE',
+    suggestedActions: ["T_POSE","FLEX_POSE","DOUBLE_BICEPS_FLEX"],
+    rarity: 'UNCOMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Cdefs%3E%0A%20%20%20%20%20%20%20%20%20%20%3CradialGradient%20id%3D%22mc-sun%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%0A%20%20%20%20%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23FEF08A%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%2260%25%22%20stop-color%3D%22%23F59E0B%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%2378350F%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3C%2FradialGradient%3E%0A%20%20%20%20%20%20%20%20%3C%2Fdefs%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22url(%23mc-sun)%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Radiant%20Starburst%20Lines%20--%3E%0A%20%20%20%20%20%20%20%20%3Cg%20stroke%3D%22%23FFF%22%20stroke-width%3D%223%22%20opacity%3D%220.4%22%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22160%22%20y1%3D%22120%22%20x2%3D%2230%22%20y2%3D%2220%22%2F%3E%3Cline%20x1%3D%22160%22%20y1%3D%22120%22%20x2%3D%22290%22%20y2%3D%2220%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22160%22%20y1%3D%22120%22%20x2%3D%220%22%20y2%3D%22120%22%2F%3E%3Cline%20x1%3D%22160%22%20y1%3D%22120%22%20x2%3D%22320%22%20y2%3D%22120%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22160%22%20y1%3D%22120%22%20x2%3D%2240%22%20y2%3D%22220%22%2F%3E%3Cline%20x1%3D%22160%22%20y1%3D%22120%22%20x2%3D%22280%22%20y2%3D%22220%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C%2Fg%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Hero%20Silhouette%20--%3E%0A%20%20%20%20%20%20%20%20%3Cg%20fill%3D%22%2318181B%22%3E%0A%20%20%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22160%22%20cy%3D%2275%22%20r%3D%2228%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3C!--%20Windblown%20Cape%20--%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22135%2C100%2070%2C175%20140%2C140%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22185%2C100%20250%2C175%20180%2C140%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3C!--%20Torso%20--%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22135%2C100%20185%2C100%20170%2C175%20150%2C175%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C%2Fg%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Gleaming%20Sunglasses%20Lens%20Flare%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%22145%22%20y%3D%2270%22%20width%3D%2230%22%20height%3D%228%22%20rx%3D%222%22%20fill%3D%22%23FFF%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22135%22%20y1%3D%2274%22%20x2%3D%22185%22%20y2%3D%2274%22%20stroke%3D%22%2338BDF8%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2215%22%20y%3D%22195%22%20width%3D%22290%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%23000%22%20stroke%3D%22%23FEF08A%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2212%22%20fill%3D%22%23FEF08A%22%20letter-spacing%3D%221%22%3EMAIN%20CHARACTER%20ENERGY%20UNLOCKED%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_MAXIMUM_AURA',
+    title: "Maximum Aura",
+    category: 'CONFIDENCE',
+    description: "Celestial purple flames with pixel sunglasses and +1,000,000 AURA badge.",
+    caption: "+1,000,000 AURA // UNTOUCHABLE",
+    aspectRatio: 1.3333333333333333,
+    tags: ["aura","confidence","shades","hands_on_hips","thumbs_up"],
+    soundId: 'ANIME_POWER_UP',
+    suggestedActions: ["HANDS_ON_HIPS","THUMBS_UP","FLEX_POSE"],
+    rarity: 'RARE',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%232E1065%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Aura%20Flame%20Waves%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%2090%20180%20C%2070%20120%20110%2080%20160%2040%20C%20210%2080%20250%20120%20230%20180%20Z%22%20fill%3D%22%23A855F7%22%20opacity%3D%220.6%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20110%20180%20C%2095%20130%20125%20100%20160%2065%20C%20195%20100%20225%20130%20210%20180%20Z%22%20fill%3D%22%23C084FC%22%20opacity%3D%220.8%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Pixel%20Sunglasses%20--%3E%0A%20%20%20%20%20%20%20%20%3Cg%20fill%3D%22%23000%22%20stroke%3D%22%23FFF%22%20stroke-width%3D%221.5%22%3E%0A%20%20%20%20%20%20%20%20%20%20%3Crect%20x%3D%22115%22%20y%3D%2295%22%20width%3D%2240%22%20height%3D%2216%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Crect%20x%3D%22165%22%20y%3D%2295%22%20width%3D%2240%22%20height%3D%2216%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Crect%20x%3D%22155%22%20y%3D%2299%22%20width%3D%2210%22%20height%3D%226%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3C!--%20Lens%20Glint%20--%3E%0A%20%20%20%20%20%20%20%20%20%20%3Crect%20x%3D%22120%22%20y%3D%2298%22%20width%3D%226%22%20height%3D%224%22%20fill%3D%22%23FFF%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Crect%20x%3D%22170%22%20y%3D%2298%22%20width%3D%226%22%20height%3D%224%22%20fill%3D%22%23FFF%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C%2Fg%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Smirk%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20148%20135%20Q%20160%20145%20174%20133%22%20fill%3D%22none%22%20stroke%3D%22%23FEF08A%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Golden%20Aura%20Badge%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2285%22%20y%3D%22152%22%20width%3D%22150%22%20height%3D%2224%22%20rx%3D%224%22%20fill%3D%22%23FACC15%22%20stroke%3D%22%23111827%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22168%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2211%22%20fill%3D%22%23000%22%3E%2B1%2C000%2C000%20AURA%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2215%22%20y%3D%22195%22%20width%3D%22290%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%23000%22%20stroke%3D%22%23A855F7%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2212%22%20fill%3D%22%23E9D5FF%22%20letter-spacing%3D%221%22%3E%2B1%2C000%2C000%20AURA%20%2F%2F%20UNTOUCHABLE%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_ABSOLUTE_CHAD_CHIN',
+    title: "Absolute Chad Jawline",
+    category: 'CONFIDENCE',
+    description: "Chiseled Grecian statue jawline with sparkling white tooth twinkle star.",
+    caption: "AVERAGE ACTION ENJOYER",
+    aspectRatio: 1.3333333333333333,
+    tags: ["chad","jawline","chiseled","thumbs_up","hands_on_hips"],
+    soundId: 'CHAD_GONG',
+    suggestedActions: ["THUMBS_UP","HANDS_ON_HIPS","FLEX_POSE"],
+    rarity: 'UNCOMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%231C1917%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Marble%20Statue%20Contour%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22120%2C40%20200%2C40%20220%2C105%20180%2C165%20140%2C165%20100%2C105%22%20fill%3D%22%23D6D3D1%22%20stroke%3D%22%23111827%22%20stroke-width%3D%226%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Ultra%20Chiseled%20Chin%20Cutout%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22140%2C165%20180%2C165%20170%2C185%20150%2C185%22%20fill%3D%22%23A8A29E%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Determined%20Narrow%20Brow%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22115%2C75%20155%2C85%20155%2C75%20115%2C65%22%20fill%3D%22%2344403C%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22205%2C75%20165%2C85%20165%2C75%20205%2C65%22%20fill%3D%22%2344403C%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Sparkling%20Star%20Glint%20on%20Tooth%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22175%2C135%20178%2C125%20181%2C135%20191%2C138%20181%2C141%20178%2C151%20175%2C141%20165%2C138%22%20fill%3D%22%23FACC15%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22178%22%20cy%3D%22138%22%20r%3D%223%22%20fill%3D%22%23FFF%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%230C0A09%22%20stroke%3D%22%23E7E5E4%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2213%22%20fill%3D%22%23E7E5E4%22%20letter-spacing%3D%222%22%3EAVERAGE%20ACTION%20ENJOYER%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_VICTORY_ACHIEVED',
+    title: "Victory Achieved",
+    category: 'CONFIDENCE',
+    description: "Golden championship cup with royal laurel wreath and celebratory ribbons.",
+    caption: "VICTORY SECURED // FLAWLESS",
+    aspectRatio: 1.3333333333333333,
+    tags: ["trophy","victory","winner","hands_raised","five_fingers"],
+    soundId: 'VICTORY_BELL',
+    suggestedActions: ["HANDS_RAISED","FIVE_FINGERS"],
+    rarity: 'COMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%23064E3B%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Laurel%20Leaves%20--%3E%0A%20%20%20%20%20%20%20%20%3Cg%20fill%3D%22%2310B981%22%20stroke%3D%22%23111827%22%20stroke-width%3D%222%22%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%2290%22%20cy%3D%2290%22%20rx%3D%2214%22%20ry%3D%228%22%20transform%3D%22rotate(-30%2090%2090)%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%2285%22%20cy%3D%22120%22%20rx%3D%2214%22%20ry%3D%228%22%20transform%3D%22rotate(-15%2085%20120)%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%2295%22%20cy%3D%22150%22%20rx%3D%2214%22%20ry%3D%228%22%20transform%3D%22rotate(10%2095%20150)%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22230%22%20cy%3D%2290%22%20rx%3D%2214%22%20ry%3D%228%22%20transform%3D%22rotate(30%20230%2090)%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22235%22%20cy%3D%22120%22%20rx%3D%2214%22%20ry%3D%228%22%20transform%3D%22rotate(15%20235%20120)%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22225%22%20cy%3D%22150%22%20rx%3D%2214%22%20ry%3D%228%22%20transform%3D%22rotate(-10%20225%20150)%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C%2Fg%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Golden%20Trophy%20Cup%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20120%2050%20L%20200%2050%20L%20190%20120%20C%20190%20145%20130%20145%20130%20120%20Z%22%20fill%3D%22%23FACC15%22%20stroke%3D%22%23111827%22%20stroke-width%3D%225%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Handles%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20120%2065%20C%2095%2065%2095%20105%20125%20105%22%20fill%3D%22none%22%20stroke%3D%22%23FACC15%22%20stroke-width%3D%226%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20200%2065%20C%20225%2065%20225%20105%20195%20105%22%20fill%3D%22none%22%20stroke%3D%22%23FACC15%22%20stroke-width%3D%226%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Stem%20%26%20Base%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%22150%22%20y%3D%22138%22%20width%3D%2220%22%20height%3D%2225%22%20fill%3D%22%23EAB308%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%22125%22%20y%3D%22163%22%20width%3D%2270%22%20height%3D%2216%22%20rx%3D%223%22%20fill%3D%22%23B45309%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Star%20on%20Trophy%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22160%2C80%20163%2C88%20171%2C88%20165%2C93%20167%2C101%20160%2C96%20153%2C101%20155%2C93%20149%2C88%20157%2C88%22%20fill%3D%22%23FFF%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%23065F46%22%20stroke%3D%22%23FACC15%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2212%22%20fill%3D%22%23FACC15%22%20letter-spacing%3D%222%22%3EVICTORY%20SECURED%20%2F%2F%20FLAWLESS%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_UNSTOPPABLE',
+    title: "Unstoppable Momentum",
+    category: 'CONFIDENCE',
+    description: "Blazing fireball comet hurtling forward with sunglasses leaving a trail of sparks.",
+    caption: "NOTHING CAN STOP THIS MOMENTUM",
+    aspectRatio: 1.3333333333333333,
+    tags: ["unstoppable","comet","fireball","swipe_right","flex_pose"],
+    soundId: 'LASER_BEAM',
+    suggestedActions: ["SWIPE_RIGHT","FLEX_POSE"],
+    rarity: 'COMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%2318181B%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Comet%20Flame%20Trail%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%2250%2C110%20160%2C40%20220%2C110%20160%2C180%22%20fill%3D%22%23EA580C%22%20opacity%3D%220.8%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%2280%2C110%20170%2C60%20210%2C110%20170%2C160%22%20fill%3D%22%23F59E0B%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Flaming%20Core%20Sphere%20with%20Sunglasses%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22200%22%20cy%3D%22110%22%20r%3D%2242%22%20fill%3D%22%23FACC15%22%20stroke%3D%22%23111827%22%20stroke-width%3D%225%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%22180%22%20y%3D%2298%22%20width%3D%2245%22%20height%3D%2214%22%20rx%3D%222%22%20fill%3D%22%23111827%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22185%2C102%20195%2C102%20190%2C108%22%20fill%3D%22%23FFF%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22210%2C102%20220%2C102%20215%2C108%22%20fill%3D%22%23FFF%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Speed%20Streaks%20--%3E%0A%20%20%20%20%20%20%20%20%3Cline%20x1%3D%2220%22%20y1%3D%2270%22%20x2%3D%22110%22%20y2%3D%2270%22%20stroke%3D%22%23F97316%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cline%20x1%3D%2240%22%20y1%3D%22150%22%20x2%3D%22130%22%20y2%3D%22150%22%20stroke%3D%22%23F97316%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2215%22%20y%3D%22195%22%20width%3D%22290%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%23000%22%20stroke%3D%22%23F97316%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2211%22%20fill%3D%22%23FEF08A%22%20letter-spacing%3D%221%22%3ENOTHING%20CAN%20STOP%20THIS%20MOMENTUM%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_PERFECT_EXECUTION',
+    title: "Perfect Execution",
+    category: 'CONFIDENCE',
+    description: "Glowing 100/100 score card with golden SSS-Rank royal stamp.",
+    caption: "100/100 // PERFECT EXECUTION",
+    aspectRatio: 1.3333333333333333,
+    tags: ["perfect","score","sss_rank","clap","thumbs_up"],
+    soundId: 'LEVEL_UP_NOTIFICATION',
+    suggestedActions: ["CLAP","THUMBS_UP"],
+    rarity: 'COMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%230F172A%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Score%20Card%20Board%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2260%22%20y%3D%2235%22%20width%3D%22200%22%20height%3D%22140%22%20rx%3D%228%22%20fill%3D%22%23F8FAFC%22%20stroke%3D%22%231E293B%22%20stroke-width%3D%226%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Red%20Triple%20S%20Rank%20Badge%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22160%22%20cy%3D%2285%22%20r%3D%2234%22%20fill%3D%22%23DC2626%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%2296%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2228%22%20fill%3D%22%23FEF08A%22%3ESSS%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%3C!--%20100%2F100%20Score%20--%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22150%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2224%22%20fill%3D%22%230F172A%22%20letter-spacing%3D%222%22%3E100%20%2F%20100%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Gold%20Stars%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%2285%2C145%2088%2C138%2095%2C138%2090%2C143%2092%2C150%2085%2C146%2078%2C150%2080%2C143%2075%2C138%2082%2C138%22%20fill%3D%22%23EAB308%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22235%2C145%20238%2C138%20245%2C138%20240%2C143%20242%2C150%20235%2C146%20228%2C150%20230%2C143%20225%2C138%20232%2C138%22%20fill%3D%22%23EAB308%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%231E293B%22%20stroke%3D%22%23FEF08A%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2212%22%20fill%3D%22%23FEF08A%22%20letter-spacing%3D%222%22%3E100%2F100%20%2F%2F%20PERFECT%20EXECUTION%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_SKILL_ISSUE',
+    title: "Skill Issue",
+    category: 'FAILURE',
+    description: "Deflating pixel balloon with giant red down-vote arrow and critical miss indicator.",
+    caption: "PURE AND UNADULTERATED SKILL ISSUE",
+    aspectRatio: 1.3333333333333333,
+    tags: ["skill_issue","failure","balloon","thumbs_down","squat"],
+    soundId: 'SAD_TROMBONE',
+    suggestedActions: ["THUMBS_DOWN","SQUAT","SWIPE_LEFT"],
+    rarity: 'COMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%233F3F46%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Deflated%20Squeezed%20Balloon%20--%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22160%22%20cy%3D%2290%22%20rx%3D%2245%22%20ry%3D%2230%22%20fill%3D%22%23EF4444%22%20stroke%3D%22%23111827%22%20stroke-width%3D%225%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22115%2C90%20100%2C85%20100%2C95%22%20fill%3D%22%23EF4444%22%20stroke%3D%22%23111827%22%20stroke-width%3D%223%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Escaping%20Air%20Whistle%20Lines%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%2090%2090%20Q%2070%2080%2050%2090%22%20fill%3D%22none%22%20stroke%3D%22%23FFF%22%20stroke-width%3D%223%22%20stroke-dasharray%3D%224%2C4%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Giant%20Down%20Arrow%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22160%2C180%20135%2C135%20150%2C135%20150%2C115%20170%2C115%20170%2C135%20185%2C135%22%20fill%3D%22%23DC2626%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%2285%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2218%22%20fill%3D%22%23FFF%22%3EL%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2215%22%20y%3D%22195%22%20width%3D%22290%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%2318181B%22%20stroke%3D%22%23EF4444%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2211%22%20fill%3D%22%23FCA5A5%22%20letter-spacing%3D%221%22%3EPURE%20AND%20UNADULTERATED%20SKILL%20ISSUE%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_EMOTIONAL_DAMAGE',
+    title: "Emotional Damage",
+    category: 'FAILURE',
+    description: "Shattered crystal heart with -99,999 HP critical hit damage pop.",
+    caption: "CRITICAL HIT: EMOTIONAL DAMAGE",
+    aspectRatio: 1.3333333333333333,
+    tags: ["emotional_damage","heart","broken","closed_fist","thumbs_down"],
+    soundId: 'CARTOON_IMPACT',
+    suggestedActions: ["CLOSED_FIST","THUMBS_DOWN"],
+    rarity: 'COMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%2327272A%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Shattered%20Heart%20Halves%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20155%2070%20C%20130%2040%2095%2060%2095%2090%20C%2095%20125%20155%20160%20155%20160%20Z%22%20fill%3D%22%23E11D48%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20165%2070%20C%20190%2040%20225%2060%20225%2090%20C%20225%20125%20165%20160%20165%20160%20Z%22%20fill%3D%22%23BE123C%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Jagged%20Crack%20Between%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20158%2055%20L%20163%2080%20L%20153%20105%20L%20165%20130%20L%20160%20160%22%20fill%3D%22none%22%20stroke%3D%22%23FEF08A%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Damage%20Pop%20Number%20--%3E%0A%20%20%20%20%20%20%20%20%3Cg%20transform%3D%22translate(160%2C%2095)%20rotate(-8)%22%3E%0A%20%20%20%20%20%20%20%20%20%20%3Crect%20x%3D%22-70%22%20y%3D%22-18%22%20width%3D%22140%22%20height%3D%2232%22%20rx%3D%224%22%20fill%3D%22%23000%22%20stroke%3D%22%23EF4444%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Ctext%20x%3D%220%22%20y%3D%225%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2216%22%20fill%3D%22%23F87171%22%3E-99%2C999%20HP%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%3C%2Fg%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%2309090B%22%20stroke%3D%22%23E11D48%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2212%22%20fill%3D%22%23FDA4AF%22%20letter-spacing%3D%221%22%3ECRITICAL%20HIT%3A%20EMOTIONAL%20DAMAGE%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_MISSION_FAILED',
+    title: "Mission Failed",
+    category: 'FAILURE',
+    description: "Retro military HUD overlay with flashing red text: MISSION FAILED.",
+    caption: "MISSION FAILED // WE'LL GET 'EM NEXT TIME",
+    aspectRatio: 1.3333333333333333,
+    tags: ["mission_failed","hud","game_over","squat","swipe_left"],
+    soundId: 'SAD_TROMBONE',
+    suggestedActions: ["SQUAT","SWIPE_LEFT","CLOSED_FIST"],
+    rarity: 'COMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%2309090B%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Tactical%20Reticle%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22160%22%20cy%3D%22100%22%20r%3D%2260%22%20fill%3D%22none%22%20stroke%3D%22%23EF4444%22%20stroke-width%3D%222%22%20stroke-dasharray%3D%2212%2C6%22%20opacity%3D%220.4%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Huge%20Red%20Stamp%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2235%22%20y%3D%2270%22%20width%3D%22250%22%20height%3D%2255%22%20rx%3D%224%22%20fill%3D%22%237F1D1D%22%20stroke%3D%22%23EF4444%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22105%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2222%22%20fill%3D%22%23FEF2F2%22%20letter-spacing%3D%223%22%3EMISSION%20FAILED%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Static%20Subtitle%20--%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22150%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22bold%22%20font-size%3D%2212%22%20fill%3D%22%23EF4444%22%3EWE'LL%20GET%20'EM%20NEXT%20TIME%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%2318181B%22%20stroke%3D%22%23DC2626%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2210%22%20fill%3D%22%23FECACA%22%20letter-spacing%3D%221%22%3EMISSION%20FAILED%20%2F%2F%20WE'LL%20GET%20'EM%20NEXT%20TIME%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_NOT_PROUDEST_MOMENT',
+    title: "Not My Proudest Moment",
+    category: 'FAILURE',
+    description: "Cardboard box hiding on the floor with two timid cartoon eyes peeking out.",
+    caption: "NOT MY PROUDEST MOMENT HONESTLY",
+    aspectRatio: 1.3333333333333333,
+    tags: ["box","hiding","shame","zombie_walk","squat"],
+    soundId: 'CARTOON_SQUEAK',
+    suggestedActions: ["ZOMBIE_WALK","SQUAT"],
+    rarity: 'UNCOMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%23292524%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Cardboard%20Box%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%2280%2C95%20160%2C65%20240%2C95%20160%2C125%22%20fill%3D%22%23D97706%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%2280%2C95%20160%2C125%20160%2C180%2080%2C150%22%20fill%3D%22%23B45309%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22240%2C95%20160%2C125%20160%2C180%20240%2C150%22%20fill%3D%22%2392400E%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Eye%20Slit%20Opening%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%22135%22%20y%3D%22135%22%20width%3D%2250%22%20height%3D%2215%22%20rx%3D%223%22%20fill%3D%22%23000%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Peeking%20Eyes%20--%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22150%22%20cy%3D%22142%22%20rx%3D%225%22%20ry%3D%224%22%20fill%3D%22%23FFF%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22151%22%20cy%3D%22142%22%20r%3D%222%22%20fill%3D%22%23000%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22170%22%20cy%3D%22142%22%20rx%3D%225%22%20ry%3D%224%22%20fill%3D%22%23FFF%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22171%22%20cy%3D%22142%22%20r%3D%222%22%20fill%3D%22%23000%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%231C1917%22%20stroke%3D%22%23D97706%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2211%22%20fill%3D%22%23FDE68A%22%20letter-spacing%3D%221%22%3ENOT%20MY%20PROUDEST%20MOMENT%20HONESTLY%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_CRITICAL_FAILURE',
+    title: "Critical Failure",
+    category: 'FAILURE',
+    description: "Flaming 20-sided D&D dice showing a natural 1 engulfed in embers.",
+    caption: "NATURAL 1 // CRITICAL DISASTER",
+    aspectRatio: 1.3333333333333333,
+    tags: ["d20","natural_1","critical_fail","closed_fist","squat"],
+    soundId: 'CARTOON_IMPACT',
+    suggestedActions: ["CLOSED_FIST","SQUAT"],
+    rarity: 'UNCOMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%2318181B%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Flames%20Behind%20Dice%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22160%2C20%20120%2C90%20200%2C90%22%20fill%3D%22%23EA580C%22%20opacity%3D%220.7%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22140%2C40%20100%2C110%20180%2C110%22%20fill%3D%22%23F59E0B%22%20opacity%3D%220.8%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20D20%20Triangle%20Shape%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22160%2C50%2095%2C150%20225%2C150%22%20fill%3D%22%23450A0A%22%20stroke%3D%22%23DC2626%22%20stroke-width%3D%225%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22160%2C50%20160%2C150%2095%2C150%22%20fill%3D%22%237F1D1D%22%20stroke%3D%22%23DC2626%22%20stroke-width%3D%223%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Big%20Number%201%20on%20Dice%20--%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22125%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2244%22%20fill%3D%22%23FEF08A%22%3E1%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Embers%20%26%20Sparks%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%2290%22%20cy%3D%2260%22%20r%3D%223%22%20fill%3D%22%23F59E0B%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22230%22%20cy%3D%2270%22%20r%3D%224%22%20fill%3D%22%23F59E0B%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22160%22%20cy%3D%2230%22%20r%3D%223%22%20fill%3D%22%23EF4444%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%2309090B%22%20stroke%3D%22%23DC2626%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2212%22%20fill%3D%22%23FCA5A5%22%20letter-spacing%3D%222%22%3ENATURAL%201%20%2F%2F%20CRITICAL%20DISASTER%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_SIDE_EYE',
+    title: "Bombastic Side Eye",
+    category: 'SUSPICIOUS',
+    description: "Unreal horizontal side-glance with single high eyebrow and criminal suspicion.",
+    caption: "CRIMINAL OFFENSIVE SIDE EYE",
+    aspectRatio: 1.3333333333333333,
+    tags: ["side_eye","suspicious","judgment","arms_crossed","pointing"],
+    soundId: 'DISCO_SLAP',
+    suggestedActions: ["ARMS_CROSSED","POINTING"],
+    rarity: 'COMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%2314532D%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Silhouette%20Face%20--%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22160%22%20cy%3D%22110%22%20rx%3D%2275%22%20ry%3D%2260%22%20fill%3D%22%23FEF08A%22%20stroke%3D%22%23111827%22%20stroke-width%3D%225%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Extreme%20Side%20Glance%20Eyes%20--%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22130%22%20cy%3D%22105%22%20rx%3D%2222%22%20ry%3D%2214%22%20fill%3D%22%23FFF%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22114%22%20cy%3D%22105%22%20rx%3D%226%22%20ry%3D%228%22%20fill%3D%22%23111827%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22190%22%20cy%3D%22105%22%20rx%3D%2222%22%20ry%3D%2214%22%20fill%3D%22%23FFF%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22174%22%20cy%3D%22105%22%20rx%3D%226%22%20ry%3D%228%22%20fill%3D%22%23111827%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Sky%20High%20Raised%20Right%20Eyebrow%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20112%2085%20Q%20130%2085%20148%2085%22%20fill%3D%22none%22%20stroke%3D%22%23111827%22%20stroke-width%3D%225%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20172%2075%20Q%20190%2055%20208%2070%22%20fill%3D%22none%22%20stroke%3D%22%23111827%22%20stroke-width%3D%225%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Skeptical%20Mouth%20--%3E%0A%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22140%22%20y1%3D%22145%22%20x2%3D%22180%22%20y2%3D%22140%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2215%22%20y%3D%22195%22%20width%3D%22290%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%23052E16%22%20stroke%3D%22%234ADE80%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2212%22%20fill%3D%22%234ADE80%22%20letter-spacing%3D%221%22%3ECRIMINAL%20OFFENSIVE%20SIDE%20EYE%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_VERY_SUSPICIOUS',
+    title: "Very Suspicious",
+    category: 'SUSPICIOUS',
+    description: "Noir detective hat and trenchcoat with flashlight beam piercing the shadows.",
+    caption: "SOMETHING DOES NOT ADD UP HERE",
+    aspectRatio: 1.3333333333333333,
+    tags: ["detective","noir","suspicious","pinch","arms_crossed"],
+    soundId: 'DRAMATIC_SUSPENSE',
+    suggestedActions: ["PINCH","ARMS_CROSSED"],
+    rarity: 'COMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%230A0A0A%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Flashlight%20Beam%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%2260%2C130%20290%2C50%20290%2C190%22%20fill%3D%22%23FEF08A%22%20opacity%3D%220.3%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Noir%20Detective%20Silhouette%20--%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Fedora%20Hat%20--%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22140%22%20cy%3D%2270%22%20rx%3D%2265%22%20ry%3D%2214%22%20fill%3D%22%233F3F46%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%22105%22%20y%3D%2240%22%20width%3D%2270%22%20height%3D%2232%22%20rx%3D%224%22%20fill%3D%22%2327272A%22%20stroke%3D%22%23111827%22%20stroke-width%3D%223%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Trenchcoat%20Collar%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22100%2C105%20140%2C165%20180%2C105%22%20fill%3D%22%2352525B%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Glowing%20Eyes%20in%20Shadow%20--%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22125%22%20cy%3D%2285%22%20rx%3D%228%22%20ry%3D%224%22%20fill%3D%22%23FACC15%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22155%22%20cy%3D%2285%22%20rx%3D%228%22%20ry%3D%224%22%20fill%3D%22%23FACC15%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%2318181B%22%20stroke%3D%22%23FACC15%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2211%22%20fill%3D%22%23FEF08A%22%20letter-spacing%3D%221%22%3ESOMETHING%20DOES%20NOT%20ADD%20UP%20HERE%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_CAUGHT_IN_ACT',
+    title: "Caught in the Act",
+    category: 'SUSPICIOUS',
+    description: "High-power police spotlight snapping onto frozen caught hands.",
+    caption: "CAUGHT IN 4K ULTRA HD!",
+    aspectRatio: 1.3333333333333333,
+    tags: ["caught","spotlight","pointing","hands_raised"],
+    soundId: 'AIR_HORN',
+    suggestedActions: ["POINTING","HANDS_RAISED"],
+    rarity: 'UNCOMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%23030712%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Prison%20Spotlight%20Circle%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22160%22%20cy%3D%22105%22%20r%3D%2275%22%20fill%3D%22%23FFF%22%20opacity%3D%220.9%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Frozen%20Character%20Silhouette%20inside%20beam%20--%3E%0A%20%20%20%20%20%20%20%20%3Cg%20fill%3D%22%23111827%22%3E%0A%20%20%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22160%22%20cy%3D%2275%22%20r%3D%2222%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3C!--%20Hands%20Raised%20in%20Surrender%20--%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22130%22%20y1%3D%2290%22%20x2%3D%22115%22%20y2%3D%2260%22%20stroke%3D%22%23111827%22%20stroke-width%3D%226%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22190%22%20y1%3D%2290%22%20x2%3D%22205%22%20y2%3D%2260%22%20stroke%3D%22%23111827%22%20stroke-width%3D%226%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22160%22%20cy%3D%22125%22%20rx%3D%2225%22%20ry%3D%2235%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C%2Fg%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Shocked%20Big%20Eyes%20inside%20head%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22153%22%20cy%3D%2273%22%20r%3D%224%22%20fill%3D%22%23FFF%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22167%22%20cy%3D%2273%22%20r%3D%224%22%20fill%3D%22%23FFF%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Red%204K%20Rec%20Indicator%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%2245%22%20cy%3D%2235%22%20r%3D%226%22%20fill%3D%22%23EF4444%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%2260%22%20y%3D%2239%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2212%22%20fill%3D%22%23EF4444%22%3EREC%20%2F%2F%204K%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%23000%22%20stroke%3D%22%23EF4444%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2213%22%20fill%3D%22%23EF4444%22%20letter-spacing%3D%222%22%3ECAUGHT%20IN%204K%20ULTRA%20HD!%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_BRO_IS_THINKING',
+    title: "Bro is Thinking",
+    category: 'SUSPICIOUS',
+    description: "Deep chin-stroke silhouette with spinning golden gears and smoky question marks.",
+    caption: "HOLD ON... BRO IS COOKING",
+    aspectRatio: 1.3333333333333333,
+    tags: ["cooking","thinking","gears","the_thinker","pointing"],
+    soundId: 'CHAD_GONG',
+    suggestedActions: ["THE_THINKER","POINTING"],
+    rarity: 'COMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%2318181B%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Spinning%20Mechanical%20Gears%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22210%22%20cy%3D%2270%22%20r%3D%2226%22%20fill%3D%22none%22%20stroke%3D%22%23F59E0B%22%20stroke-width%3D%226%22%20stroke-dasharray%3D%2210%2C6%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22210%22%20cy%3D%2270%22%20r%3D%228%22%20fill%3D%22%23F59E0B%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22245%22%20cy%3D%22115%22%20r%3D%2218%22%20fill%3D%22none%22%20stroke%3D%22%23EAB308%22%20stroke-width%3D%225%22%20stroke-dasharray%3D%228%2C4%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Thinker%20Face%20with%20Hand%20on%20Chin%20--%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22140%22%20cy%3D%22100%22%20rx%3D%2250%22%20ry%3D%2245%22%20fill%3D%22%23FBBF24%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Hand%20stroked%20under%20chin%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%22120%22%20y%3D%22135%22%20width%3D%2235%22%20height%3D%2218%22%20rx%3D%226%22%20fill%3D%22%23F59E0B%22%20stroke%3D%22%23111827%22%20stroke-width%3D%223%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Eyes%20squinting%20thoughtfully%20--%3E%0A%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22120%22%20y1%3D%2295%22%20x2%3D%22135%22%20y2%3D%2295%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22150%22%20y1%3D%2295%22%20x2%3D%22165%22%20y2%3D%2295%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Smoke%20Puffs%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%2295%22%20cy%3D%2265%22%20r%3D%228%22%20fill%3D%22%23A1A1AA%22%20opacity%3D%220.6%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%2285%22%20cy%3D%2245%22%20r%3D%2212%22%20fill%3D%22%23A1A1AA%22%20opacity%3D%220.4%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%2309090B%22%20stroke%3D%22%23F59E0B%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2212%22%20fill%3D%22%23FDE68A%22%20letter-spacing%3D%221%22%3EHOLD%20ON...%20BRO%20IS%20COOKING%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_QUESTIONABLE_DECISION',
+    title: "Questionable Decision",
+    category: 'SUSPICIOUS',
+    description: "Sweating cartoon hand trembling between two big red self-destruct buttons.",
+    caption: "HIGHLY QUESTIONABLE LIFE CHOICE",
+    aspectRatio: 1.3333333333333333,
+    tags: ["buttons","choice","dilemma","pinch","arms_crossed"],
+    soundId: 'DRAMATIC_SUSPENSE',
+    suggestedActions: ["PINCH","ARMS_CROSSED"],
+    rarity: 'UNCOMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%23374151%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Control%20Panel%20Desk%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2240%22%20y%3D%2290%22%20width%3D%22240%22%20height%3D%2285%22%20rx%3D%226%22%20fill%3D%22%231F2937%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Two%20Big%20Red%20Push%20Buttons%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22100%22%20cy%3D%22130%22%20r%3D%2226%22%20fill%3D%22%23EF4444%22%20stroke%3D%22%237F1D1D%22%20stroke-width%3D%225%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22220%22%20cy%3D%22130%22%20r%3D%2226%22%20fill%3D%22%23EF4444%22%20stroke%3D%22%237F1D1D%22%20stroke-width%3D%225%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Trembling%20Sweaty%20Finger%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20160%2050%20L%20155%20105%20Q%20160%20115%20165%20105%20Z%22%20fill%3D%22%23FED7AA%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Sweat%20Drops%20--%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22140%22%20cy%3D%2270%22%20rx%3D%224%22%20ry%3D%227%22%20fill%3D%22%2338BDF8%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22180%22%20cy%3D%2275%22%20rx%3D%224%22%20ry%3D%227%22%20fill%3D%22%2338BDF8%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2215%22%20y%3D%22195%22%20width%3D%22290%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%23111827%22%20stroke%3D%22%23EF4444%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2211%22%20fill%3D%22%23FCA5A5%22%20letter-spacing%3D%221%22%3EHIGHLY%20QUESTIONABLE%20LIFE%20CHOICE%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_INNOCENT_MAYBE_NOT',
+    title: "Innocent? Maybe Not",
+    category: 'SUSPICIOUS',
+    description: "Golden halo over a smiling angel face holding cartoon dynamite behind back.",
+    caption: "LOOKS INNOCENT... PLOTTING CHAOS",
+    aspectRatio: 1.3333333333333333,
+    tags: ["halo","dynamite","innocent","pointing","thumbs_up"],
+    soundId: 'DISCO_SLAP',
+    suggestedActions: ["POINTING","THUMBS_UP"],
+    rarity: 'UNCOMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%231E1B4B%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Floating%20Golden%20Halo%20--%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22160%22%20cy%3D%2245%22%20rx%3D%2236%22%20ry%3D%2210%22%20fill%3D%22none%22%20stroke%3D%22%23FACC15%22%20stroke-width%3D%226%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Innocent%20Smiling%20Face%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22160%22%20cy%3D%22105%22%20r%3D%2248%22%20fill%3D%22%23FED7AA%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22142%22%20cy%3D%22100%22%20r%3D%226%22%20fill%3D%22%23111827%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22178%22%20cy%3D%22100%22%20r%3D%226%22%20fill%3D%22%23111827%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Cheeky%20Smile%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20145%20125%20Q%20160%20140%20175%20125%22%20fill%3D%22none%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Stick%20of%20TNT%20Dynamite%20behind%20back%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%22225%22%20y%3D%22115%22%20width%3D%2218%22%20height%3D%2240%22%20rx%3D%223%22%20fill%3D%22%23DC2626%22%20stroke%3D%22%23111827%22%20stroke-width%3D%223%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20234%20115%20Q%20236%20100%20242%2095%22%20fill%3D%22none%22%20stroke%3D%22%23F59E0B%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22242%2C93%20245%2C88%20247%2C94%22%20fill%3D%22%23FACC15%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%230F172A%22%20stroke%3D%22%23FACC15%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2211%22%20fill%3D%22%23FEF08A%22%20letter-spacing%3D%221%22%3ELOOKS%20INNOCENT...%20PLOTTING%20CHAOS%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_VICTORY_DANCE',
+    title: "Victory Dance",
+    category: 'CELEBRATION',
+    description: "Neon dancing figure busting energetic funky moves with colorful sound waves.",
+    caption: "BUSTING MOVES // CANNOT BE TAMED",
+    aspectRatio: 1.3333333333333333,
+    tags: ["dance","disco","groove","disco_fever","peace_sign"],
+    soundId: 'DISCO_SLAP',
+    suggestedActions: ["DISCO_FEVER","PEACE_SIGN"],
+    rarity: 'COMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%234A044E%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Colorful%20Musical%20Waves%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%2020%2060%20Q%2060%2020%20100%2060%20T%20180%2060%20T%20260%2060%20T%20320%2060%22%20fill%3D%22none%22%20stroke%3D%22%23F472B6%22%20stroke-width%3D%223%22%20opacity%3D%220.6%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%2010%20160%20Q%2050%20120%2090%20160%20T%20170%20160%20T%20250%20160%20T%20310%20160%22%20fill%3D%22none%22%20stroke%3D%22%2322D3EE%22%20stroke-width%3D%223%22%20opacity%3D%220.6%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Dancing%20Groovy%20Figure%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22160%22%20cy%3D%2265%22%20r%3D%2220%22%20fill%3D%22%23FACC15%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22160%22%20y1%3D%2285%22%20x2%3D%22160%22%20y2%3D%22135%22%20stroke%3D%22%23FACC15%22%20stroke-width%3D%228%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Flailing%20Funky%20Arms%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpolyline%20points%3D%22110%2C80%20160%2C95%20210%2C75%22%20fill%3D%22none%22%20stroke%3D%22%23FACC15%22%20stroke-width%3D%227%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Funky%20Kicking%20Legs%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpolyline%20points%3D%22125%2C175%20160%2C135%20195%2C165%22%20fill%3D%22none%22%20stroke%3D%22%23FACC15%22%20stroke-width%3D%227%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%232E0234%22%20stroke%3D%22%23F472B6%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2211%22%20fill%3D%22%23F472B6%22%20letter-spacing%3D%221%22%3EBUSTING%20MOVES%20%2F%2F%20CANNOT%20BE%20TAMED%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_ABSOLUTE_CINEMA',
+    title: "Absolute Cinema",
+    category: 'CELEBRATION',
+    description: "Hands raised in majestic awe before a giant glowing cinema screen with tears of joy.",
+    caption: "THIS IS ABSOLUTE CINEMA",
+    aspectRatio: 1.3333333333333333,
+    tags: ["cinema","masterpiece","t_pose","clap","rare"],
+    soundId: 'BRASS_FANFARE',
+    suggestedActions: ["T_POSE","CLAP"],
+    rarity: 'RARE',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%23000%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Giant%20Cinema%20Screen%20Glowing%20Light%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2240%22%20y%3D%2225%22%20width%3D%22240%22%20height%3D%22115%22%20rx%3D%226%22%20fill%3D%22%23F8FAFC%22%20stroke%3D%22%2338BDF8%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2245%22%20y%3D%2230%22%20width%3D%22230%22%20height%3D%22105%22%20fill%3D%22%23E0F2FE%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Screen%20Text%20--%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%2290%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2224%22%20fill%3D%22%230369A1%22%20letter-spacing%3D%223%22%3ECINEMA%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Audience%20Silhouette%20Hands%20Raised%20in%20Awe%20--%3E%0A%20%20%20%20%20%20%20%20%3Cg%20fill%3D%22%2318181B%22%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22160%22%20cy%3D%22180%22%20rx%3D%2235%22%20ry%3D%2230%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3C!--%20Raised%20worship%20hands%20--%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22120%22%20y1%3D%22180%22%20x2%3D%22105%22%20y2%3D%22135%22%20stroke%3D%22%2318181B%22%20stroke-width%3D%228%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22200%22%20y1%3D%22180%22%20x2%3D%22215%22%20y2%3D%22135%22%20stroke%3D%22%2318181B%22%20stroke-width%3D%228%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C%2Fg%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%230C4A6E%22%20stroke%3D%22%2338BDF8%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2213%22%20fill%3D%22%23BAE6FD%22%20letter-spacing%3D%222%22%3ETHIS%20IS%20ABSOLUTE%20CINEMA%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_PARTY_MODE',
+    title: "Party Mode",
+    category: 'CELEBRATION',
+    description: "Glittering rainbow disco ball scattering beams with blowout party horn.",
+    caption: "PARTY MODE FULLY ENGAGED",
+    aspectRatio: 1.3333333333333333,
+    tags: ["party","disco_ball","confetti","disco_fever","peace_sign"],
+    soundId: 'CROWD_CHEER',
+    suggestedActions: ["DISCO_FEVER","PEACE_SIGN"],
+    rarity: 'COMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%2318181B%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Disco%20Ball%20Facets%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22160%22%20cy%3D%2270%22%20r%3D%2238%22%20fill%3D%22%23E4E4E7%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cg%20stroke%3D%22%2371717A%22%20stroke-width%3D%221.5%22%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22122%22%20y1%3D%2270%22%20x2%3D%22198%22%20y2%3D%2270%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22130%22%20y1%3D%2252%22%20x2%3D%22190%22%20y2%3D%2252%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22130%22%20y1%3D%2288%22%20x2%3D%22190%22%20y2%3D%2288%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22160%22%20y1%3D%2232%22%20x2%3D%22160%22%20y2%3D%22108%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C%2Fg%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Hanging%20string%20--%3E%0A%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22160%22%20y1%3D%220%22%20x2%3D%22160%22%20y2%3D%2232%22%20stroke%3D%22%23A1A1AA%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Multi-colored%20Confetti%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%2260%22%20cy%3D%2260%22%20r%3D%225%22%20fill%3D%22%23EF4444%22%2F%3E%3Ccircle%20cx%3D%22260%22%20cy%3D%2250%22%20r%3D%226%22%20fill%3D%22%233B82F6%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%2290%22%20cy%3D%22140%22%20r%3D%226%22%20fill%3D%22%23FACC15%22%2F%3E%3Ccircle%20cx%3D%22230%22%20cy%3D%22130%22%20r%3D%225%22%20fill%3D%22%2310B981%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2280%22%20y%3D%2290%22%20width%3D%2212%22%20height%3D%226%22%20fill%3D%22%23A855F7%22%20transform%3D%22rotate(30%2080%2090)%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%22235%22%20y%3D%2285%22%20width%3D%2212%22%20height%3D%226%22%20fill%3D%22%23F97316%22%20transform%3D%22rotate(-25%20235%2085)%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%23000%22%20stroke%3D%22%23FACC15%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2212%22%20fill%3D%22%23FACC15%22%20letter-spacing%3D%222%22%3EPARTY%20MODE%20FULLY%20ENGAGED%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_LEVEL_UP',
+    title: "Level Up!",
+    category: 'CELEBRATION',
+    description: "Radiant RPG pillar of light surging from the ground with floating golden +99 stats.",
+    caption: "LEVEL UP! SKILLS +999",
+    aspectRatio: 1.3333333333333333,
+    tags: ["level_up","rpg","stats","five_fingers","jump"],
+    soundId: 'LEVEL_UP_NOTIFICATION',
+    suggestedActions: ["FIVE_FINGERS","JUMP","SWIPE_RIGHT"],
+    rarity: 'COMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%23042F2E%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Holy%20Ascension%20Light%20Column%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22110%2C20%20210%2C20%20240%2C190%2080%2C190%22%20fill%3D%22%232DD4BF%22%20opacity%3D%220.3%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22135%2C20%20185%2C20%20205%2C190%20115%2C190%22%20fill%3D%22%235EEAD4%22%20opacity%3D%220.6%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Floating%20%2B999%20Badge%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2285%22%20y%3D%2270%22%20width%3D%22150%22%20height%3D%2240%22%20rx%3D%226%22%20fill%3D%22%23FACC15%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%2297%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2218%22%20fill%3D%22%23111827%22%20letter-spacing%3D%222%22%3E%2B999%20STATS%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Sparkle%20Rings%20--%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22160%22%20cy%3D%22150%22%20rx%3D%2260%22%20ry%3D%2214%22%20fill%3D%22none%22%20stroke%3D%22%23FACC15%22%20stroke-width%3D%223%22%20stroke-dasharray%3D%228%2C4%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%23134E4A%22%20stroke%3D%22%235EEAD4%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2213%22%20fill%3D%22%235EEAD4%22%20letter-spacing%3D%222%22%3ELEVEL%20UP!%20SKILLS%20%2B999%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_CROWD_GOES_WILD',
+    title: "Crowd Goes Wild",
+    category: 'CELEBRATION',
+    description: "Packed stadium silhouette with waving ocean of hands and camera flashbulbs.",
+    caption: "THE ENTIRE STADIUM ERUPTS!",
+    aspectRatio: 1.3333333333333333,
+    tags: ["stadium","crowd","applause","clap","hands_raised"],
+    soundId: 'CROWD_CHEER',
+    suggestedActions: ["CLAP","HANDS_RAISED","FIVE_FINGERS"],
+    rarity: 'COMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%231E1B4B%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Flashing%20Camera%20Strobe%20Stars%20--%3E%0A%20%20%20%20%20%20%20%20%3Cg%20fill%3D%22%23FFF%22%3E%0A%20%20%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%2250%22%20cy%3D%2240%22%20r%3D%224%22%2F%3E%3Ccircle%20cx%3D%22120%22%20cy%3D%2230%22%20r%3D%226%22%2F%3E%3Ccircle%20cx%3D%22210%22%20cy%3D%2245%22%20r%3D%225%22%2F%3E%3Ccircle%20cx%3D%22280%22%20cy%3D%2235%22%20r%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%2280%22%20cy%3D%2270%22%20r%3D%225%22%2F%3E%3Ccircle%20cx%3D%22180%22%20cy%3D%2265%22%20r%3D%227%22%2F%3E%3Ccircle%20cx%3D%22250%22%20cy%3D%2275%22%20r%3D%226%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C%2Fg%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Stadium%20Lights%20Beam%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%2220%2C10%20160%2C140%2070%2C180%22%20fill%3D%22%23FBBF24%22%20opacity%3D%220.15%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22300%2C10%20160%2C140%20250%2C180%22%20fill%3D%22%23FBBF24%22%20opacity%3D%220.15%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Sea%20of%20Cheering%20Hands%20Silhouette%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%200%20160%20Q%2030%20135%2060%20160%20Q%2090%20130%20120%20160%20Q%20150%20125%20180%20160%20Q%20210%20130%20240%20160%20Q%20270%20135%20300%20160%20L%20320%20190%20L%200%20190%20Z%22%20fill%3D%22%230F172A%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%23000%22%20stroke%3D%22%23FBBF24%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2212%22%20fill%3D%22%23FBBF24%22%20letter-spacing%3D%222%22%3ETHE%20ENTIRE%20STADIUM%20ERUPTS!%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_CHAOS_UNLEASHED',
+    title: "Chaos Unleashed",
+    category: 'CELEBRATION',
+    description: "Joyous cartoon figure dancing happily in front of an inferno of fire.",
+    caption: "SOME PEOPLE JUST WANT TO WATCH",
+    aspectRatio: 1.3333333333333333,
+    tags: ["chaos","fire","inferno","jump","disco_fever"],
+    soundId: 'AIR_HORN',
+    suggestedActions: ["JUMP","DISCO_FEVER"],
+    rarity: 'UNCOMMON',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%23450A0A%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Hellish%20Inferno%20Flames%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%2220%2C180%2050%2C60%2090%2C140%20130%2C40%20170%2C130%20220%2C50%20260%2C120%20300%2C30%20310%2C180%22%20fill%3D%22%23DC2626%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%2240%2C180%2070%2C90%20110%2C150%20150%2C70%20190%2C140%20240%2C80%20280%2C180%22%20fill%3D%22%23F97316%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%2270%2C180%20100%2C120%20140%2C160%20170%2C100%20210%2C150%20250%2C180%22%20fill%3D%22%23FACC15%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Cute%20Happy%20Character%20in%20front%20of%20flames%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22160%22%20cy%3D%22135%22%20r%3D%2228%22%20fill%3D%22%23FEF08A%22%20stroke%3D%22%23111827%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22150%22%20cy%3D%22130%22%20r%3D%224%22%20fill%3D%22%23111827%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22170%22%20cy%3D%22130%22%20r%3D%224%22%20fill%3D%22%23111827%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Cheerful%20Smile%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20148%20145%20Q%20160%20156%20172%20145%22%20fill%3D%22none%22%20stroke%3D%22%23111827%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2215%22%20y%3D%22195%22%20width%3D%22290%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%23000%22%20stroke%3D%22%23F97316%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2211%22%20fill%3D%22%23FEF08A%22%20letter-spacing%3D%221%22%3ESOME%20PEOPLE%20JUST%20WANT%20TO%20WATCH%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_NPC_MODE',
+    title: "NPC Mode",
+    category: 'SPECIAL',
+    description: "Monochrome mannequin standing in standby pose with a spinning loading circle above head.",
+    caption: "NPC BEHAVIOR DETECTED",
+    aspectRatio: 1.3333333333333333,
+    tags: ["npc","loading","monochrome","zombie_walk","t_pose"],
+    soundId: 'RECORD_SCRATCH',
+    suggestedActions: ["ZOMBIE_WALK","T_POSE"],
+    rarity: 'RARE',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%2318181B%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Loading%20Spinner%20overhead%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22160%22%20cy%3D%2240%22%20r%3D%2216%22%20fill%3D%22none%22%20stroke%3D%22%2371717A%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20160%2024%20A%2016%2016%200%200%201%20176%2040%22%20fill%3D%22none%22%20stroke%3D%22%2322D3EE%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Mannequin%20Head%20%26%20Torso%20--%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22160%22%20cy%3D%2285%22%20rx%3D%2226%22%20ry%3D%2232%22%20fill%3D%22%23A1A1AA%22%20stroke%3D%22%2327272A%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22145%22%20y1%3D%2285%22%20x2%3D%22155%22%20y2%3D%2285%22%20stroke%3D%22%233F3F46%22%20stroke-width%3D%223%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22165%22%20y1%3D%2285%22%20x2%3D%22175%22%20y2%3D%2285%22%20stroke%3D%22%233F3F46%22%20stroke-width%3D%223%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22125%2C120%20195%2C120%20180%2C185%20140%2C185%22%20fill%3D%22%2371717A%22%20stroke%3D%22%2327272A%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Dialogue%20Bubble%20with%20...%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%22200%22%20y%3D%2255%22%20width%3D%2255%22%20height%3D%2226%22%20rx%3D%224%22%20fill%3D%22%23FFF%22%20stroke%3D%22%23000%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22227%22%20y%3D%2273%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2214%22%20fill%3D%22%23000%22%3E...%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%2309090B%22%20stroke%3D%22%2322D3EE%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2213%22%20fill%3D%22%2322D3EE%22%20letter-spacing%3D%222%22%3ENPC%20BEHAVIOR%20DETECTED%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_NO_THOUGHTS',
+    title: "No Thoughts, Head Empty",
+    category: 'SPECIAL',
+    description: "Serene cartoon creature with the classic DVD screensaver bouncing inside skull.",
+    caption: "NO THOUGHTS // HEAD TOTALLY EMPTY",
+    aspectRatio: 1.3333333333333333,
+    tags: ["dvd","head_empty","zen","zen_prayer","zombie_walk"],
+    soundId: 'SINGING_BOWL',
+    suggestedActions: ["ZEN_PRAYER","ZOMBIE_WALK"],
+    rarity: 'RARE',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%23022C22%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Big%20Round%20Empty%20Head%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22160%22%20cy%3D%22105%22%20r%3D%2270%22%20fill%3D%22%23ECFDF5%22%20stroke%3D%22%23065F46%22%20stroke-width%3D%226%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20DVD%20Logo%20in%20Corner%20of%20Head%20--%3E%0A%20%20%20%20%20%20%20%20%3Cg%20transform%3D%22translate(130%2C%2085)%22%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%2230%22%20cy%3D%2215%22%20rx%3D%2232%22%20ry%3D%2214%22%20fill%3D%22%2310B981%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Ctext%20x%3D%2230%22%20y%3D%2220%22%20text-anchor%3D%22middle%22%20font-family%3D%22sans-serif%22%20font-weight%3D%22900%22%20font-size%3D%2212%22%20fill%3D%22%23FFF%22%3EDVD%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%3C%2Fg%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Blissful%20Curved%20Closed%20Eyes%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20125%20125%20Q%20135%20115%20145%20125%22%20fill%3D%22none%22%20stroke%3D%22%23065F46%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20175%20125%20Q%20185%20115%20195%20125%22%20fill%3D%22none%22%20stroke%3D%22%23065F46%22%20stroke-width%3D%224%22%20stroke-linecap%3D%22round%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22160%22%20cy%3D%22142%22%20rx%3D%224%22%20ry%3D%224%22%20fill%3D%22%23065F46%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2215%22%20y%3D%22195%22%20width%3D%22290%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%23064E3B%22%20stroke%3D%22%2334D399%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2211%22%20fill%3D%22%23A7F3D0%22%20letter-spacing%3D%221%22%3ENO%20THOUGHTS%20%2F%2F%20HEAD%20TOTALLY%20EMPTY%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_BRAIN_LEFT_CHAT',
+    title: "Brain Left The Chat",
+    category: 'SPECIAL',
+    description: "Cute cartoon brain wearing angel wings and suitcase floating away into clouds.",
+    caption: "BRAIN HAS LEFT THE SERVER",
+    aspectRatio: 1.3333333333333333,
+    tags: ["brain_left","angel","cloud","zen_prayer","swipe_left"],
+    soundId: 'SWIPE_WHOOSH',
+    suggestedActions: ["ZEN_PRAYER","SWIPE_LEFT"],
+    rarity: 'RARE',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%2338BDF8%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Heavenly%20Cloud%20Base%20--%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%2280%22%20cy%3D%22180%22%20rx%3D%2260%22%20ry%3D%2235%22%20fill%3D%22%23FFF%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22160%22%20cy%3D%22190%22%20rx%3D%2280%22%20ry%3D%2240%22%20fill%3D%22%23FFF%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22240%22%20cy%3D%22180%22%20rx%3D%2260%22%20ry%3D%2235%22%20fill%3D%22%23FFF%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Angel%20Wings%20on%20Brain%20--%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22105%22%20cy%3D%2285%22%20rx%3D%2230%22%20ry%3D%2215%22%20fill%3D%22%23FFF%22%20stroke%3D%22%23E0F2FE%22%20stroke-width%3D%223%22%20transform%3D%22rotate(-30%20105%2085)%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22215%22%20cy%3D%2285%22%20rx%3D%2230%22%20ry%3D%2215%22%20fill%3D%22%23FFF%22%20stroke%3D%22%23E0F2FE%22%20stroke-width%3D%223%22%20transform%3D%22rotate(30%20215%2085)%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Flying%20Brain%20Body%20--%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22160%22%20cy%3D%2295%22%20rx%3D%2238%22%20ry%3D%2230%22%20fill%3D%22%23F472B6%22%20stroke%3D%22%23BE185D%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Tiny%20Suitcase%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%22180%22%20y%3D%22115%22%20width%3D%2222%22%20height%3D%2216%22%20rx%3D%222%22%20fill%3D%22%23B45309%22%20stroke%3D%22%2378350F%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20186%20115%20L%20186%20110%20L%20196%20110%20L%20196%20115%22%20fill%3D%22none%22%20stroke%3D%22%2378350F%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Tiny%20Halo%20--%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22160%22%20cy%3D%2255%22%20rx%3D%2220%22%20ry%3D%226%22%20fill%3D%22none%22%20stroke%3D%22%23FACC15%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%230C4A6E%22%20stroke%3D%22%23FFF%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2212%22%20fill%3D%22%23FFF%22%20letter-spacing%3D%222%22%3EBRAIN%20HAS%20LEFT%20THE%20SERVER%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_LEGENDARY_MOMENT',
+    title: "Legendary Moment",
+    category: 'SPECIAL',
+    description: "Blinding iridescent diamond crystalline starburst radiating prismatic rainbow rays.",
+    caption: "★ 0.001% DROP RATE MOMENT ★",
+    aspectRatio: 1.3333333333333333,
+    tags: ["legendary","prismatic","rainbow","peace_sign","hands_raised"],
+    soundId: 'VICTORY_BELL',
+    suggestedActions: ["PEACE_SIGN","HANDS_RAISED"],
+    rarity: 'LEGENDARY',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Cdefs%3E%0A%20%20%20%20%20%20%20%20%20%20%3ClinearGradient%20id%3D%22rainbow-ray%22%20x1%3D%220%25%22%20y1%3D%220%25%22%20x2%3D%22100%25%22%20y2%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%23F43F5E%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%2225%25%22%20stop-color%3D%22%23F59E0B%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%2250%25%22%20stop-color%3D%22%2310B981%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%2275%25%22%20stop-color%3D%22%233B82F6%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%238B5CF6%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3C%2FlinearGradient%3E%0A%20%20%20%20%20%20%20%20%3C%2Fdefs%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%2309090B%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Prismatic%20Starburst%20Rays%20--%3E%0A%20%20%20%20%20%20%20%20%3Cg%20stroke%3D%22url(%23rainbow-ray)%22%20stroke-width%3D%224%22%20opacity%3D%220.8%22%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22160%22%20y1%3D%22105%22%20x2%3D%22160%22%20y2%3D%2210%22%2F%3E%3Cline%20x1%3D%22160%22%20y1%3D%22105%22%20x2%3D%22160%22%20y2%3D%22200%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22160%22%20y1%3D%22105%22%20x2%3D%2230%22%20y2%3D%22105%22%2F%3E%3Cline%20x1%3D%22160%22%20y1%3D%22105%22%20x2%3D%22290%22%20y2%3D%22105%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22160%22%20y1%3D%22105%22%20x2%3D%2260%22%20y2%3D%2230%22%2F%3E%3Cline%20x1%3D%22160%22%20y1%3D%22105%22%20x2%3D%22260%22%20y2%3D%22180%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22160%22%20y1%3D%22105%22%20x2%3D%22260%22%20y2%3D%2230%22%2F%3E%3Cline%20x1%3D%22160%22%20y1%3D%22105%22%20x2%3D%2260%22%20y2%3D%22180%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C%2Fg%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Radiant%20Central%20Diamond%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22160%2C50%20205%2C105%20160%2C160%20115%2C105%22%20fill%3D%22%23FFF%22%20stroke%3D%22url(%23rainbow-ray)%22%20stroke-width%3D%226%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cpolygon%20points%3D%22160%2C75%20185%2C105%20160%2C135%20135%2C105%22%20fill%3D%22%23E0F2FE%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Sparkle%20Dots%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22100%22%20cy%3D%2250%22%20r%3D%224%22%20fill%3D%22%23FEF08A%22%2F%3E%3Ccircle%20cx%3D%22220%22%20cy%3D%2250%22%20r%3D%224%22%20fill%3D%22%23FEF08A%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%2318181B%22%20stroke%3D%22url(%23rainbow-ray)%22%20stroke-width%3D%223%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2212%22%20fill%3D%22%23FDE047%22%20letter-spacing%3D%222%22%3E%E2%98%85%200.001%25%20DROP%20RATE%20MOMENT%20%E2%98%85%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_UNEXPECTED_GENIUS',
+    title: "Unexpected Genius",
+    category: 'SPECIAL',
+    description: "Blazing 1000-watt cartoon bulb lighting up a deep space nebula galaxy with equations.",
+    caption: "SOMETIMES MY GENIUS IS FRIGHTENING",
+    aspectRatio: 1.3333333333333333,
+    tags: ["genius","lightbulb","galaxy","the_thinker","pointing"],
+    soundId: 'LEVEL_UP_NOTIFICATION',
+    suggestedActions: ["THE_THINKER","POINTING"],
+    rarity: 'RARE',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Cdefs%3E%0A%20%20%20%20%20%20%20%20%20%20%3CradialGradient%20id%3D%22space-grad%22%20cx%3D%2250%25%22%20cy%3D%2250%25%22%20r%3D%2250%25%22%3E%0A%20%20%20%20%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%220%25%22%20stop-color%3D%22%234C1D95%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%20%20%3Cstop%20offset%3D%22100%25%22%20stop-color%3D%22%230F172A%22%2F%3E%0A%20%20%20%20%20%20%20%20%20%20%3C%2FradialGradient%3E%0A%20%20%20%20%20%20%20%20%3C%2Fdefs%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22url(%23space-grad)%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Radiant%20Bulb%20Glow%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22160%22%20cy%3D%2285%22%20r%3D%2265%22%20fill%3D%22%23FACC15%22%20opacity%3D%220.25%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22160%22%20cy%3D%2285%22%20r%3D%2245%22%20fill%3D%22%23FEF08A%22%20opacity%3D%220.6%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Glass%20Bulb%20Body%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20130%2085%20C%20130%2055%20190%2055%20190%2085%20C%20190%20105%20175%20115%20175%20130%20L%20145%20130%20C%20145%20115%20130%20105%20130%2085%20Z%22%20fill%3D%22%23FFF%22%20stroke%3D%22%23111827%22%20stroke-width%3D%225%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Glowing%20Filament%20--%3E%0A%20%20%20%20%20%20%20%20%3Cpath%20d%3D%22M%20150%20115%20L%20150%2085%20L%20160%2095%20L%20170%2085%20L%20170%20115%22%20fill%3D%22none%22%20stroke%3D%22%23F59E0B%22%20stroke-width%3D%224%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bulb%20Screw%20Base%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%22145%22%20y%3D%22130%22%20width%3D%2230%22%20height%3D%2218%22%20rx%3D%222%22%20fill%3D%22%2371717A%22%20stroke%3D%22%23111827%22%20stroke-width%3D%223%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22145%22%20y1%3D%22136%22%20x2%3D%22175%22%20y2%3D%22136%22%20stroke%3D%22%23111827%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22145%22%20y1%3D%22142%22%20x2%3D%22175%22%20y2%3D%22142%22%20stroke%3D%22%23111827%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2210%22%20y%3D%22195%22%20width%3D%22300%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%23000%22%20stroke%3D%22%23FACC15%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2210%22%20fill%3D%22%23FEF08A%22%20letter-spacing%3D%221%22%3ESOMETIMES%20MY%20GENIUS%20IS%20FRIGHTENING%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
+  },
+  {
+    id: 'MEME_FINAL_BOSS_ENERGY',
+    title: "Final Boss Energy",
+    category: 'SPECIAL',
+    description: "Colossal glowing red HP bar with skull crest and menacing fiery dark eyes.",
+    caption: "WHY DO I HEAR BOSS MUSIC?!",
+    aspectRatio: 1.3333333333333333,
+    tags: ["final_boss","boss_music","hp_bar","t_pose","closed_fist"],
+    soundId: 'INCEPTION_BRAAAM',
+    suggestedActions: ["T_POSE","CLOSED_FIST"],
+    rarity: 'LEGENDARY',
+    dataUrl: "data:image/svg+xml;utf8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20320%20240%22%20width%3D%22100%25%22%20height%3D%22100%25%22%3E%0A%20%20%20%20%20%20%20%20%3Crect%20width%3D%22320%22%20height%3D%22240%22%20fill%3D%22%2309090B%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Dark%20Aura%20Red%20Haze%20--%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22160%22%20cy%3D%22110%22%20r%3D%2285%22%20fill%3D%22%23450A0A%22%20opacity%3D%220.6%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Boss%20HP%20Bar%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2235%22%20y%3D%2245%22%20width%3D%22250%22%20height%3D%2216%22%20rx%3D%224%22%20fill%3D%22%2318181B%22%20stroke%3D%22%23991B1B%22%20stroke-width%3D%223%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2238%22%20y%3D%2248%22%20width%3D%22244%22%20height%3D%2210%22%20rx%3D%222%22%20fill%3D%22%23DC2626%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%2238%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2211%22%20fill%3D%22%23EF4444%22%20letter-spacing%3D%222%22%3EFINAL%20BOSS%3A%20OMNI%20OVERLORD%3C%2Ftext%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Piercing%20Fiery%20Red%20Eyes%20--%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22125%22%20cy%3D%22115%22%20rx%3D%2222%22%20ry%3D%2212%22%20fill%3D%22%23000%22%20stroke%3D%22%23EF4444%22%20stroke-width%3D%223%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cellipse%20cx%3D%22195%22%20cy%3D%22115%22%20rx%3D%2222%22%20ry%3D%2212%22%20fill%3D%22%23000%22%20stroke%3D%22%23EF4444%22%20stroke-width%3D%223%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22125%22%20cy%3D%22115%22%20r%3D%225%22%20fill%3D%22%23EF4444%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ccircle%20cx%3D%22195%22%20cy%3D%22115%22%20r%3D%225%22%20fill%3D%22%23EF4444%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Menacing%20Angry%20Brow%20--%3E%0A%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22100%22%20y1%3D%2295%22%20x2%3D%22148%22%20y2%3D%22108%22%20stroke%3D%22%23EF4444%22%20stroke-width%3D%225%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Cline%20x1%3D%22220%22%20y1%3D%2295%22%20x2%3D%22172%22%20y2%3D%22108%22%20stroke%3D%22%23EF4444%22%20stroke-width%3D%225%22%2F%3E%0A%20%20%20%20%20%20%20%20%3C!--%20Bottom%20Banner%20--%3E%0A%20%20%20%20%20%20%20%20%3Crect%20x%3D%2220%22%20y%3D%22195%22%20width%3D%22280%22%20height%3D%2232%22%20rx%3D%226%22%20fill%3D%22%23000%22%20stroke%3D%22%23DC2626%22%20stroke-width%3D%222%22%2F%3E%0A%20%20%20%20%20%20%20%20%3Ctext%20x%3D%22160%22%20y%3D%22216%22%20text-anchor%3D%22middle%22%20font-family%3D%22monospace%22%20font-weight%3D%22900%22%20font-size%3D%2212%22%20fill%3D%22%23EF4444%22%20letter-spacing%3D%222%22%3EWHY%20DO%20I%20HEAR%20BOSS%20MUSIC%3F!%3C%2Ftext%3E%0A%20%20%20%20%20%20%3C%2Fsvg%3E",
   },
 ];
 
@@ -871,6 +1477,114 @@ export function getDefaultMemeForAction(actionId: string): MemeVisualDefinition 
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Filter memes by category or special tabs (ALL, FAVOURITES, CUSTOM)
+ */
+export function filterMemesByCategory(
+  category: string,
+  builtInMemes: MemeVisualDefinition[] = DEFAULT_MEME_LIBRARY,
+  customMemes: MemeVisualDefinition[] = [],
+  favoriteIds: string[] = []
+): MemeVisualDefinition[] {
+  const allMemes = [...builtInMemes, ...customMemes];
+  const upper = category.toUpperCase().trim();
+
+  if (upper === 'ALL' || upper === '') {
+    return allMemes;
+  }
+  if (upper === 'FAVOURITES' || upper === 'FAVORITES') {
+    return allMemes.filter((m) => favoriteIds.includes(m.id));
+  }
+  if (upper === 'CUSTOM') {
+    return customMemes;
+  }
+  return allMemes.filter((m) => m.category === upper);
+}
+
+/**
+ * Real-time search across meme titles, captions, descriptions, and tags
+ */
+export function searchMemes(
+  query: string,
+  builtInMemes: MemeVisualDefinition[] = DEFAULT_MEME_LIBRARY,
+  customMemes: MemeVisualDefinition[] = []
+): MemeVisualDefinition[] {
+  const allMemes = [...builtInMemes, ...customMemes];
+  const q = query.toLowerCase().trim();
+  if (!q) return allMemes;
+
+  return allMemes.filter((m) => {
+    return (
+      m.title.toLowerCase().includes(q) ||
+      (m.caption && m.caption.toLowerCase().includes(q)) ||
+      m.description.toLowerCase().includes(q) ||
+      (m.tags && m.tags.some((t) => t.toLowerCase().includes(q)))
+    );
+  });
+}
+
+/**
+ * Selects an eligible random meme for a triggered action, avoiding immediate repetition
+ */
+export function getRandomMemeForAction(
+  actionId: string,
+  excludeMemeIdOrCustomMemes?: string | MemeVisualDefinition[],
+  customMemesOrExcludeMemeId?: MemeVisualDefinition[] | string
+): MemeVisualDefinition {
+  let excludeMemeId: string | undefined;
+  let customMemes: MemeVisualDefinition[] = [];
+
+  if (typeof excludeMemeIdOrCustomMemes === 'string') {
+    excludeMemeId = excludeMemeIdOrCustomMemes;
+    if (Array.isArray(customMemesOrExcludeMemeId)) {
+      customMemes = customMemesOrExcludeMemeId;
+    }
+  } else if (Array.isArray(excludeMemeIdOrCustomMemes)) {
+    customMemes = excludeMemeIdOrCustomMemes;
+    if (typeof customMemesOrExcludeMemeId === 'string') {
+      excludeMemeId = customMemesOrExcludeMemeId;
+    }
+  }
+
+  const allMemes = [...DEFAULT_MEME_LIBRARY, ...customMemes];
+  const recommendedIds = GOOFY_ACTION_RECOMMENDED_MEMES[actionId as keyof typeof GOOFY_ACTION_RECOMMENDED_MEMES] || [];
+  
+  let candidates = allMemes.filter((m) => recommendedIds.includes(m.id));
+  if (candidates.length === 0) {
+    candidates = allMemes;
+  }
+
+  if (excludeMemeId && candidates.length > 1) {
+    const withoutRepeat = candidates.filter((m) => m.id !== excludeMemeId);
+    if (withoutRepeat.length > 0) {
+      candidates = withoutRepeat;
+    }
+  }
+
+  const chosen = candidates[Math.floor(Math.random() * candidates.length)];
+  return chosen || DEFAULT_MEME_LIBRARY[0]!;
+}
+
+/**
+ * Returns a rare or legendary meme from the special collection
+ */
+export function getRareMeme(customMemes: MemeVisualDefinition[] = []): MemeVisualDefinition {
+  const allMemes = [...DEFAULT_MEME_LIBRARY, ...customMemes];
+  const rarePool = allMemes.filter((m) => m.rarity === 'RARE' || m.rarity === 'LEGENDARY' || m.category === 'SPECIAL');
+  if (rarePool.length > 0) {
+    return rarePool[Math.floor(Math.random() * rarePool.length)]!;
+  }
+  return DEFAULT_MEME_LIBRARY[0]!;
+}
+
+/**
+ * Retrieve preset by ID
+ */
+export function getPresetById(id: string): MemePresetDefinition | undefined {
+  return BUILTIN_MEME_PRESETS.find((p) => p.id === id);
+}
+
 // 3. INDEXED_DB PERSISTENCE FOR USER-UPLOADED MEMES / GIFS
 // Keeps high-resolution binary images out of React state and localStorage quota
 // ─────────────────────────────────────────────────────────────────────────────
@@ -957,6 +1671,20 @@ export async function saveCustomMemeToDB(
   });
 
   return customMeme;
+}
+
+export async function saveCustomMemeDefinitionToDB(
+  meme: MemeVisualDefinition
+): Promise<MemeVisualDefinition> {
+  const db = await openMemeDB();
+  await new Promise<void>((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    const req = store.put(meme);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+  return meme;
 }
 
 export async function deleteCustomMemeFromDB(id: string): Promise<boolean> {
