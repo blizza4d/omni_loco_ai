@@ -5,8 +5,10 @@ import {
   UnifiedMemeEvent,
   GOOFY_POSE_METADATA,
   GOOFY_HAND_METADATA,
+  GOOFY_DUAL_COMBO_DEFINITIONS,
   GoofyPoseType,
   GoofyHandGestureType,
+  GoofyDualHandComboId,
   MemeVisualDefinition,
 } from './goofy-types';
 import { GoofyAudioEngine } from './goofy-audio-engine';
@@ -94,17 +96,19 @@ export class GoofyEventEngine {
    */
   dispatchActionTrigger(
     actionId: string,
-    source: 'BODY' | 'HAND',
+    source: 'BODY' | 'HAND' | 'DUAL_HAND',
     hand?: 'Left' | 'Right' | 'Both',
     confidence = 0.95
   ): UnifiedMemeEvent | null {
     // 1. Check if action is enabled in config
-    let mapping =
-      source === 'BODY'
-        ? this.config.mappings[actionId as GoofyPoseType]
-        : this.config.handMappings[actionId as GoofyHandGestureType];
+    const comboDef = GOOFY_DUAL_COMBO_DEFINITIONS[actionId as GoofyDualHandComboId];
+    let mapping = comboDef
+      ? this.config.dualHandMappings?.[actionId as GoofyDualHandComboId]
+      : source === 'BODY'
+      ? this.config.mappings[actionId as GoofyPoseType]
+      : this.config.handMappings[actionId as GoofyHandGestureType];
 
-    if (!mapping) {
+    if (!mapping && !comboDef) {
       mapping = this.config.mappings[actionId as GoofyPoseType];
     }
     if (mapping && !mapping.enabled) {
@@ -114,7 +118,10 @@ export class GoofyEventEngine {
     // 2. Resolve label & caption
     let actionLabel = actionId;
     let defaultCaption = 'MEME ACTION DETECTED!';
-    if (source === 'BODY') {
+    if (comboDef) {
+      actionLabel = comboDef.label;
+      defaultCaption = comboDef.defaultCaption;
+    } else if (source === 'BODY') {
       const meta = GOOFY_POSE_METADATA[actionId as GoofyPoseType];
       if (meta) {
         actionLabel = meta.label;
@@ -134,7 +141,10 @@ export class GoofyEventEngine {
       defaultCaption;
 
     // 3. Resolve sound
-    let soundId: GoofySoundId = (mapping && mapping.soundId) || 'INCEPTION_BRAAAM';
+    let soundId: GoofySoundId =
+      (mapping && mapping.soundId) ||
+      (comboDef && comboDef.defaultSoundId) ||
+      'INCEPTION_BRAAAM';
     if (this.config.randomSoundMode) {
       const lib = this.audioEngine.getSoundLibrary();
       soundId = lib[Math.floor(Math.random() * lib.length)]!.id;
@@ -155,6 +165,7 @@ export class GoofyEventEngine {
       const assignedMemeId =
         (mapping && mapping.memeId) ||
         this.config.actionMemeMappings[actionId] ||
+        (comboDef && comboDef.defaultMemeId) ||
         getDefaultMemeForAction(actionId).id;
 
       memeDef =
@@ -205,7 +216,7 @@ export class GoofyEventEngine {
 
     // 7. Trigger particle FX & screen shake
     if (this.config.enableVisualFx) {
-      const color = source === 'HAND' ? '#06B6D4' : '#FFE600';
+      const color = source === 'DUAL_HAND' ? '#A855F7' : source === 'HAND' ? '#06B6D4' : '#FFE600';
       this.visualFx.triggerPoseReaction(color, this.config.enableScreenShake);
     }
 
@@ -272,35 +283,55 @@ export class GoofyEventEngine {
   }
 
   /**
+   * Dispatches a simultaneous dual-hand gesture combination trigger
+   */
+  dispatchDualHandTrigger(
+    comboId: GoofyDualHandComboId,
+    confidence = 0.98
+  ): UnifiedMemeEvent | null {
+    return this.dispatchActionTrigger(comboId, 'DUAL_HAND', 'Both', confidence);
+  }
+
+  /**
    * Manual Preview: triggers sound and meme popup without treating it as an AI detection
    */
   previewAction(
     actionId: string,
-    source: 'BODY' | 'HAND',
+    source: 'BODY' | 'HAND' | 'DUAL_HAND',
     soundOverride?: GoofySoundId,
     memeOverride?: string
   ): ActiveMemePopup {
-    let mapping =
-      source === 'BODY'
-        ? this.config.mappings[actionId as GoofyPoseType]
-        : this.config.handMappings[actionId as GoofyHandGestureType];
+    const comboDef = GOOFY_DUAL_COMBO_DEFINITIONS[actionId as GoofyDualHandComboId];
+    let mapping = comboDef
+      ? this.config.dualHandMappings?.[actionId as GoofyDualHandComboId]
+      : source === 'BODY'
+      ? this.config.mappings[actionId as GoofyPoseType]
+      : this.config.handMappings[actionId as GoofyHandGestureType];
 
-    if (!mapping) {
+    if (!mapping && !comboDef) {
       mapping = this.config.mappings[actionId as GoofyPoseType];
     }
 
-    const soundId = soundOverride || (mapping && mapping.soundId) || 'INCEPTION_BRAAAM';
+    const soundId =
+      soundOverride ||
+      (mapping && mapping.soundId) ||
+      (comboDef && comboDef.defaultSoundId) ||
+      'INCEPTION_BRAAAM';
     const memeId =
       memeOverride ||
       (mapping && mapping.memeId) ||
       this.config.actionMemeMappings[actionId] ||
+      (comboDef && comboDef.defaultMemeId) ||
       getDefaultMemeForAction(actionId).id;
 
     const memeDef = getMemeById(memeId, this.customMemes) || getDefaultMemeForAction(actionId);
 
     let actionLabel = actionId;
     let defaultCaption = 'TEST PREVIEW';
-    if (source === 'BODY') {
+    if (comboDef) {
+      actionLabel = comboDef.label;
+      defaultCaption = comboDef.defaultCaption;
+    } else if (source === 'BODY') {
       const meta = GOOFY_POSE_METADATA[actionId as GoofyPoseType];
       if (meta) {
         actionLabel = meta.label;

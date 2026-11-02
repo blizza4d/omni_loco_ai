@@ -42,7 +42,9 @@ export function MemePopupOverlay({
       case 'SPECIAL':
         return 'border-fuchsia-400 shadow-[0_0_40px_rgba(217,70,239,0.75)]';
       default:
-        return popup.actionSource === 'HAND'
+        return popup.actionSource === 'DUAL_HAND'
+          ? 'border-purple-400 shadow-[0_0_40px_rgba(168,85,247,0.7)]'
+          : popup.actionSource === 'HAND'
           ? 'border-cyan-400 shadow-[0_0_35px_rgba(6,182,212,0.6)]'
           : 'border-yellow-400 shadow-[0_0_35px_rgba(250,204,21,0.6)]';
     }

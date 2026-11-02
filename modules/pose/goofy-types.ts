@@ -31,7 +31,14 @@ export type GoofyHandGestureType =
   | 'SWIPE_LEFT'
   | 'SWIPE_RIGHT';
 
-export type GoofyActionId = GoofyPoseType | GoofyHandGestureType;
+export type GoofyDualHandComboId =
+  | 'DOUBLE_THUMBS_UP'
+  | 'BOTH_HANDS_OPEN'
+  | 'BOTH_HANDS_FIST'
+  | 'DOUBLE_PEACE'
+  | 'THUMBS_UP_AND_DOWN';
+
+export type GoofyActionId = GoofyPoseType | GoofyHandGestureType | GoofyDualHandComboId;
 
 export type GoofySoundId =
   | 'AIR_HORN'
@@ -101,6 +108,7 @@ export interface HandClassificationResult {
   confidence: number;
   label: string;
   comicCaption: string;
+  fingerCount?: number;
   isDynamic?: boolean;
 }
 
@@ -180,7 +188,7 @@ export interface ActiveMemePopup {
   id: string;
   actionId: string;
   actionLabel: string;
-  actionSource: 'BODY' | 'HAND';
+  actionSource: 'BODY' | 'HAND' | 'DUAL_HAND';
   hand?: 'Left' | 'Right' | 'Both';
   memeId: string;
   memeTitle: string;
@@ -200,7 +208,7 @@ export interface ActiveMemePopup {
 export interface UnifiedMemeEvent {
   id: string;
   timestamp: number;
-  source: 'BODY' | 'HAND';
+  source: 'BODY' | 'HAND' | 'DUAL_HAND';
   actionId: string;
   actionLabel: string;
   hand?: 'Left' | 'Right' | 'Both';
@@ -230,6 +238,7 @@ export interface GoofyModeConfig {
   enableSound: boolean; // Play sound effects
   simultaneousPolicy: 'ALLOW_BOTH' | 'HAND_PRIORITY' | 'BODY_PRIORITY' | 'REPLACE_OLDEST';
   handMappings: Record<GoofyHandGestureType, PoseSoundMapping>;
+  dualHandMappings: Record<GoofyDualHandComboId, PoseSoundMapping>;
   actionMemeMappings: Record<string, string>; // action/gesture ID -> memeId
   actionCustomCaptions: Record<string, string>; // action/gesture ID -> custom caption
   // V3 Advanced Meme Additions
@@ -559,7 +568,7 @@ export const GOOFY_HAND_METADATA: Record<GoofyHandGestureType, GoofyHandMetadata
   OPEN_PALM: {
     id: 'OPEN_PALM',
     label: 'OPEN PALM',
-    defaultCaption: 'HALT! // MAXIMUM STOP ENERGY',
+    defaultCaption: 'STOP RIGHT THERE',
     icon: '✋',
     description: 'All 5 fingers extended flat toward camera.',
     cues: ['All 5 fingers extended', 'Flat palm orientation'],
@@ -567,7 +576,7 @@ export const GOOFY_HAND_METADATA: Record<GoofyHandGestureType, GoofyHandMetadata
   CLOSED_FIST: {
     id: 'CLOSED_FIST',
     label: 'CLOSED FIST',
-    defaultCaption: 'POWER LEVEL RISING // BROFIST LOADED',
+    defaultCaption: 'ANGER UNLOCKED',
     icon: '✊',
     description: 'All fingers curled tight into a solid fist.',
     cues: ['All 4 fingers curled', 'Thumb tucked over fingers'],
@@ -575,7 +584,7 @@ export const GOOFY_HAND_METADATA: Record<GoofyHandGestureType, GoofyHandMetadata
   THUMBS_UP: {
     id: 'THUMBS_UP',
     label: 'THUMBS UP',
-    defaultCaption: 'ABSOLUTE CHAD APPROVED // CERTIFIED BASED',
+    defaultCaption: 'MAXIMUM AURA',
     icon: '👍',
     description: 'Fingers curled with thumb pointing straight up.',
     cues: ['Thumb extended vertical upward', '4 fingers fully curled'],
@@ -583,7 +592,7 @@ export const GOOFY_HAND_METADATA: Record<GoofyHandGestureType, GoofyHandMetadata
   THUMBS_DOWN: {
     id: 'THUMBS_DOWN',
     label: 'THUMBS DOWN',
-    defaultCaption: 'MAJOR DISAPPROVAL // CRINGE DETECTED',
+    defaultCaption: 'SKILL ISSUE',
     icon: '👎',
     description: 'Fingers curled with thumb pointing straight down.',
     cues: ['Thumb extended downward', '4 fingers fully curled'],
@@ -591,7 +600,7 @@ export const GOOFY_HAND_METADATA: Record<GoofyHandGestureType, GoofyHandMetadata
   PEACE_SIGN: {
     id: 'PEACE_SIGN',
     label: 'PEACE SIGN',
-    defaultCaption: 'PEACE OUT // ZERO DRAMA ZONE',
+    defaultCaption: 'MAIN CHARACTER ENERGY',
     icon: '✌️',
     description: 'Index and middle fingers extended in a V-shape.',
     cues: ['Index & middle extended', 'Ring & pinky curled', 'Fingertips separated'],
@@ -599,7 +608,7 @@ export const GOOFY_HAND_METADATA: Record<GoofyHandGestureType, GoofyHandMetadata
   POINTING: {
     id: 'POINTING',
     label: 'POINTING',
-    defaultCaption: 'TARGET ACQUIRED // YOU HAVE BEEN CHOSEN',
+    defaultCaption: 'BRO IS TARGETING',
     icon: '👉',
     description: 'Index finger extended forward, others curled.',
     cues: ['Index finger extended', 'Middle, ring, pinky curled'],
@@ -607,7 +616,7 @@ export const GOOFY_HAND_METADATA: Record<GoofyHandGestureType, GoofyHandMetadata
   PINCH: {
     id: 'PINCH',
     label: 'PINCH',
-    defaultCaption: 'TINY OBJECT SECURED // ULTRA PRECISION',
+    defaultCaption: 'GOTCHA',
     icon: '🤏',
     description: 'Thumb tip and index tip touching or near contact.',
     cues: ['Thumb & index tip distance < 0.35 palm scale'],
@@ -615,7 +624,7 @@ export const GOOFY_HAND_METADATA: Record<GoofyHandGestureType, GoofyHandMetadata
   THREE_FINGERS: {
     id: 'THREE_FINGERS',
     label: 'THREE FINGERS',
-    defaultCaption: 'TRIPLE THREAT // SACRED TRINITY',
+    defaultCaption: 'TRIPLE THREAT',
     icon: '🤟',
     description: 'Index, middle, and ring fingers extended.',
     cues: ['Index, middle, ring extended', 'Pinky curled'],
@@ -623,7 +632,7 @@ export const GOOFY_HAND_METADATA: Record<GoofyHandGestureType, GoofyHandMetadata
   FOUR_FINGERS: {
     id: 'FOUR_FINGERS',
     label: 'FOUR FINGERS',
-    defaultCaption: 'QUAD CORE OVERCLOCK // 400% CAPACITY',
+    defaultCaption: 'QUAD CORE',
     icon: '🖖',
     description: 'Index, middle, ring, and pinky extended, thumb tucked.',
     cues: ['4 fingers extended', 'Thumb tucked across palm'],
@@ -631,7 +640,7 @@ export const GOOFY_HAND_METADATA: Record<GoofyHandGestureType, GoofyHandMetadata
   FIVE_FINGERS: {
     id: 'FIVE_FINGERS',
     label: 'FIVE FINGERS',
-    defaultCaption: 'FULL SPREAD CELEBRATION // HIGH FIVE!',
+    defaultCaption: 'ABSOLUTE POWER',
     icon: '🖐️',
     description: 'All 5 fingers spread wide.',
     cues: ['All 5 fingers extended and spread outward'],
@@ -639,7 +648,7 @@ export const GOOFY_HAND_METADATA: Record<GoofyHandGestureType, GoofyHandMetadata
   SWIPE_LEFT: {
     id: 'SWIPE_LEFT',
     label: 'SWIPE LEFT',
-    defaultCaption: 'SWIPE LEFT // ABSOLUTELY NOT',
+    defaultCaption: 'REJECTED',
     icon: '👈',
     description: 'Fast horizontal hand motion from right to left.',
     isDynamic: true,
@@ -648,11 +657,81 @@ export const GOOFY_HAND_METADATA: Record<GoofyHandGestureType, GoofyHandMetadata
   SWIPE_RIGHT: {
     id: 'SWIPE_RIGHT',
     label: 'SWIPE RIGHT',
-    defaultCaption: 'SWIPE RIGHT // IT’S AN INSTANT MATCH!',
+    defaultCaption: 'APPROVED',
     icon: '👉',
     description: 'Fast horizontal hand motion from left to right.',
     isDynamic: true,
     cues: ['Rapid rightward velocity > 1.2 screens/sec'],
+  },
+};
+
+export interface DualHandComboDefinition {
+  id: GoofyDualHandComboId;
+  label: string;
+  leftGesture: GoofyHandGestureType | GoofyHandGestureType[];
+  rightGesture: GoofyHandGestureType | GoofyHandGestureType[];
+  defaultMemeId: string;
+  defaultSoundId: GoofySoundId;
+  defaultCaption: string;
+  icon: string;
+  description: string;
+}
+
+export const GOOFY_DUAL_COMBO_DEFINITIONS: Record<GoofyDualHandComboId, DualHandComboDefinition> = {
+  DOUBLE_THUMBS_UP: {
+    id: 'DOUBLE_THUMBS_UP',
+    label: 'DOUBLE THUMBS UP',
+    leftGesture: 'THUMBS_UP',
+    rightGesture: 'THUMBS_UP',
+    defaultMemeId: 'MEME_MAXIMUM_AURA',
+    defaultSoundId: 'CHAD_GONG',
+    defaultCaption: 'ULTRA CHAD OVERLOAD // AURA +1000',
+    icon: '👍👍',
+    description: 'Both hands displaying simultaneous thumbs up.',
+  },
+  BOTH_HANDS_OPEN: {
+    id: 'BOTH_HANDS_OPEN',
+    label: 'BOTH HANDS OPEN',
+    leftGesture: ['OPEN_PALM', 'FIVE_FINGERS'],
+    rightGesture: ['OPEN_PALM', 'FIVE_FINGERS'],
+    defaultMemeId: 'MEME_STOP_SIGN',
+    defaultSoundId: 'INCEPTION_BRAAAM',
+    defaultCaption: 'HALT ON ALL FREQUENCIES // TOTAL SURRENDER',
+    icon: '✋✋',
+    description: 'Both palms held open toward the camera.',
+  },
+  BOTH_HANDS_FIST: {
+    id: 'BOTH_HANDS_FIST',
+    label: 'DOUBLE FISTS',
+    leftGesture: 'CLOSED_FIST',
+    rightGesture: 'CLOSED_FIST',
+    defaultMemeId: 'MEME_FINAL_BOSS_ENERGY',
+    defaultSoundId: 'ANIME_POWER_UP',
+    defaultCaption: 'DOUBLE BROFIST // POWER LEVEL OVER 9000',
+    icon: '✊✊',
+    description: 'Both hands clenched in solid fists.',
+  },
+  DOUBLE_PEACE: {
+    id: 'DOUBLE_PEACE',
+    label: 'DOUBLE PEACE',
+    leftGesture: 'PEACE_SIGN',
+    rightGesture: 'PEACE_SIGN',
+    defaultMemeId: 'MEME_ABSOLUTE_CINEMA',
+    defaultSoundId: 'BRASS_FANFARE',
+    defaultCaption: 'DOUBLE PEACE // ABSOLUTE CINEMA',
+    icon: '✌️✌️',
+    description: 'Both hands displaying peace V-signs.',
+  },
+  THUMBS_UP_AND_DOWN: {
+    id: 'THUMBS_UP_AND_DOWN',
+    label: 'THUMBS UP & DOWN',
+    leftGesture: ['THUMBS_UP', 'THUMBS_DOWN'],
+    rightGesture: ['THUMBS_UP', 'THUMBS_DOWN'],
+    defaultMemeId: 'MEME_CONFUSED_BRAIN',
+    defaultSoundId: 'RECORD_SCRATCH',
+    defaultCaption: 'PERFECTLY BALANCED // BRUH MOMENT',
+    icon: '👍👎',
+    description: 'One hand thumbs up, other hand thumbs down.',
   },
 };
 
@@ -785,7 +864,7 @@ export const DEFAULT_GOOFY_CONFIG: GoofyModeConfig = {
     },
     CLOSED_FIST: {
       pose: 'CLOSED_FIST',
-      soundId: 'ANIME_POWER_UP',
+      soundId: 'CARTOON_IMPACT',
       enabled: true,
       visualEnabled: true,
       memeId: 'MEME_POW_IMPACT',
@@ -795,21 +874,21 @@ export const DEFAULT_GOOFY_CONFIG: GoofyModeConfig = {
       soundId: 'CHAD_GONG',
       enabled: true,
       visualEnabled: true,
-      memeId: 'MEME_CHAD_THUMBS_UP',
+      memeId: 'MEME_MAXIMUM_AURA',
     },
     THUMBS_DOWN: {
       pose: 'THUMBS_DOWN',
       soundId: 'SAD_TROMBONE',
       enabled: true,
       visualEnabled: true,
-      memeId: 'MEME_THUMBS_DOWN_FAIL',
+      memeId: 'MEME_SKILL_ISSUE',
     },
     PEACE_SIGN: {
       pose: 'PEACE_SIGN',
       soundId: 'VICTORY_BELL',
       enabled: true,
       visualEnabled: true,
-      memeId: 'MEME_PEACE_OUT',
+      memeId: 'MEME_MAIN_CHARACTER',
     },
     POINTING: {
       pose: 'POINTING',
@@ -844,7 +923,7 @@ export const DEFAULT_GOOFY_CONFIG: GoofyModeConfig = {
       soundId: 'CROWD_CHEER',
       enabled: true,
       visualEnabled: true,
-      memeId: 'MEME_SUCCESS_KID',
+      memeId: 'MEME_UNSTOPPABLE',
     },
     SWIPE_LEFT: {
       pose: 'SWIPE_LEFT',
@@ -859,6 +938,43 @@ export const DEFAULT_GOOFY_CONFIG: GoofyModeConfig = {
       enabled: true,
       visualEnabled: true,
       memeId: 'MEME_SWIPE_RIGHT',
+    },
+  },
+  dualHandMappings: {
+    DOUBLE_THUMBS_UP: {
+      pose: 'DOUBLE_THUMBS_UP' as any,
+      soundId: 'CHAD_GONG',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'MEME_MAXIMUM_AURA',
+    },
+    BOTH_HANDS_OPEN: {
+      pose: 'BOTH_HANDS_OPEN' as any,
+      soundId: 'INCEPTION_BRAAAM',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'MEME_STOP_SIGN',
+    },
+    BOTH_HANDS_FIST: {
+      pose: 'BOTH_HANDS_FIST' as any,
+      soundId: 'ANIME_POWER_UP',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'MEME_FINAL_BOSS_ENERGY',
+    },
+    DOUBLE_PEACE: {
+      pose: 'DOUBLE_PEACE' as any,
+      soundId: 'BRASS_FANFARE',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'MEME_ABSOLUTE_CINEMA',
+    },
+    THUMBS_UP_AND_DOWN: {
+      pose: 'THUMBS_UP_AND_DOWN' as any,
+      soundId: 'RECORD_SCRATCH',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'MEME_CONFUSED_BRAIN',
     },
   },
   actionMemeMappings: {
@@ -879,16 +995,21 @@ export const DEFAULT_GOOFY_CONFIG: GoofyModeConfig = {
     ZOMBIE_WALK: 'MEME_FACEPALM',
     OPEN_PALM: 'MEME_STOP_SIGN',
     CLOSED_FIST: 'MEME_POW_IMPACT',
-    THUMBS_UP: 'MEME_CHAD_THUMBS_UP',
-    THUMBS_DOWN: 'MEME_THUMBS_DOWN_FAIL',
-    PEACE_SIGN: 'MEME_PEACE_OUT',
+    THUMBS_UP: 'MEME_MAXIMUM_AURA',
+    THUMBS_DOWN: 'MEME_SKILL_ISSUE',
+    PEACE_SIGN: 'MEME_MAIN_CHARACTER',
     POINTING: 'MEME_TARGET_LOCKED',
     PINCH: 'MEME_PINCH_GRAB',
     THREE_FINGERS: 'MEME_THREE_FINGER_SALUTE',
     FOUR_FINGERS: 'MEME_FOUR_FINGER_POWER',
-    FIVE_FINGERS: 'MEME_SUCCESS_KID',
+    FIVE_FINGERS: 'MEME_UNSTOPPABLE',
     SWIPE_LEFT: 'MEME_SWIPE_LEFT',
     SWIPE_RIGHT: 'MEME_SWIPE_RIGHT',
+    DOUBLE_THUMBS_UP: 'MEME_MAXIMUM_AURA',
+    BOTH_HANDS_OPEN: 'MEME_STOP_SIGN',
+    BOTH_HANDS_FIST: 'MEME_FINAL_BOSS_ENERGY',
+    DOUBLE_PEACE: 'MEME_ABSOLUTE_CINEMA',
+    THUMBS_UP_AND_DOWN: 'MEME_CONFUSED_BRAIN',
   },
   actionCustomCaptions: {},
   randomMemeMode: false,
@@ -1049,4 +1170,9 @@ export const GOOFY_ACTION_RECOMMENDED_MEMES: Record<GoofyActionId, string[]> = {
   FIVE_FINGERS: ['MEME_SUCCESS_KID', 'MEME_CROWD_GOES_WILD', 'MEME_LEVEL_UP', 'MEME_VICTORY_ACHIEVED'],
   SWIPE_LEFT: ['MEME_SWIPE_LEFT', 'MEME_MISSION_FAILED', 'MEME_SKILL_ISSUE'],
   SWIPE_RIGHT: ['MEME_SWIPE_RIGHT', 'MEME_LEVEL_UP', 'MEME_UNSTOPPABLE'],
+  DOUBLE_THUMBS_UP: ['MEME_MAXIMUM_AURA', 'MEME_CHAD_THUMBS_UP', 'MEME_ABSOLUTE_CHAD_CHIN'],
+  BOTH_HANDS_OPEN: ['MEME_STOP_SIGN', 'MEME_ABSOLUTE_SHOCK', 'MEME_WAIT_WHAT'],
+  BOTH_HANDS_FIST: ['MEME_FINAL_BOSS_ENERGY', 'MEME_POW_IMPACT', 'MEME_UNSTOPPABLE'],
+  DOUBLE_PEACE: ['MEME_ABSOLUTE_CINEMA', 'MEME_PEACE_OUT', 'MEME_VICTORY_DANCE'],
+  THUMBS_UP_AND_DOWN: ['MEME_CONFUSED_BRAIN', 'MEME_WHAT_JUST_HAPPENED', 'MEME_SIDE_EYE'],
 };

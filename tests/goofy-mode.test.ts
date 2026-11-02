@@ -3,7 +3,12 @@ import { GoofyPoseClassifier } from '../modules/pose/goofy-pose-classifier';
 import { GoofyPoseStateMachine } from '../modules/pose/goofy-state-machine';
 import { GoofyAudioEngine } from '../modules/pose/goofy-audio-engine';
 import { GoofyParticleEmitter, GoofyVisualFXEngine } from '../modules/pose/goofy-visual-fx';
-import { GoofyHandClassifier, GoofyHandStateMachine } from '../modules/pose/goofy-hand-classifier';
+import {
+  GoofyHandClassifier,
+  GoofyHandStateMachine,
+  GoofyDualHandStateMachine,
+  detectDualHandCombo,
+} from '../modules/pose/goofy-hand-classifier';
 import { GoofyEventEngine } from '../modules/pose/goofy-event-engine';
 import {
   DEFAULT_MEME_LIBRARY,
@@ -20,6 +25,8 @@ import { PoseLandmark } from '../modules/pose/types';
 import {
   GoofyPoseType,
   GoofyHandGestureType,
+  GoofyDualHandComboId,
+  GOOFY_DUAL_COMBO_DEFINITIONS,
   DEFAULT_GOOFY_CONFIG,
   DEFAULT_SOUND_LIBRARY,
   BUILTIN_MEME_PRESETS,
@@ -897,7 +904,7 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
       expect(tPoseMeme.id).toBe('MEME_SURPRISED_PIKACHU');
 
       const thumbsUpMeme = getDefaultMemeForAction('THUMBS_UP');
-      expect(thumbsUpMeme.id).toBe('MEME_CHAD_THUMBS_UP');
+      expect(thumbsUpMeme.id).toBe('MEME_MAXIMUM_AURA');
 
       const pinchMeme = getDefaultMemeForAction('PINCH');
       expect(pinchMeme.id).toBe('MEME_PINCH_GRAB');
@@ -1038,6 +1045,176 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
       expect(engine.getRecentMemeIds().length).toBe(2);
       // Anti-repetition check
       expect(evt2!.memeId).not.toBe(evt1!.memeId);
+    });
+  });
+
+  describe('Goofy Model V3 Hand-Only Architecture & Dual-Hand Combos', () => {
+    it('detectDualHandCombo detects all 5 specified dual-hand combinations correctly', () => {
+      // 1. DOUBLE_THUMBS_UP
+      const doubleThumbs = detectDualHandCombo('THUMBS_UP', 'THUMBS_UP');
+      expect(doubleThumbs.combo).toBe('DOUBLE_THUMBS_UP');
+      expect(doubleThumbs.confidence).toBeGreaterThanOrEqual(0.9);
+
+      // 2. BOTH_HANDS_OPEN
+      const openBoth = detectDualHandCombo('OPEN_PALM', 'OPEN_PALM');
+      expect(openBoth.combo).toBe('BOTH_HANDS_OPEN');
+
+      const openAndFive = detectDualHandCombo('OPEN_PALM', 'FIVE_FINGERS');
+      expect(openAndFive.combo).toBe('BOTH_HANDS_OPEN');
+
+      // 3. BOTH_HANDS_FIST
+      const doubleFist = detectDualHandCombo('CLOSED_FIST', 'CLOSED_FIST');
+      expect(doubleFist.combo).toBe('BOTH_HANDS_FIST');
+
+      // 4. DOUBLE_PEACE
+      const doublePeace = detectDualHandCombo('PEACE_SIGN', 'PEACE_SIGN');
+      expect(doublePeace.combo).toBe('DOUBLE_PEACE');
+
+      // 5. THUMBS_UP_AND_DOWN (both symmetric orientations)
+      const upDown1 = detectDualHandCombo('THUMBS_UP', 'THUMBS_DOWN');
+      expect(upDown1.combo).toBe('THUMBS_UP_AND_DOWN');
+
+      const upDown2 = detectDualHandCombo('THUMBS_DOWN', 'THUMBS_UP');
+      expect(upDown2.combo).toBe('THUMBS_UP_AND_DOWN');
+
+      // Unmatched combo
+      const unmatched = detectDualHandCombo('PINCH', 'POINTING');
+      expect(unmatched.combo).toBeNull();
+    });
+
+    it('GoofyDualHandStateMachine enforces temporal gating and cooldown', () => {
+      const sm = new GoofyDualHandStateMachine({
+        minHoldMs: 180,
+        cooldownMs: 500,
+      });
+
+      const comboResult = { combo: 'DOUBLE_THUMBS_UP' as const, confidence: 0.95 };
+
+      // Frame 1: Candidate onset (0ms)
+      const r1 = sm.process(comboResult, 1000);
+      expect(r1.status).toBe('CANDIDATE');
+      expect(r1.triggered).toBe(false);
+
+      // Frame 2: Mid-hold (100ms)
+      const r2 = sm.process(comboResult, 1100);
+      expect(r2.status).toBe('CANDIDATE');
+      expect(r2.triggered).toBe(false);
+
+      // Frame 3: Hold complete (200ms >= 180ms) -> Triggers!
+      const r3 = sm.process(comboResult, 1200);
+      expect(r3.status).toBe('TRIGGERED');
+      expect(r3.triggered).toBe(true);
+      expect(r3.combo).toBe('DOUBLE_THUMBS_UP');
+
+      // Frame 4: Next frame enters COOLDOWN
+      const r4 = sm.process(comboResult, 1220);
+      expect(r4.status).toBe('COOLDOWN');
+      expect(r4.triggered).toBe(false);
+
+      // Frame 5: Before cooldown ends (300ms < 500ms cooldown)
+      const r5 = sm.process(comboResult, 1500);
+      expect(r5.status).toBe('COOLDOWN');
+      expect(r5.triggered).toBe(false);
+
+      // Frame 6: Drop combo (user lowers hands)
+      sm.process(null, 1600);
+
+      // Frame 7: After cooldown expires (1200 + 500 = 1700ms), new combo begins
+      const r6 = sm.process(comboResult, 1750);
+      expect(r6.status).toBe('CANDIDATE');
+    });
+
+    it('provides unambiguous geometric separation between OPEN_PALM and FIVE_FINGERS', () => {
+      const classifier = new GoofyHandClassifier();
+
+      // Create base flat palm landmarks
+      const makePalm = (spreadFactor: number): Landmark3D[] => {
+        const lms: Landmark3D[] = [];
+        // 0: Wrist
+        lms.push({ x: 0.5, y: 0.8, z: 0 });
+        // Palm base points (1, 5, 9, 13, 17)
+        lms[1] = { x: 0.45, y: 0.7, z: 0 };
+        lms[2] = { x: 0.40, y: 0.65, z: 0 };
+        lms[3] = { x: 0.35, y: 0.60, z: 0 };
+        // Thumb tip: close for flat palm (spreadFactor=1), spread far out for five fingers (spreadFactor=2)
+        lms[4] = { x: spreadFactor > 1.2 ? 0.20 : 0.38, y: 0.55, z: 0 };
+
+        // Index (5-8)
+        lms[5] = { x: 0.46, y: 0.65, z: 0 };
+        lms[6] = { x: 0.45, y: 0.55, z: 0 };
+        lms[7] = { x: 0.45, y: 0.45, z: 0 };
+        lms[8] = { x: spreadFactor > 1.2 ? 0.40 : 0.45, y: 0.35, z: 0 }; // Index tip
+
+        // Middle (9-12)
+        lms[9] = { x: 0.50, y: 0.65, z: 0 };
+        lms[10] = { x: 0.50, y: 0.55, z: 0 };
+        lms[11] = { x: 0.50, y: 0.45, z: 0 };
+        lms[12] = { x: 0.50, y: 0.33, z: 0 }; // Middle tip
+
+        // Ring (13-16)
+        lms[13] = { x: 0.54, y: 0.65, z: 0 };
+        lms[14] = { x: 0.55, y: 0.55, z: 0 };
+        lms[15] = { x: 0.55, y: 0.45, z: 0 };
+        lms[16] = { x: spreadFactor > 1.2 ? 0.60 : 0.55, y: 0.36, z: 0 }; // Ring tip
+
+        // Pinky (17-20)
+        lms[17] = { x: 0.58, y: 0.68, z: 0 };
+        lms[18] = { x: 0.60, y: 0.60, z: 0 };
+        lms[19] = { x: 0.61, y: 0.52, z: 0 };
+        lms[20] = { x: spreadFactor > 1.2 ? 0.70 : 0.58, y: 0.42, z: 0 }; // Pinky tip
+
+        return lms;
+      };
+
+      const flatPalm = makePalm(1.0);
+      const resFlat = classifier.classify(flatPalm, 'Right', 1000);
+      expect(resFlat.fingerCount).toBe(5);
+      expect(resFlat.gesture).toBe('OPEN_PALM');
+
+      const wideSpreadPalm = makePalm(2.0);
+      const resWide = classifier.classify(wideSpreadPalm, 'Right', 1000);
+      expect(resWide.fingerCount).toBe(5);
+      expect(resWide.gesture).toBe('FIVE_FINGERS');
+    });
+
+    it('GoofyEventEngine dispatches dual-hand triggers with correct source and metadata', () => {
+      const audio = new GoofyAudioEngine();
+      const vfx = new GoofyVisualFXEngine();
+      const engine = new GoofyEventEngine(DEFAULT_GOOFY_CONFIG, audio, vfx);
+
+      const evt = engine.dispatchDualHandTrigger('DOUBLE_THUMBS_UP', 0.98);
+      expect(evt).not.toBeNull();
+      expect(evt!.source).toBe('DUAL_HAND');
+      expect(evt!.actionId).toBe('DOUBLE_THUMBS_UP');
+      expect(evt!.actionLabel).toBe('DOUBLE THUMBS UP');
+      expect(evt!.memeId).toBe('MEME_MAXIMUM_AURA');
+      expect(evt!.soundName).toBe('Triumphant Chad Gong');
+    });
+
+    it('verifies all 5 dual-hand combos have default metadata, memes, and sounds', () => {
+      const combos: GoofyDualHandComboId[] = [
+        'DOUBLE_THUMBS_UP',
+        'BOTH_HANDS_OPEN',
+        'BOTH_HANDS_FIST',
+        'DOUBLE_PEACE',
+        'THUMBS_UP_AND_DOWN',
+      ];
+
+      for (const cid of combos) {
+        const def = GOOFY_DUAL_COMBO_DEFINITIONS[cid];
+        expect(def).toBeDefined();
+        expect(def.label).toBeTruthy();
+        expect(def.icon).toBeTruthy();
+        expect(def.defaultCaption).toBeTruthy();
+
+        // Default meme exists
+        const meme = getMemeById(def.defaultMemeId);
+        expect(meme).toBeDefined();
+
+        // Default sound exists
+        const sound = DEFAULT_SOUND_LIBRARY.find((s) => s.id === def.defaultSoundId);
+        expect(sound).toBeDefined();
+      }
     });
   });
 });

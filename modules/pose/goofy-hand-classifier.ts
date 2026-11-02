@@ -1,6 +1,7 @@
 import { Landmark3D } from '../hand/types';
 import {
   GoofyHandGestureType,
+  GoofyDualHandComboId,
   HandClassificationResult,
   GOOFY_HAND_METADATA,
 } from './goofy-types';
@@ -45,6 +46,7 @@ export class GoofyHandClassifier {
         confidence: 0,
         label: 'NO HAND DETECTED',
         comicCaption: 'SHOW YOUR HAND TO TRIGGER MEMES!',
+        fingerCount: 0,
       };
     }
 
@@ -233,23 +235,42 @@ export class GoofyHandClassifier {
       });
     }
 
+    // Count total extended fingers (0 to 5)
+    const fingerCount = (thumbExtended ? 1 : 0) + extendedFourCount;
+
     // ─────────────────────────────────────────────────────────────
-    // GESTURE 9 & 10: FIVE FINGERS / OPEN PALM
-    // All 5 fingers extended and spread outward
+    // GESTURE 9 & 10: FIVE FINGERS vs OPEN PALM
+    // Resolves overlapping classification:
+    // FIVE FINGERS: radially spread wide in counting gesture (span > 2.2 * palmScale)
+    // OPEN PALM: flat stop palm facing camera (span <= 2.2 * palmScale)
     // ─────────────────────────────────────────────────────────────
     if (indexExtended && middleExtended && ringExtended && pinkyExtended && thumbExtended) {
-      candidates.push({
-        gesture: 'FIVE_FINGERS',
-        score: 0.95,
-      });
-      candidates.push({
-        gesture: 'OPEN_PALM',
-        score: 0.94,
-      });
+      const spread = this.dist3D(thumbTip, pinkyTip);
+      const normalizedSpread = spread / palmScale;
+
+      if (normalizedSpread > 2.2) {
+        candidates.push({
+          gesture: 'FIVE_FINGERS',
+          score: 0.96,
+        });
+        candidates.push({
+          gesture: 'OPEN_PALM',
+          score: 0.90,
+        });
+      } else {
+        candidates.push({
+          gesture: 'OPEN_PALM',
+          score: 0.96,
+        });
+        candidates.push({
+          gesture: 'FIVE_FINGERS',
+          score: 0.90,
+        });
+      }
     } else if (extendedFourCount === 4) {
       candidates.push({
         gesture: 'OPEN_PALM',
-        score: 0.88,
+        score: 0.91,
       });
     }
 
@@ -269,6 +290,7 @@ export class GoofyHandClassifier {
         confidence: Math.round(top.score * 100) / 100,
         label: meta ? meta.label : top.gesture,
         comicCaption: meta ? meta.defaultCaption : 'GESTURE DETECTED',
+        fingerCount,
         isDynamic: top.isDynamic,
       };
     }
@@ -279,6 +301,7 @@ export class GoofyHandClassifier {
       confidence: 0,
       label: 'HAND TRACKED',
       comicCaption: 'HOLD A RECOGNISABLE GESTURE TO TRIGGER MEMES',
+      fingerCount,
     };
   }
 
@@ -380,5 +403,141 @@ export class GoofyHandStateMachine {
     this.candidateStartTime = 0;
     this.lastTriggerTime = 0;
     this.hasTriggeredCurrentGesture = false;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DUAL-HAND COMBINATIONS ENGINE
+// Detects simultaneous multi-hand gestures and provides hold-time gating
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Detects whether left and right hand gestures form a recognized dual-hand combo
+ */
+export function detectDualHandCombo(
+  leftGesture: GoofyHandGestureType | null,
+  rightGesture: GoofyHandGestureType | null
+): { combo: GoofyDualHandComboId | null; confidence: number } {
+  if (!leftGesture || !rightGesture) return { combo: null, confidence: 0 };
+
+  // 1. DOUBLE_THUMBS_UP (Both Thumbs Up)
+  if (leftGesture === 'THUMBS_UP' && rightGesture === 'THUMBS_UP') {
+    return { combo: 'DOUBLE_THUMBS_UP', confidence: 0.98 };
+  }
+
+  // 2. BOTH_HANDS_OPEN (Both Hands Open / Five Fingers)
+  const isOpen = (g: GoofyHandGestureType) => g === 'OPEN_PALM' || g === 'FIVE_FINGERS';
+  if (isOpen(leftGesture) && isOpen(rightGesture)) {
+    return { combo: 'BOTH_HANDS_OPEN', confidence: 0.96 };
+  }
+
+  // 3. BOTH_HANDS_FIST (Double Brofist)
+  if (leftGesture === 'CLOSED_FIST' && rightGesture === 'CLOSED_FIST') {
+    return { combo: 'BOTH_HANDS_FIST', confidence: 0.96 };
+  }
+
+  // 4. DOUBLE_PEACE (Double V-Sign)
+  if (leftGesture === 'PEACE_SIGN' && rightGesture === 'PEACE_SIGN') {
+    return { combo: 'DOUBLE_PEACE', confidence: 0.96 };
+  }
+
+  // 5. THUMBS_UP_AND_DOWN (Contradictory Mixed Signals)
+  if (
+    (leftGesture === 'THUMBS_UP' && rightGesture === 'THUMBS_DOWN') ||
+    (leftGesture === 'THUMBS_DOWN' && rightGesture === 'THUMBS_UP')
+  ) {
+    return { combo: 'THUMBS_UP_AND_DOWN', confidence: 0.95 };
+  }
+
+  return { combo: null, confidence: 0 };
+}
+
+export class GoofyDualHandStateMachine {
+  private activeCombo: GoofyDualHandComboId | null = null;
+  private candidateCombo: GoofyDualHandComboId | null = null;
+  private candidateStartTime = 0;
+  private lastTriggerTime = 0;
+  private hasTriggeredCurrentCombo = false;
+
+  private minHoldMs: number;
+  private cooldownMs: number;
+
+  constructor(options: HandStateMachineOptions = {}) {
+    this.minHoldMs = options.minHoldMs ?? 180;
+    this.cooldownMs = options.cooldownMs ?? 800;
+  }
+
+  updateConfig(options: HandStateMachineOptions): void {
+    if (options.minHoldMs !== undefined) this.minHoldMs = options.minHoldMs;
+    if (options.cooldownMs !== undefined) this.cooldownMs = options.cooldownMs;
+  }
+
+  process(
+    leftOrResult: GoofyHandGestureType | { combo: GoofyDualHandComboId | null; confidence?: number } | null,
+    rightOrTimestamp?: GoofyHandGestureType | number | null,
+    timestampParam?: number
+  ): {
+    status: 'IDLE' | 'CANDIDATE' | 'TRIGGERED' | 'COOLDOWN';
+    triggered: boolean;
+    combo: GoofyDualHandComboId | null;
+    activeCombo: GoofyDualHandComboId | null;
+  } {
+    let combo: GoofyDualHandComboId | null = null;
+    let timestamp = performance.now();
+
+    if (leftOrResult && typeof leftOrResult === 'object' && 'combo' in leftOrResult) {
+      combo = leftOrResult.combo;
+      if (typeof rightOrTimestamp === 'number') {
+        timestamp = rightOrTimestamp;
+      }
+    } else {
+      combo = detectDualHandCombo(
+        leftOrResult as GoofyHandGestureType | null,
+        rightOrTimestamp as GoofyHandGestureType | null
+      ).combo;
+      if (typeof timestampParam === 'number') {
+        timestamp = timestampParam;
+      }
+    }
+
+    if (!combo) {
+      this.activeCombo = null;
+      this.candidateCombo = null;
+      this.candidateStartTime = 0;
+      this.hasTriggeredCurrentCombo = false;
+      return { status: 'IDLE', triggered: false, combo: null, activeCombo: null };
+    }
+
+    if (combo !== this.candidateCombo) {
+      this.candidateCombo = combo;
+      this.candidateStartTime = timestamp;
+      this.hasTriggeredCurrentCombo = false;
+      return { status: 'CANDIDATE', triggered: false, combo, activeCombo: this.activeCombo };
+    }
+
+    const heldDuration = timestamp - this.candidateStartTime;
+    if (heldDuration >= this.minHoldMs) {
+      this.activeCombo = combo;
+
+      if (!this.hasTriggeredCurrentCombo) {
+        if (timestamp - this.lastTriggerTime >= this.cooldownMs) {
+          this.hasTriggeredCurrentCombo = true;
+          this.lastTriggerTime = timestamp;
+          return { status: 'TRIGGERED', triggered: true, combo, activeCombo: combo };
+        }
+        return { status: 'COOLDOWN', triggered: false, combo, activeCombo: combo };
+      }
+      return { status: 'COOLDOWN', triggered: false, combo, activeCombo: combo };
+    }
+
+    return { status: 'CANDIDATE', triggered: false, combo, activeCombo: this.activeCombo };
+  }
+
+  reset(): void {
+    this.activeCombo = null;
+    this.candidateCombo = null;
+    this.candidateStartTime = 0;
+    this.lastTriggerTime = 0;
+    this.hasTriggeredCurrentCombo = false;
   }
 }

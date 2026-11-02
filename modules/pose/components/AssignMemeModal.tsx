@@ -7,8 +7,10 @@ import {
   MemeVisualDefinition,
   GoofyPoseType,
   GoofyHandGestureType,
+  GoofyDualHandComboId,
   GOOFY_POSE_METADATA,
   GOOFY_HAND_METADATA,
+  GOOFY_DUAL_COMBO_DEFINITIONS,
 } from '../goofy-types';
 
 interface AssignMemeModalProps {
@@ -17,17 +19,6 @@ interface AssignMemeModalProps {
   onClose: () => void;
   onAssignToAction: (actionId: string, memeId: string) => void;
 }
-
-const BODY_ACTIONS: GoofyPoseType[] = [
-  'T_POSE',
-  'HANDS_RAISED',
-  'HANDS_ON_HIPS',
-  'ARMS_CROSSED',
-  'SQUAT',
-  'JUMP',
-  'FLEX_POSE',
-  'CLAP',
-];
 
 const HAND_GESTURES: GoofyHandGestureType[] = [
   'OPEN_PALM',
@@ -42,6 +33,14 @@ const HAND_GESTURES: GoofyHandGestureType[] = [
   'FIVE_FINGERS',
   'SWIPE_LEFT',
   'SWIPE_RIGHT',
+];
+
+const DUAL_COMBOS: GoofyDualHandComboId[] = [
+  'DOUBLE_THUMBS_UP',
+  'BOTH_HANDS_OPEN',
+  'BOTH_HANDS_FIST',
+  'DOUBLE_PEACE',
+  'THUMBS_UP_AND_DOWN',
 ];
 
 export function AssignMemeModal({
@@ -87,39 +86,6 @@ export function AssignMemeModal({
 
         {/* Action Selection Sections */}
         <div className="space-y-4 flex-1 overflow-y-auto pr-1">
-          {/* Body Actions */}
-          <div>
-            <h4 className="font-extrabold text-amber-600 uppercase border-b border-charcoal-soft/20 pb-1 mb-2">
-              BODY ACTIONS (8)
-            </h4>
-            <div className="grid grid-cols-2 gap-2">
-              {BODY_ACTIONS.map((actionKey) => {
-                const meta = GOOFY_POSE_METADATA[actionKey];
-                const isAssigned = currentMappings[actionKey] === meme.id;
-                return (
-                  <button
-                    key={actionKey}
-                    onClick={() => {
-                      onAssignToAction(actionKey, meme.id);
-                      onClose();
-                    }}
-                    className={`p-2 border rounded text-left transition-all flex items-center justify-between ${
-                      isAssigned
-                        ? 'border-amber-500 bg-amber-100 text-charcoal-dark font-black'
-                        : 'border-charcoal-soft/40 bg-paper-cream hover:border-amber-400 hover:bg-amber-50/40 text-charcoal-dark'
-                    }`}
-                  >
-                    <div className="flex items-center gap-1.5 truncate">
-                      <span>{meta.icon}</span>
-                      <span className="text-[11px] truncate uppercase">{meta.label}</span>
-                    </div>
-                    {isAssigned && <Check className="w-3.5 h-3.5 text-amber-600 shrink-0" />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
           {/* Hand Gestures */}
           <div>
             <h4 className="font-extrabold text-cyan-600 uppercase border-b border-charcoal-soft/20 pb-1 mb-2">
@@ -147,6 +113,39 @@ export function AssignMemeModal({
                       <span className="text-[11px] truncate uppercase">{meta.label}</span>
                     </div>
                     {isAssigned && <Check className="w-3.5 h-3.5 text-cyan-600 shrink-0" />}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Dual-Hand Combos */}
+          <div>
+            <h4 className="font-extrabold text-purple-600 uppercase border-b border-charcoal-soft/20 pb-1 mb-2">
+              DUAL-HAND COMBINATIONS (5)
+            </h4>
+            <div className="grid grid-cols-2 gap-2">
+              {DUAL_COMBOS.map((comboKey) => {
+                const meta = GOOFY_DUAL_COMBO_DEFINITIONS[comboKey];
+                const isAssigned = currentMappings[comboKey] === meme.id;
+                return (
+                  <button
+                    key={comboKey}
+                    onClick={() => {
+                      onAssignToAction(comboKey, meme.id);
+                      onClose();
+                    }}
+                    className={`p-2 border rounded text-left transition-all flex items-center justify-between ${
+                      isAssigned
+                        ? 'border-purple-500 bg-purple-100 text-charcoal-dark font-black'
+                        : 'border-charcoal-soft/40 bg-paper-cream hover:border-purple-400 hover:bg-purple-50/40 text-charcoal-dark'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span>{meta.icon}</span>
+                      <span className="text-[11px] truncate uppercase">{meta.label}</span>
+                    </div>
+                    {isAssigned && <Check className="w-3.5 h-3.5 text-purple-600 shrink-0" />}
                   </button>
                 );
               })}
