@@ -36,7 +36,13 @@ export type GoofyDualHandComboId =
   | 'BOTH_HANDS_OPEN'
   | 'BOTH_HANDS_FIST'
   | 'DOUBLE_PEACE'
-  | 'THUMBS_UP_AND_DOWN';
+  | 'THUMBS_UP_AND_DOWN'
+  | 'PERFECT_TEN'
+  | 'DOUBLE_THREE'
+  | 'ROCK_PAPER_SCISSORS'
+  | 'SECRET_HEART_HANDS'
+  | 'SECRET_MATRIX_DODGE'
+  | 'SECRET_YOU_ARE_BREATHTAKING';
 
 export type GoofyActionId = GoofyPoseType | GoofyHandGestureType | GoofyDualHandComboId;
 
@@ -236,7 +242,7 @@ export interface GoofyModeConfig {
   memeDurationMs: number; // Duration in ms to display meme pop-up (default 1500)
   enableMemePopups: boolean; // Display meme popups over live camera
   enableSound: boolean; // Play sound effects
-  simultaneousPolicy: 'ALLOW_BOTH' | 'HAND_PRIORITY' | 'BODY_PRIORITY' | 'REPLACE_OLDEST';
+  simultaneousPolicy: 'ALLOW_BOTH' | 'RIGHT_PRIORITY' | 'LEFT_PRIORITY' | 'HAND_PRIORITY' | 'BODY_PRIORITY' | 'REPLACE_OLDEST';
   handMappings: Record<GoofyHandGestureType, PoseSoundMapping>;
   dualHandMappings: Record<GoofyDualHandComboId, PoseSoundMapping>;
   actionMemeMappings: Record<string, string>; // action/gesture ID -> memeId
@@ -675,6 +681,8 @@ export interface DualHandComboDefinition {
   defaultCaption: string;
   icon: string;
   description: string;
+  isSecret?: boolean;
+  requiredDigits?: number;
 }
 
 export const GOOFY_DUAL_COMBO_DEFINITIONS: Record<GoofyDualHandComboId, DualHandComboDefinition> = {
@@ -732,6 +740,77 @@ export const GOOFY_DUAL_COMBO_DEFINITIONS: Record<GoofyDualHandComboId, DualHand
     defaultCaption: 'PERFECTLY BALANCED // BRUH MOMENT',
     icon: '👍👎',
     description: 'One hand thumbs up, other hand thumbs down.',
+  },
+  PERFECT_TEN: {
+    id: 'PERFECT_TEN',
+    label: 'PERFECT 10',
+    leftGesture: 'FIVE_FINGERS',
+    rightGesture: 'FIVE_FINGERS',
+    defaultMemeId: 'MEME_PERFECT_TEN',
+    defaultSoundId: 'LEVEL_UP_NOTIFICATION',
+    defaultCaption: 'PERFECT 10 // MAXIMUM POWER UNLEASHED',
+    icon: '🔟',
+    description: 'All 10 fingers extended across both hands in counting gesture.',
+    requiredDigits: 10,
+  },
+  DOUBLE_THREE: {
+    id: 'DOUBLE_THREE',
+    label: 'DOUBLE THREE',
+    leftGesture: 'THREE_FINGERS',
+    rightGesture: 'THREE_FINGERS',
+    defaultMemeId: 'MEME_SIX_PACK_ENERGY',
+    defaultSoundId: 'CONFIDENT_ENTRANCE',
+    defaultCaption: 'DOUBLE TRIPLE // SIX PACK ENERGY',
+    icon: '🤟🤟',
+    description: 'Three fingers extended on each hand simultaneously (6 digits).',
+    requiredDigits: 6,
+  },
+  ROCK_PAPER_SCISSORS: {
+    id: 'ROCK_PAPER_SCISSORS',
+    label: 'RPS SHOWDOWN',
+    leftGesture: ['CLOSED_FIST', 'PEACE_SIGN', 'OPEN_PALM'],
+    rightGesture: ['CLOSED_FIST', 'PEACE_SIGN', 'OPEN_PALM'],
+    defaultMemeId: 'MEME_ROCK_PAPER_SCISSORS',
+    defaultSoundId: 'CARTOON_IMPACT',
+    defaultCaption: 'ROCK PAPER SCISSORS // CHOOSE YOUR FIGHTER',
+    icon: '✊✌️',
+    description: 'Two-hand duel: Fist vs Scissors or Open Palm.',
+  },
+  SECRET_HEART_HANDS: {
+    id: 'SECRET_HEART_HANDS',
+    label: 'HEART HANDS',
+    leftGesture: 'PINCH',
+    rightGesture: 'PINCH',
+    defaultMemeId: 'MEME_SECRET_HEART_AURA',
+    defaultSoundId: 'VICTORY_BELL',
+    defaultCaption: 'SECRET UNLOCKED // WHOLESOME OVERLOAD',
+    icon: '🫶',
+    description: 'Secret combo: Both hands pinching to form a heart shape.',
+    isSecret: true,
+  },
+  SECRET_MATRIX_DODGE: {
+    id: 'SECRET_MATRIX_DODGE',
+    label: 'NEURAL GLITCH',
+    leftGesture: ['POINTING', 'PINCH'],
+    rightGesture: ['POINTING', 'PINCH'],
+    defaultMemeId: 'MEME_SECRET_MATRIX_GLITCH',
+    defaultSoundId: 'LASER_BEAM',
+    defaultCaption: 'SECRET UNLOCKED // MATRIX OVERRIDE ACTIVATED',
+    icon: '🕶️',
+    description: 'Secret combo: Pointing with one hand while pinching with the other.',
+    isSecret: true,
+  },
+  SECRET_YOU_ARE_BREATHTAKING: {
+    id: 'SECRET_YOU_ARE_BREATHTAKING',
+    label: 'BREATHTAKING',
+    leftGesture: ['THUMBS_UP', 'POINTING'],
+    rightGesture: ['THUMBS_UP', 'POINTING'],
+    defaultMemeId: 'MEME_SECRET_YOU_ARE_BREATHTAKING',
+    defaultSoundId: 'BRASS_FANFARE',
+    defaultCaption: 'SECRET UNLOCKED // YOU\'RE BREATHTAKING!',
+    icon: '✨👉',
+    description: 'Secret combo: Thumbs up with one hand while pointing at camera.',
+    isSecret: true,
   },
 };
 
@@ -976,6 +1055,48 @@ export const DEFAULT_GOOFY_CONFIG: GoofyModeConfig = {
       visualEnabled: true,
       memeId: 'MEME_CONFUSED_BRAIN',
     },
+    PERFECT_TEN: {
+      pose: 'PERFECT_TEN' as any,
+      soundId: 'LEVEL_UP_NOTIFICATION',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'MEME_PERFECT_TEN',
+    },
+    DOUBLE_THREE: {
+      pose: 'DOUBLE_THREE' as any,
+      soundId: 'CONFIDENT_ENTRANCE',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'MEME_SIX_PACK_ENERGY',
+    },
+    ROCK_PAPER_SCISSORS: {
+      pose: 'ROCK_PAPER_SCISSORS' as any,
+      soundId: 'CARTOON_IMPACT',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'MEME_ROCK_PAPER_SCISSORS',
+    },
+    SECRET_HEART_HANDS: {
+      pose: 'SECRET_HEART_HANDS' as any,
+      soundId: 'VICTORY_BELL',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'MEME_SECRET_HEART_AURA',
+    },
+    SECRET_MATRIX_DODGE: {
+      pose: 'SECRET_MATRIX_DODGE' as any,
+      soundId: 'LASER_BEAM',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'MEME_SECRET_MATRIX_GLITCH',
+    },
+    SECRET_YOU_ARE_BREATHTAKING: {
+      pose: 'SECRET_YOU_ARE_BREATHTAKING' as any,
+      soundId: 'BRASS_FANFARE',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'MEME_SECRET_YOU_ARE_BREATHTAKING',
+    },
   },
   actionMemeMappings: {
     T_POSE: 'MEME_SURPRISED_PIKACHU',
@@ -1010,6 +1131,12 @@ export const DEFAULT_GOOFY_CONFIG: GoofyModeConfig = {
     BOTH_HANDS_FIST: 'MEME_FINAL_BOSS_ENERGY',
     DOUBLE_PEACE: 'MEME_ABSOLUTE_CINEMA',
     THUMBS_UP_AND_DOWN: 'MEME_CONFUSED_BRAIN',
+    PERFECT_TEN: 'MEME_PERFECT_TEN',
+    DOUBLE_THREE: 'MEME_SIX_PACK_ENERGY',
+    ROCK_PAPER_SCISSORS: 'MEME_ROCK_PAPER_SCISSORS',
+    SECRET_HEART_HANDS: 'MEME_SECRET_HEART_AURA',
+    SECRET_MATRIX_DODGE: 'MEME_SECRET_MATRIX_GLITCH',
+    SECRET_YOU_ARE_BREATHTAKING: 'MEME_SECRET_YOU_ARE_BREATHTAKING',
   },
   actionCustomCaptions: {},
   randomMemeMode: false,
@@ -1175,4 +1302,10 @@ export const GOOFY_ACTION_RECOMMENDED_MEMES: Record<GoofyActionId, string[]> = {
   BOTH_HANDS_FIST: ['MEME_FINAL_BOSS_ENERGY', 'MEME_POW_IMPACT', 'MEME_UNSTOPPABLE'],
   DOUBLE_PEACE: ['MEME_ABSOLUTE_CINEMA', 'MEME_PEACE_OUT', 'MEME_VICTORY_DANCE'],
   THUMBS_UP_AND_DOWN: ['MEME_CONFUSED_BRAIN', 'MEME_WHAT_JUST_HAPPENED', 'MEME_SIDE_EYE'],
+  PERFECT_TEN: ['MEME_PERFECT_TEN', 'MEME_LEVEL_UP', 'MEME_UNSTOPPABLE'],
+  DOUBLE_THREE: ['MEME_SIX_PACK_ENERGY', 'MEME_MAXIMUM_AURA', 'MEME_LEVEL_UP'],
+  ROCK_PAPER_SCISSORS: ['MEME_ROCK_PAPER_SCISSORS', 'MEME_POW_IMPACT', 'MEME_FINAL_BOSS_ENERGY'],
+  SECRET_HEART_HANDS: ['MEME_SECRET_HEART_AURA', 'MEME_VICTORY_ACHIEVED', 'MEME_MAIN_CHARACTER'],
+  SECRET_MATRIX_DODGE: ['MEME_SECRET_MATRIX_GLITCH', 'MEME_TARGET_LOCKED', 'MEME_FINAL_BOSS_ENERGY'],
+  SECRET_YOU_ARE_BREATHTAKING: ['MEME_SECRET_YOU_ARE_BREATHTAKING', 'MEME_MAXIMUM_AURA', 'MEME_CHAD_THUMBS_UP'],
 };

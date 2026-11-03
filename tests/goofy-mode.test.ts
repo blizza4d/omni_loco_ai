@@ -865,6 +865,40 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
       expect(engine.getActivePopups()[0]!.actionId).toBe('POINTING');
     });
 
+    it('RIGHT_PRIORITY policy favors Right hand over Left hand', () => {
+      const audio = new GoofyAudioEngine();
+      const vfx = new GoofyVisualFXEngine();
+      const config = { ...DEFAULT_GOOFY_CONFIG, simultaneousPolicy: 'RIGHT_PRIORITY' as const };
+      const engine = new GoofyEventEngine(config, audio, vfx);
+
+      // Right hand triggers first
+      engine.dispatchActionTrigger('THUMBS_UP', 'HAND', 'Right');
+      expect(engine.getActivePopups().length).toBe(1);
+      expect(engine.getActivePopups()[0]!.hand).toBe('Right');
+
+      // Left hand is suppressed
+      const leftRes = engine.dispatchActionTrigger('POINTING', 'HAND', 'Left');
+      expect(leftRes).toBeNull();
+      expect(engine.getActivePopups().length).toBe(1);
+    });
+
+    it('LEFT_PRIORITY policy favors Left hand over Right hand', () => {
+      const audio = new GoofyAudioEngine();
+      const vfx = new GoofyVisualFXEngine();
+      const config = { ...DEFAULT_GOOFY_CONFIG, simultaneousPolicy: 'LEFT_PRIORITY' as const };
+      const engine = new GoofyEventEngine(config, audio, vfx);
+
+      // Left hand triggers first
+      engine.dispatchActionTrigger('POINTING', 'HAND', 'Left');
+      expect(engine.getActivePopups().length).toBe(1);
+      expect(engine.getActivePopups()[0]!.hand).toBe('Left');
+
+      // Right hand is suppressed
+      const rightRes = engine.dispatchActionTrigger('THUMBS_UP', 'HAND', 'Right');
+      expect(rightRes).toBeNull();
+      expect(engine.getActivePopups().length).toBe(1);
+    });
+
     it('previewAction dispatches test popup and sound', () => {
       const audio = new GoofyAudioEngine();
       const vfx = new GoofyVisualFXEngine();
@@ -879,8 +913,8 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
   });
 
   describe('GoofyMemeLibrary: Original Vector SVGs & Action Mappings (V3 Upgrade)', () => {
-    it('contains at least 50 (specifically 62) original vector SVG memes with valid data URLs and stable IDs', () => {
-      expect(DEFAULT_MEME_LIBRARY.length).toBe(62);
+    it('contains at least 50 (specifically 68) original vector SVG memes with valid data URLs and stable IDs', () => {
+      expect(DEFAULT_MEME_LIBRARY.length).toBe(68);
       expect(DEFAULT_MEME_LIBRARY.length).toBeGreaterThanOrEqual(50);
 
       const idSet = new Set<string>();
@@ -1049,7 +1083,7 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
   });
 
   describe('Goofy Model V3 Hand-Only Architecture & Dual-Hand Combos', () => {
-    it('detectDualHandCombo detects all 5 specified dual-hand combinations correctly', () => {
+    it('detectDualHandCombo detects all 11 specified dual-hand combinations correctly', () => {
       // 1. DOUBLE_THUMBS_UP
       const doubleThumbs = detectDualHandCombo('THUMBS_UP', 'THUMBS_UP');
       expect(doubleThumbs.combo).toBe('DOUBLE_THUMBS_UP');
@@ -1077,9 +1111,36 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
       const upDown2 = detectDualHandCombo('THUMBS_DOWN', 'THUMBS_UP');
       expect(upDown2.combo).toBe('THUMBS_UP_AND_DOWN');
 
-      // Unmatched combo
-      const unmatched = detectDualHandCombo('PINCH', 'POINTING');
-      expect(unmatched.combo).toBeNull();
+      // 6. PERFECT_TEN (All 10 fingers extended)
+      const perfectTen = detectDualHandCombo('FIVE_FINGERS', 'FIVE_FINGERS');
+      expect(perfectTen.combo).toBe('PERFECT_TEN');
+      expect(perfectTen.confidence).toBeGreaterThanOrEqual(0.95);
+
+      // 7. DOUBLE_THREE (Three + Three = 6 energy)
+      const doubleThree = detectDualHandCombo('THREE_FINGERS', 'THREE_FINGERS');
+      expect(doubleThree.combo).toBe('DOUBLE_THREE');
+
+      // 8. ROCK_PAPER_SCISSORS (Dual Duel Clash)
+      const rps1 = detectDualHandCombo('CLOSED_FIST', 'PEACE_SIGN');
+      expect(rps1.combo).toBe('ROCK_PAPER_SCISSORS');
+
+      const rps2 = detectDualHandCombo('OPEN_PALM', 'CLOSED_FIST');
+      expect(rps2.combo).toBe('ROCK_PAPER_SCISSORS');
+
+      // 9. SECRET_YOU_ARE_BREATHTAKING (Keanu dual finger guns)
+      const breathtaking = detectDualHandCombo('POINTING', 'POINTING');
+      expect(breathtaking.combo).toBe('SECRET_YOU_ARE_BREATHTAKING');
+
+      // 10. SECRET_HEART_HANDS (Dual pinch heart gesture)
+      const heartHands = detectDualHandCombo('PINCH', 'PINCH');
+      expect(heartHands.combo).toBe('SECRET_HEART_HANDS');
+
+      // 11. SECRET_MATRIX_DODGE (Open Palm + Pointing bullet-time trigger)
+      const matrixDodge1 = detectDualHandCombo('OPEN_PALM', 'POINTING');
+      expect(matrixDodge1.combo).toBe('SECRET_MATRIX_DODGE');
+
+      const matrixDodge2 = detectDualHandCombo('POINTING', 'OPEN_PALM');
+      expect(matrixDodge2.combo).toBe('SECRET_MATRIX_DODGE');
     });
 
     it('GoofyDualHandStateMachine enforces temporal gating and cooldown', () => {
@@ -1191,14 +1252,22 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
       expect(evt!.soundName).toBe('Triumphant Chad Gong');
     });
 
-    it('verifies all 5 dual-hand combos have default metadata, memes, and sounds', () => {
+    it('verifies all 11 dual-hand combos have default metadata, memes, and sounds', () => {
       const combos: GoofyDualHandComboId[] = [
         'DOUBLE_THUMBS_UP',
         'BOTH_HANDS_OPEN',
         'BOTH_HANDS_FIST',
         'DOUBLE_PEACE',
         'THUMBS_UP_AND_DOWN',
+        'PERFECT_TEN',
+        'DOUBLE_THREE',
+        'ROCK_PAPER_SCISSORS',
+        'SECRET_HEART_HANDS',
+        'SECRET_MATRIX_DODGE',
+        'SECRET_YOU_ARE_BREATHTAKING',
       ];
+
+      expect(combos.length).toBe(11);
 
       for (const cid of combos) {
         const def = GOOFY_DUAL_COMBO_DEFINITIONS[cid];
@@ -1215,6 +1284,42 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
         const sound = DEFAULT_SOUND_LIBRARY.find((s) => s.id === def.defaultSoundId);
         expect(sound).toBeDefined();
       }
+    });
+
+    it('smooths high-frequency landmark jitter via exponential moving average', () => {
+      const classifier = new GoofyHandClassifier();
+      const baseHand = createBaseHandLandmarks();
+
+      // First frame
+      const r1 = classifier.classify(baseHand, 'Right', 1000);
+      expect(r1.gesture).not.toBeNull();
+
+      // Frame with jitter injected into index tip
+      const jitteredHand = createBaseHandLandmarks();
+      jitteredHand[8] = { x: baseHand[8]!.x + 0.008, y: baseHand[8]!.y - 0.008, z: 0 };
+      const r2 = classifier.classify(jitteredHand, 'Right', 1016);
+      expect(r2.gesture).toBe(r1.gesture);
+    });
+
+    it('correctly reverses horizontal swipe direction when isMirrored is true', () => {
+      const classifier = new GoofyHandClassifier();
+      const t0 = 1000;
+
+      // Physical hand moves from x = 0.3 to x = 0.65 (positive physical velocity)
+      const hand1 = createBaseHandLandmarks();
+      hand1[0] = { x: 0.30, y: 0.50, z: 0 };
+      classifier.classify(hand1, 'Right', t0, true);
+
+      const hand2 = createBaseHandLandmarks();
+      hand2[0] = { x: 0.45, y: 0.50, z: 0 };
+      classifier.classify(hand2, 'Right', t0 + 50, true);
+
+      const hand3 = createBaseHandLandmarks();
+      hand3[0] = { x: 0.65, y: 0.50, z: 0 };
+      // In mirrored mode, moving to right side of sensor corresponds to left swipe on screen
+      const resMirrored = classifier.classify(hand3, 'Right', t0 + 100, true);
+      expect(resMirrored.gesture).toBe('SWIPE_LEFT');
+      expect(resMirrored.isDynamic).toBe(true);
     });
   });
 });

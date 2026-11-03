@@ -164,6 +164,24 @@ export const INITIAL_ACHIEVEMENTS: Achievement[] = [
     unlockedAt: null,
     category: 'VISION',
   },
+  {
+    id: 'GOOFY_PERFECT_TEN',
+    title: 'PERFECT 10',
+    codename: 'HIGH_TEN_ALL_DIGITS_DEPLOYED',
+    description: 'Raised both hands with all 10 fingers extended for maximum overdrive.',
+    icon: '🙌',
+    unlockedAt: null,
+    category: 'VISION',
+  },
+  {
+    id: 'GOOFY_SECRET_COMBO',
+    title: 'SECRET CIPHER',
+    codename: 'SECRET_DUAL_COMBO_UNLOCKED',
+    description: 'Discovered a hidden dual-hand gesture combination in Goofy Model.',
+    icon: '🔮',
+    unlockedAt: null,
+    category: 'SECRET',
+  },
 ];
 
 const STORAGE_KEY = 'omni-achievements-v1';

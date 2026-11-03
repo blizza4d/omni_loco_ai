@@ -184,6 +184,17 @@ export default function GoofyModePage() {
 
   const leftHandLandmarksRef = useRef<Landmark3D[] | null>(null);
   const rightHandLandmarksRef = useRef<Landmark3D[] | null>(null);
+  const prevTelemetryRef = useRef({
+    handCount: -1,
+    leftGesture: null as GoofyHandGestureType | null,
+    rightGesture: null as GoofyHandGestureType | null,
+    leftFingers: -1,
+    rightFingers: -1,
+    totalFingers: -1,
+    dualCombo: null as GoofyDualHandComboId | null,
+    label: '',
+    caption: '',
+  });
   const frameCountRef = useRef(0);
   const lastFpsCalcRef = useRef(performance.now());
   const configRef = useRef(config);
@@ -341,17 +352,30 @@ export default function GoofyModePage() {
       const handResult = runnerRef.current.detectHands(videoRef.current, now);
       if (handResult && handResult.landmarks && handResult.landmarks.length > 0) {
         detectedHands = handResult.landmarks.map((lms, idx) => {
-          const hName =
+          const rawHandedness =
             handResult.handedness && handResult.handedness[idx] && handResult.handedness[idx]![0]
               ? (handResult.handedness[idx]![0]!.displayName as 'Left' | 'Right')
               : idx === 0
               ? 'Right'
               : 'Left';
           return {
-            handedness: hName,
+            handedness: rawHandedness,
             landmarks: lms.map((pt) => ({ x: pt.x, y: pt.y, z: pt.z })),
           };
         });
+
+        // Consistent visual screen-X handedness sorting to prevent handedness flipping
+        if (detectedHands.length === 2 && detectedHands[0]?.landmarks[0] && detectedHands[1]?.landmarks[0]) {
+          const h0x = isMirrored ? (1 - detectedHands[0].landmarks[0].x) : detectedHands[0].landmarks[0].x;
+          const h1x = isMirrored ? (1 - detectedHands[1].landmarks[0].x) : detectedHands[1].landmarks[0].x;
+          if (h0x <= h1x) {
+            detectedHands[0].handedness = 'Left';
+            detectedHands[1].handedness = 'Right';
+          } else {
+            detectedHands[0].handedness = 'Right';
+            detectedHands[1].handedness = 'Left';
+          }
+        }
 
         // Update cached refs
         const leftH = detectedHands.find((h) => h.handedness === 'Left');
@@ -389,8 +413,6 @@ export default function GoofyModePage() {
         // ─────────────────────────────────────────────────────────────
         // HAND INFERENCE, DUAL COMBOS & FINGER TELEMETRY
         // ─────────────────────────────────────────────────────────────
-        setHandCount(detectedHands.length);
-
         let curLeftGesture: GoofyHandGestureType | null = null;
         let curRightGesture: GoofyHandGestureType | null = null;
         let leftFingers = 0;
@@ -399,7 +421,12 @@ export default function GoofyModePage() {
         let rightResult: ReturnType<GoofyHandClassifier['classify']> | null = null;
 
         for (const hand of detectedHands) {
-          const res = handClassifierRef.current.classify(hand.landmarks, hand.handedness, now);
+          const res = handClassifierRef.current.classify(
+            hand.landmarks,
+            hand.handedness,
+            now,
+            isMirrored
+          );
           if (hand.handedness === 'Left') {
             curLeftGesture = res.gesture;
             leftFingers = res.fingerCount ?? 0;
@@ -410,12 +437,6 @@ export default function GoofyModePage() {
             rightResult = res;
           }
         }
-
-        setLeftHandGesture(curLeftGesture);
-        setRightHandGesture(curRightGesture);
-        setLeftFingerCount(leftFingers);
-        setRightFingerCount(rightFingers);
-        setTotalFingerCount(leftFingers + rightFingers);
 
         // Dual-Hand Combination Evaluation & Arbitration
         let dualComboTriggered = false;
@@ -429,12 +450,19 @@ export default function GoofyModePage() {
           if (dualSM.triggered && dualSM.combo) {
             dualComboTriggered = true;
             eventEngineRef.current.dispatchDualHandTrigger(dualSM.combo, comboResult.confidence);
+
+            // Dual Combo Achievements
+            unlockAchievement('GOOFY_DUAL_COMBO');
+            if (dualSM.combo === 'PERFECT_TEN') {
+              unlockAchievement('GOOFY_PERFECT_TEN');
+            }
+            if (GOOFY_DUAL_COMBO_DEFINITIONS[dualSM.combo]?.isSecret) {
+              unlockAchievement('GOOFY_SECRET_COMBO');
+            }
           }
         } else {
           dualHandSMRef.current.reset();
         }
-
-        setActiveDualCombo(currentDualComboId);
 
         // If a dual-hand combo is triggered, suppress individual single-hand triggers for this tick
         if (!dualComboTriggered) {
@@ -463,35 +491,66 @@ export default function GoofyModePage() {
           }
         }
 
-        // Active Detection & Caption Display Update
+        // Active Detection & Caption Resolution
+        let newLabel = 'SHOW YOUR HANDS';
+        let newCaption = 'HOLD A HAND GESTURE OR DUAL-HAND COMBO TO TRIGGER MEMES!';
+
         if (currentDualComboId) {
           const comboMeta = GOOFY_DUAL_COMBO_DEFINITIONS[currentDualComboId];
-          setActiveDetectionLabel(`${comboMeta.icon} ${comboMeta.label}`);
-          setComicCaption(
-            config.actionCustomCaptions[currentDualComboId] || comboMeta.defaultCaption
-          );
+          newLabel = `${comboMeta.icon} ${comboMeta.label}`;
+          newCaption = config.actionCustomCaptions[currentDualComboId] || comboMeta.defaultCaption;
         } else if (curRightGesture && curLeftGesture) {
-          setActiveDetectionLabel(
-            `L: ${GOOFY_HAND_METADATA[curLeftGesture]?.label} | R: ${GOOFY_HAND_METADATA[curRightGesture]?.label}`
-          );
-          setComicCaption(
+          newLabel = `L: ${GOOFY_HAND_METADATA[curLeftGesture]?.label} | R: ${GOOFY_HAND_METADATA[curRightGesture]?.label}`;
+          newCaption =
             config.actionCustomCaptions[curRightGesture] ||
-              GOOFY_HAND_METADATA[curRightGesture]?.defaultCaption
-          );
+            GOOFY_HAND_METADATA[curRightGesture]?.defaultCaption;
         } else if (curRightGesture) {
           const meta = GOOFY_HAND_METADATA[curRightGesture];
-          setActiveDetectionLabel(`${meta?.icon} RIGHT: ${meta?.label}`);
-          setComicCaption(config.actionCustomCaptions[curRightGesture] || meta?.defaultCaption);
+          newLabel = `${meta?.icon} RIGHT: ${meta?.label}`;
+          newCaption = config.actionCustomCaptions[curRightGesture] || meta?.defaultCaption;
         } else if (curLeftGesture) {
           const meta = GOOFY_HAND_METADATA[curLeftGesture];
-          setActiveDetectionLabel(`${meta?.icon} LEFT: ${meta?.label}`);
-          setComicCaption(config.actionCustomCaptions[curLeftGesture] || meta?.defaultCaption);
+          newLabel = `${meta?.icon} LEFT: ${meta?.label}`;
+          newCaption = config.actionCustomCaptions[curLeftGesture] || meta?.defaultCaption;
         } else if (detectedHands.length > 0) {
-          setActiveDetectionLabel('HANDS DETECTED (NO GESTURE)');
-          setComicCaption(`DIGITS DETECTED: ${leftFingers + rightFingers} // FORM A GESTURE!`);
-        } else {
-          setActiveDetectionLabel('SHOW YOUR HANDS');
-          setComicCaption('HOLD A HAND GESTURE OR DUAL-HAND COMBO TO TRIGGER MEMES!');
+          newLabel = 'HANDS DETECTED (NO GESTURE)';
+          newCaption = `DIGITS DETECTED: ${leftFingers + rightFingers} // FORM A GESTURE!`;
+        }
+
+        // High-Performance React State Throttling: only re-render DOM when telemetry values mutate
+        const totalFingers = leftFingers + rightFingers;
+        const prevT = prevTelemetryRef.current;
+        if (
+          prevT.handCount !== detectedHands.length ||
+          prevT.leftGesture !== curLeftGesture ||
+          prevT.rightGesture !== curRightGesture ||
+          prevT.leftFingers !== leftFingers ||
+          prevT.rightFingers !== rightFingers ||
+          prevT.totalFingers !== totalFingers ||
+          prevT.dualCombo !== currentDualComboId ||
+          prevT.label !== newLabel ||
+          prevT.caption !== newCaption
+        ) {
+          prevTelemetryRef.current = {
+            handCount: detectedHands.length,
+            leftGesture: curLeftGesture,
+            rightGesture: curRightGesture,
+            leftFingers,
+            rightFingers,
+            totalFingers,
+            dualCombo: currentDualComboId,
+            label: newLabel,
+            caption: newCaption,
+          };
+          setHandCount(detectedHands.length);
+          setLeftHandGesture(curLeftGesture);
+          setRightHandGesture(curRightGesture);
+          setLeftFingerCount(leftFingers);
+          setRightFingerCount(rightFingers);
+          setTotalFingerCount(totalFingers);
+          setActiveDualCombo(currentDualComboId);
+          setActiveDetectionLabel(newLabel);
+          setComicCaption(newCaption);
         }
 
         // Render Visual Comic Particles
@@ -823,9 +882,20 @@ export default function GoofyModePage() {
 
                   {/* Dual Combo Active Badge */}
                   {activeDualCombo && (
-                    <div className="flex items-center gap-1.5 bg-purple-600 border border-purple-300 text-white px-2.5 py-0.5 rounded font-black text-[10px] tracking-wider animate-pulse shadow-md">
+                    <div
+                      className={`flex items-center gap-1.5 border px-2.5 py-0.5 rounded font-black text-[10px] tracking-wider animate-pulse shadow-md ${
+                        GOOFY_DUAL_COMBO_DEFINITIONS[activeDualCombo]?.isSecret
+                          ? 'bg-gradient-to-r from-purple-700 via-pink-600 to-amber-500 border-amber-300 text-white'
+                          : 'bg-purple-600 border-purple-300 text-white'
+                      }`}
+                    >
                       <Sparkles className="w-3 h-3 text-amber-300" />
                       <span>{GOOFY_DUAL_COMBO_DEFINITIONS[activeDualCombo]?.label}</span>
+                      {GOOFY_DUAL_COMBO_DEFINITIONS[activeDualCombo]?.isSecret && (
+                        <span className="text-[9px] bg-black/50 px-1 py-0.5 rounded text-amber-300 font-extrabold">
+                          SECRET
+                        </span>
+                      )}
                     </div>
                   )}
                 </div>
@@ -892,7 +962,7 @@ export default function GoofyModePage() {
               <div className="flex items-center gap-2 text-[11px] text-ink-muted">
                 <span>PIPELINE: Hand-Only (21-Point)</span>
                 <span>&bull;</span>
-                <span>DUAL COMBOS: 5 Patterns</span>
+                <span>DUAL COMBOS: 11 Patterns (3 Secret)</span>
                 <span>&bull;</span>
                 <span>BACKEND: WebGPU / WASM</span>
               </div>
@@ -1170,7 +1240,7 @@ export default function GoofyModePage() {
                     : 'border-transparent text-ink-muted hover:text-charcoal-dark'
                 }`}
               >
-                DUAL COMBOS (5)
+                DUAL COMBOS (11)
               </button>
 
               <button
@@ -1414,7 +1484,7 @@ export default function GoofyModePage() {
               </div>
             )}
 
-            {/* TAB 2: 5 DUAL-HAND COMBOS */}
+            {/* TAB 2: 11 DUAL-HAND COMBOS */}
             {activeTab === 'COMBOS' && (
               <div className="space-y-3 max-h-[580px] overflow-y-auto pr-1">
                 {(
@@ -1424,6 +1494,12 @@ export default function GoofyModePage() {
                     'BOTH_HANDS_FIST',
                     'DOUBLE_PEACE',
                     'THUMBS_UP_AND_DOWN',
+                    'PERFECT_TEN',
+                    'DOUBLE_THREE',
+                    'ROCK_PAPER_SCISSORS',
+                    'SECRET_HEART_HANDS',
+                    'SECRET_MATRIX_DODGE',
+                    'SECRET_YOU_ARE_BREATHTAKING',
                   ] as GoofyDualHandComboId[]
                 ).map((comboKey) => {
                   const meta = GOOFY_DUAL_COMBO_DEFINITIONS[comboKey];
@@ -1452,9 +1528,21 @@ export default function GoofyModePage() {
                         <div className="flex items-center gap-2">
                           <span className="text-xl">{meta.icon}</span>
                           <div>
-                            <span className="font-extrabold text-xs uppercase block text-charcoal-dark">
-                              {meta.label}
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-extrabold text-xs uppercase block text-charcoal-dark">
+                                {meta.label}
+                              </span>
+                              {meta.isSecret && (
+                                <span className="px-1.5 py-0.5 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded text-[9px] font-black uppercase tracking-wider">
+                                  SECRET
+                                </span>
+                              )}
+                              {meta.requiredDigits !== undefined && (
+                                <span className="px-1.5 py-0.5 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded text-[9px] font-black uppercase">
+                                  {meta.requiredDigits} DIGITS
+                                </span>
+                              )}
+                            </div>
                             <span className="text-[10px] text-ink-muted">{meta.description}</span>
                           </div>
                         </div>

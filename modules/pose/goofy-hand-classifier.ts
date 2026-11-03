@@ -17,6 +17,8 @@ export class GoofyHandClassifier {
   private velocityHistory: VelocityPoint[] = [];
   private lastSwipeTime = 0;
   private swipeCooldownMs = 450;
+  private smoothedLandmarks: Map<'Left' | 'Right', Landmark3D[]> = new Map();
+  private smoothingAlpha = 0.68;
 
   private dist3D(a: Landmark3D, b: Landmark3D): number {
     const dx = a.x - b.x;
@@ -32,14 +34,49 @@ export class GoofyHandClassifier {
   }
 
   /**
+   * Exponential moving average jitter-smoothing filter per hand
+   */
+  private applySmoothing(raw: Landmark3D[], handedness: 'Left' | 'Right'): Landmark3D[] {
+    const prev = this.smoothedLandmarks.get(handedness);
+    if (!prev || prev.length !== raw.length) {
+      const cloned = raw.map((l) => ({ ...l }));
+      this.smoothedLandmarks.set(handedness, cloned);
+      return cloned;
+    }
+
+    // Teleportation / new hand check
+    const wristJump = this.dist2D(raw[0]!, prev[0]!);
+    if (wristJump > 0.35) {
+      const cloned = raw.map((l) => ({ ...l }));
+      this.smoothedLandmarks.set(handedness, cloned);
+      return cloned;
+    }
+
+    const smoothed = raw.map((curr, idx) => {
+      const p = prev[idx]!;
+      const a = this.smoothingAlpha;
+      return {
+        x: a * curr.x + (1 - a) * p.x,
+        y: a * curr.y + (1 - a) * p.y,
+        z: curr.z !== undefined && p.z !== undefined ? a * curr.z + (1 - a) * p.z : curr.z,
+      };
+    });
+
+    this.smoothedLandmarks.set(handedness, smoothed);
+    return smoothed;
+  }
+
+  /**
    * Classify 21 3D hand landmarks into one of the 12 supported Goofy hand gestures
    */
   classify(
-    landmarks: Landmark3D[],
+    rawLandmarks: Landmark3D[],
     handedness: 'Left' | 'Right' = 'Right',
-    timestamp = performance.now()
+    timestamp = performance.now(),
+    isMirrored = false
   ): HandClassificationResult {
-    if (!landmarks || landmarks.length < 21) {
+    if (!rawLandmarks || rawLandmarks.length < 21) {
+      this.smoothedLandmarks.delete(handedness);
       return {
         gesture: null,
         handedness,
@@ -49,6 +86,8 @@ export class GoofyHandClassifier {
         fingerCount: 0,
       };
     }
+
+    const landmarks = this.applySmoothing(rawLandmarks, handedness);
 
     const wrist = landmarks[0]!;
     const thumbCMC = landmarks[1]!;
@@ -117,7 +156,8 @@ export class GoofyHandClassifier {
       const newest = this.velocityHistory[this.velocityHistory.length - 1]!;
       const dt = (newest.time - oldest.time) / 1000;
       if (dt > 0.08) {
-        const vx = (newest.x - oldest.x) / dt;
+        const rawVx = (newest.x - oldest.x) / dt;
+        const vx = isMirrored ? -rawVx : rawVx;
         const vy = (newest.y - oldest.y) / dt;
         const speed = Math.sqrt(vx * vx + vy * vy);
 
@@ -309,6 +349,7 @@ export class GoofyHandClassifier {
     this.lastPinchState = false;
     this.velocityHistory = [];
     this.lastSwipeTime = 0;
+    this.smoothedLandmarks.clear();
   }
 }
 
@@ -420,33 +461,77 @@ export function detectDualHandCombo(
 ): { combo: GoofyDualHandComboId | null; confidence: number } {
   if (!leftGesture || !rightGesture) return { combo: null, confidence: 0 };
 
-  // 1. DOUBLE_THUMBS_UP (Both Thumbs Up)
+  // 1. PERFECT_TEN: Both hands showing FIVE_FINGERS (all 10 digits)
+  if (leftGesture === 'FIVE_FINGERS' && rightGesture === 'FIVE_FINGERS') {
+    return { combo: 'PERFECT_TEN', confidence: 0.99 };
+  }
+
+  // 2. DOUBLE_THREE: Both hands showing THREE_FINGERS (3 + 3 = 6000 MW energy)
+  if (leftGesture === 'THREE_FINGERS' && rightGesture === 'THREE_FINGERS') {
+    return { combo: 'DOUBLE_THREE', confidence: 0.98 };
+  }
+
+  // 3. SECRET_YOU_ARE_BREATHTAKING: Both hands pointing directly forward (dual finger guns)
+  if (leftGesture === 'POINTING' && rightGesture === 'POINTING') {
+    return { combo: 'SECRET_YOU_ARE_BREATHTAKING', confidence: 0.98 };
+  }
+
+  // 4. SECRET_HEART_HANDS: Both hands in pinch formation forming a heart
+  if (leftGesture === 'PINCH' && rightGesture === 'PINCH') {
+    return { combo: 'SECRET_HEART_HANDS', confidence: 0.98 };
+  }
+
+  // 5. SECRET_MATRIX_DODGE: One hand open palm (bullet stop) and other hand pointing (laser trigger)
+  if (
+    (leftGesture === 'OPEN_PALM' && rightGesture === 'POINTING') ||
+    (leftGesture === 'POINTING' && rightGesture === 'OPEN_PALM')
+  ) {
+    return { combo: 'SECRET_MATRIX_DODGE', confidence: 0.97 };
+  }
+
+  // 6. ROCK_PAPER_SCISSORS: Split dual duel between two hands
+  const isRock = (g: GoofyHandGestureType) => g === 'CLOSED_FIST';
+  const isPaper = (g: GoofyHandGestureType) => g === 'OPEN_PALM' || g === 'FIVE_FINGERS';
+  const isScissors = (g: GoofyHandGestureType) => g === 'PEACE_SIGN';
+
+  if (
+    (isRock(leftGesture) && isPaper(rightGesture)) ||
+    (isPaper(leftGesture) && isRock(rightGesture)) ||
+    (isRock(leftGesture) && isScissors(rightGesture)) ||
+    (isScissors(leftGesture) && isRock(rightGesture)) ||
+    (isPaper(leftGesture) && isScissors(rightGesture)) ||
+    (isScissors(leftGesture) && isPaper(rightGesture))
+  ) {
+    return { combo: 'ROCK_PAPER_SCISSORS', confidence: 0.96 };
+  }
+
+  // 7. DOUBLE_THUMBS_UP (Both Thumbs Up)
   if (leftGesture === 'THUMBS_UP' && rightGesture === 'THUMBS_UP') {
     return { combo: 'DOUBLE_THUMBS_UP', confidence: 0.98 };
   }
 
-  // 2. BOTH_HANDS_OPEN (Both Hands Open / Five Fingers)
-  const isOpen = (g: GoofyHandGestureType) => g === 'OPEN_PALM' || g === 'FIVE_FINGERS';
-  if (isOpen(leftGesture) && isOpen(rightGesture)) {
-    return { combo: 'BOTH_HANDS_OPEN', confidence: 0.96 };
-  }
-
-  // 3. BOTH_HANDS_FIST (Double Brofist)
-  if (leftGesture === 'CLOSED_FIST' && rightGesture === 'CLOSED_FIST') {
-    return { combo: 'BOTH_HANDS_FIST', confidence: 0.96 };
-  }
-
-  // 4. DOUBLE_PEACE (Double V-Sign)
+  // 8. DOUBLE_PEACE (Double V-Sign)
   if (leftGesture === 'PEACE_SIGN' && rightGesture === 'PEACE_SIGN') {
     return { combo: 'DOUBLE_PEACE', confidence: 0.96 };
   }
 
-  // 5. THUMBS_UP_AND_DOWN (Contradictory Mixed Signals)
+  // 9. BOTH_HANDS_FIST (Double Brofist)
+  if (leftGesture === 'CLOSED_FIST' && rightGesture === 'CLOSED_FIST') {
+    return { combo: 'BOTH_HANDS_FIST', confidence: 0.96 };
+  }
+
+  // 10. THUMBS_UP_AND_DOWN (Contradictory Mixed Signals)
   if (
     (leftGesture === 'THUMBS_UP' && rightGesture === 'THUMBS_DOWN') ||
     (leftGesture === 'THUMBS_DOWN' && rightGesture === 'THUMBS_UP')
   ) {
     return { combo: 'THUMBS_UP_AND_DOWN', confidence: 0.95 };
+  }
+
+  // 11. BOTH_HANDS_OPEN (Both Hands Open / Five Fingers fallback)
+  const isOpen = (g: GoofyHandGestureType) => g === 'OPEN_PALM' || g === 'FIVE_FINGERS';
+  if (isOpen(leftGesture) && isOpen(rightGesture)) {
+    return { combo: 'BOTH_HANDS_OPEN', confidence: 0.95 };
   }
 
   return { combo: null, confidence: 0 };

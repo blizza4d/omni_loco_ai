@@ -183,12 +183,29 @@ export class GoofyEventEngine {
     const now = performance.now();
     const durationMs = this.config.memeDurationMs || 1500;
 
-    if (this.activePopups.length > 0) {
+    if (source === 'DUAL_HAND') {
+      // Dual-hand combos take top priority and clear single-hand popups for clarity
+      this.activePopups = [];
+    } else if (this.activePopups.length > 0) {
       const policy = this.config.simultaneousPolicy || 'ALLOW_BOTH';
       if (policy === 'REPLACE_OLDEST') {
         this.activePopups = [];
+      } else if (policy === 'RIGHT_PRIORITY') {
+        if (hand === 'Left' && this.activePopups.some((p) => p.hand === 'Right')) {
+          return null; // Yield to active right hand
+        }
+        if (hand === 'Right') {
+          this.activePopups = this.activePopups.filter((p) => p.hand !== 'Left');
+        }
+      } else if (policy === 'LEFT_PRIORITY') {
+        if (hand === 'Right' && this.activePopups.some((p) => p.hand === 'Left')) {
+          return null; // Yield to active left hand
+        }
+        if (hand === 'Left') {
+          this.activePopups = this.activePopups.filter((p) => p.hand !== 'Right');
+        }
       } else if (policy === 'HAND_PRIORITY' && source === 'BODY') {
-        const hasActiveHand = this.activePopups.some((p) => p.actionSource === 'HAND');
+        const hasActiveHand = this.activePopups.some((p) => p.actionSource === 'HAND' || p.actionSource === 'DUAL_HAND');
         if (hasActiveHand) return null; // Yield to hand
       } else if (policy === 'BODY_PRIORITY' && source === 'HAND') {
         const hasActiveBody = this.activePopups.some((p) => p.actionSource === 'BODY');

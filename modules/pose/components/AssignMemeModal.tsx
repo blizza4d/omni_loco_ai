@@ -41,6 +41,12 @@ const DUAL_COMBOS: GoofyDualHandComboId[] = [
   'BOTH_HANDS_FIST',
   'DOUBLE_PEACE',
   'THUMBS_UP_AND_DOWN',
+  'PERFECT_TEN',
+  'DOUBLE_THREE',
+  'ROCK_PAPER_SCISSORS',
+  'SECRET_HEART_HANDS',
+  'SECRET_MATRIX_DODGE',
+  'SECRET_YOU_ARE_BREATHTAKING',
 ];
 
 export function AssignMemeModal({
@@ -122,7 +128,7 @@ export function AssignMemeModal({
           {/* Dual-Hand Combos */}
           <div>
             <h4 className="font-extrabold text-purple-600 uppercase border-b border-charcoal-soft/20 pb-1 mb-2">
-              DUAL-HAND COMBINATIONS (5)
+              DUAL-HAND COMBINATIONS ({DUAL_COMBOS.length})
             </h4>
             <div className="grid grid-cols-2 gap-2">
               {DUAL_COMBOS.map((comboKey) => {
