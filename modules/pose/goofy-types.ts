@@ -127,7 +127,16 @@ export interface SoundDefinition {
 }
 
 export type MemeCategory =
+  | 'APPROVAL_CONFIDENCE'
+  | 'DISAPPROVAL_REJECTION'
+  | 'ANGER_AGGRESSION'
+  | 'SURPRISE_SHOCK'
   | 'CONFUSION'
+  | 'VICTORY_CELEBRATION'
+  | 'SUSPICION_JUDGEMENT'
+  | 'FAILURE_DISAPPOINTMENT'
+  | 'CHAOS_UNEXPECTED'
+  | 'HAND_GESTURE_REACTION'
   | 'SHOCK'
   | 'CONFIDENCE'
   | 'FAILURE'
@@ -139,6 +148,26 @@ export type MemeCategory =
   | 'CARTOON'
   | 'ANIME'
   | 'CUSTOM';
+
+export interface SemanticCategoryMeta {
+  id: MemeCategory;
+  label: string;
+  icon: string;
+  description: string;
+}
+
+export const SEMANTIC_MEME_CATEGORIES: SemanticCategoryMeta[] = [
+  { id: 'APPROVAL_CONFIDENCE', label: 'Approval & Confidence', icon: '👑', description: 'GigaChad, Keanu, Success Kid, absolute confidence.' },
+  { id: 'DISAPPROVAL_REJECTION', label: 'Disapproval & Rejection', icon: '👎', description: 'Skill issue, facepalm, Gordon Ramsay, Homer bush.' },
+  { id: 'ANGER_AGGRESSION', label: 'Anger & Aggression', icon: '✊', description: 'Arthur fist, desk slam, rage, intense frustration.' },
+  { id: 'SURPRISE_SHOCK', label: 'Surprise & Shock', icon: '😲', description: 'Surprised Pikachu, Mind Blown, jaw drop, disbelief.' },
+  { id: 'CONFUSION', label: 'Confusion', icon: '🤔', description: 'Confused Travolta, math lady, what just happened.' },
+  { id: 'VICTORY_CELEBRATION', label: 'Victory & Celebration', icon: '🏆', description: 'Absolute Cinema, Shaq shimmy, DiCaprio toast, party.' },
+  { id: 'SUSPICION_JUDGEMENT', label: 'Suspicion & Judgement', icon: '🤨', description: 'The Rock eyebrow, side eye, Fry squint, Gus Fring.' },
+  { id: 'FAILURE_DISAPPOINTMENT', label: 'Failure & Disappointment', icon: '💀', description: 'Emotional damage, mission failed, sad trombone.' },
+  { id: 'CHAOS_UNEXPECTED', label: 'Chaos & Unexpected', icon: '🔥', description: 'Elmo fire, This is Fine, Disaster Girl, sudden madness.' },
+  { id: 'HAND_GESTURE_REACTION', label: 'Funny Hand Gestures', icon: '🤏', description: 'Spiderman pointing, salt bae, khaby lame, hands.' },
+];
 
 export type MemeRarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'LEGENDARY';
 
@@ -166,8 +195,12 @@ export interface MemeVisualDefinition {
   description: string;
   caption?: string; // Default comic caption
   dataUrl: string; // SVG data URL or image/GIF data/blob URL
+  mediaType?: 'image' | 'gif' | 'video' | 'svg';
+  sourceType?: 'REAL_MEDIA' | 'ORIGINAL_SVG' | 'USER_UPLOAD';
   aspectRatio?: number;
   tags?: string[];
+  gestureTags?: GoofyHandGestureType[];
+  comboTags?: GoofyDualHandComboId[];
   isCustom?: boolean;
   fileName?: string;
   soundId?: GoofySoundId;
@@ -199,9 +232,12 @@ export interface ActiveMemePopup {
   memeId: string;
   memeTitle: string;
   memeUrl: string;
+  mediaType?: 'image' | 'gif' | 'video' | 'svg';
+  sourceType?: 'REAL_MEDIA' | 'ORIGINAL_SVG' | 'USER_UPLOAD';
   caption: string;
   soundId: GoofySoundId;
   soundName: string;
+  soundUrl?: string;
   timestamp: number;
   durationMs: number;
   rotationDeg: number;
@@ -209,6 +245,8 @@ export interface ActiveMemePopup {
   category?: MemeCategory;
   rarity?: MemeRarity;
   animationStyle?: PopupAnimationStyle;
+  matchScore?: number;
+  matchReason?: string;
 }
 
 export interface UnifiedMemeEvent {
@@ -255,6 +293,12 @@ export interface GoofyModeConfig {
   activePresetId?: string; // Current preset ID
   favoriteMemes?: string[]; // Array of favorite meme IDs
   recentMemes?: string[]; // Array of last-triggered meme IDs
+  // Real Meme Recognition Engine Additions
+  smartMatchingEnabled?: boolean; // AI-driven multi-candidate semantic selection
+  preventImmediateRepetition?: boolean; // Discourages repeated meme triggers on consecutive gestures
+  preferredCategories?: MemeCategory[]; // User's preferred reaction categories
+  mediaTypeFilter?: 'ALL' | 'GIFS_ONLY' | 'IMAGES_ONLY'; // Filter active meme media
+  multiMemeAssignments?: Record<string, string[]>; // Action ID -> array of meme IDs
 }
 
 export interface GoofyTriggerEvent {
@@ -1146,6 +1190,11 @@ export const DEFAULT_GOOFY_CONFIG: GoofyModeConfig = {
   activePresetId: 'DEFAULT',
   favoriteMemes: [],
   recentMemes: [],
+  smartMatchingEnabled: true,
+  preventImmediateRepetition: true,
+  preferredCategories: [],
+  mediaTypeFilter: 'ALL',
+  multiMemeAssignments: {},
 };
 
 export interface MemePresetDefinition {

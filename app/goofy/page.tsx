@@ -26,6 +26,7 @@ import {
   PopupAnimationStyle,
   MemePresetId,
   MemeCategory,
+  SEMANTIC_MEME_CATEGORIES,
   BUILTIN_MEME_PRESETS,
   GOOFY_ACTION_RECOMMENDED_MEMES,
 } from '@/modules/pose/goofy-types';
@@ -449,7 +450,14 @@ export default function GoofyModePage() {
 
           if (dualSM.triggered && dualSM.combo) {
             dualComboTriggered = true;
-            eventEngineRef.current.dispatchDualHandTrigger(dualSM.combo, comboResult.confidence);
+            eventEngineRef.current.dispatchDualHandTrigger(
+              dualSM.combo,
+              comboResult.confidence,
+              {
+                fingerCount: leftFingers + rightFingers,
+                isDynamic: false,
+              }
+            );
 
             // Dual Combo Achievements
             unlockAchievement('GOOFY_DUAL_COMBO');
@@ -473,7 +481,11 @@ export default function GoofyModePage() {
                 sm.gesture,
                 'HAND',
                 'Left',
-                leftResult.confidence
+                leftResult.confidence,
+                {
+                  fingerCount: leftResult.fingerCount,
+                  isDynamic: leftResult.isDynamic,
+                }
               );
             }
           }
@@ -485,7 +497,11 @@ export default function GoofyModePage() {
                 sm.gesture,
                 'HAND',
                 'Right',
-                rightResult.confidence
+                rightResult.confidence,
+                {
+                  fingerCount: rightResult.fingerCount,
+                  isDynamic: rightResult.isDynamic,
+                }
               );
             }
           }
@@ -655,6 +671,10 @@ export default function GoofyModePage() {
       list = list.filter((m: MemeVisualDefinition) => favSet.has(m.id) || m.isFavorite);
     } else if (selectedMemeCategory === 'CUSTOM') {
       list = list.filter((m: MemeVisualDefinition) => m.isCustom);
+    } else if (selectedMemeCategory === 'GIFS') {
+      list = list.filter((m: MemeVisualDefinition) => m.mediaType === 'gif');
+    } else if (selectedMemeCategory === 'REAL_MEDIA') {
+      list = list.filter((m: MemeVisualDefinition) => m.sourceType === 'REAL_MEDIA' || m.dataUrl.startsWith('/memes/'));
     } else if (selectedMemeCategory !== 'ALL') {
       list = filterMemesByCategory(selectedMemeCategory as MemeCategory, list);
     }
@@ -662,10 +682,21 @@ export default function GoofyModePage() {
     return list;
   }, [allMemes, memeSearchQuery, selectedMemeCategory, config.favoriteMemes]);
 
-  // Category counts
+  // Category counts across all 10 semantic categories + special tabs
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = {
+      APPROVAL_CONFIDENCE: 0,
+      DISAPPROVAL_REJECTION: 0,
+      ANGER_AGGRESSION: 0,
+      SURPRISE_SHOCK: 0,
       CONFUSION: 0,
+      VICTORY_CELEBRATION: 0,
+      SUSPICION_JUDGEMENT: 0,
+      FAILURE_DISAPPOINTMENT: 0,
+      CHAOS_UNEXPECTED: 0,
+      HAND_GESTURE_REACTION: 0,
+      GIFS: 0,
+      REAL_MEDIA: 0,
       SHOCK: 0,
       CONFIDENCE: 0,
       FAILURE: 0,
@@ -674,6 +705,12 @@ export default function GoofyModePage() {
       SPECIAL: 0,
     };
     for (const m of allMemes) {
+      if (m.mediaType === 'gif') {
+        counts['GIFS'] = (counts['GIFS'] || 0) + 1;
+      }
+      if (m.sourceType === 'REAL_MEDIA' || m.dataUrl.startsWith('/memes/')) {
+        counts['REAL_MEDIA'] = (counts['REAL_MEDIA'] || 0) + 1;
+      }
       if (m.category && counts[m.category] !== undefined) {
         counts[m.category] = (counts[m.category] || 0) + 1;
       }
@@ -1170,21 +1207,36 @@ export default function GoofyModePage() {
                 </label>
               </div>
 
-              {/* Advanced Modes: Random Meme & Rare Popups */}
-              <div className="grid grid-cols-3 gap-2 pt-1 border-t border-charcoal-soft/10">
+              {/* Advanced Modes: Smart Matching, Anti-Repetition, Rare Reactions */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-charcoal-soft/10">
                 <label
                   className="flex items-center gap-1.5 cursor-pointer text-[11px] font-bold"
-                  title="Randomizes reaction meme from pool with anti-repetition memory"
+                  title="AI-powered semantic matching of hand gestures to contextually appropriate memes"
                 >
                   <input
                     type="checkbox"
-                    checked={config.randomMemeMode}
+                    checked={config.smartMatchingEnabled ?? true}
                     onChange={(e) =>
-                      setConfig((p) => ({ ...p, randomMemeMode: e.target.checked }))
+                      setConfig((p) => ({ ...p, smartMatchingEnabled: e.target.checked }))
                     }
-                    className="accent-purple-600"
+                    className="accent-cyan-600"
                   />
-                  <span className="text-purple-700">RANDOM MEME</span>
+                  <span className="text-cyan-800">SMART MATCHER</span>
+                </label>
+
+                <label
+                  className="flex items-center gap-1.5 cursor-pointer text-[11px] font-bold"
+                  title="Prevents consecutive repetitive meme pop-ups for the same gesture"
+                >
+                  <input
+                    type="checkbox"
+                    checked={config.preventImmediateRepetition ?? true}
+                    onChange={(e) =>
+                      setConfig((p) => ({ ...p, preventImmediateRepetition: e.target.checked }))
+                    }
+                    className="accent-emerald-600"
+                  />
+                  <span className="text-emerald-800">ANTI-REPEAT</span>
                 </label>
 
                 <label
@@ -1204,7 +1256,7 @@ export default function GoofyModePage() {
 
                 <label
                   className="flex items-center gap-1.5 cursor-pointer text-[11px] font-bold"
-                  title="Enables rare easter egg reaction memes"
+                  title="Enables rare legendary surprise reactions"
                 >
                   <input
                     type="checkbox"
@@ -1842,26 +1894,13 @@ export default function GoofyModePage() {
                     )}
                   </div>
 
+                  {/* Quick Filters */}
                   <div className="flex flex-wrap gap-1 text-[10px] font-bold font-mono">
                     {[
                       { id: 'ALL', label: `ALL (${allMemes.length})` },
+                      { id: 'REAL_MEDIA', label: `🔥 REAL MEDIA (${categoryCounts['REAL_MEDIA'] || 0})` },
+                      { id: 'GIFS', label: `🎬 ANIMATED GIFS (${categoryCounts['GIFS'] || 0})` },
                       { id: 'FAVORITES', label: `★ FAVOURITES (${favCount})` },
-                      { id: 'CONFUSION', label: `CONFUSION (${categoryCounts['CONFUSION'] || 0})` },
-                      { id: 'SHOCK', label: `SHOCK (${categoryCounts['SHOCK'] || 0})` },
-                      {
-                        id: 'CONFIDENCE',
-                        label: `CONFIDENCE (${categoryCounts['CONFIDENCE'] || 0})`,
-                      },
-                      { id: 'FAILURE', label: `FAILURE (${categoryCounts['FAILURE'] || 0})` },
-                      {
-                        id: 'SUSPICIOUS',
-                        label: `SUSPICIOUS (${categoryCounts['SUSPICIOUS'] || 0})`,
-                      },
-                      {
-                        id: 'CELEBRATION',
-                        label: `CELEBRATION (${categoryCounts['CELEBRATION'] || 0})`,
-                      },
-                      { id: 'SPECIAL', label: `SPECIAL (${categoryCounts['SPECIAL'] || 0})` },
                       { id: 'CUSTOM', label: `CUSTOM (${customMemes.length})` },
                     ].map((cat) => (
                       <button
@@ -1876,6 +1915,34 @@ export default function GoofyModePage() {
                         {cat.label}
                       </button>
                     ))}
+                  </div>
+
+                  {/* 10 Semantic Reaction Categories */}
+                  <div className="pt-1 border-t border-charcoal-soft/20">
+                    <span className="text-[9px] font-black uppercase tracking-wider text-ink-muted block mb-1">
+                      SEMANTIC REACTION CATEGORIES:
+                    </span>
+                    <div className="flex flex-wrap gap-1 text-[9px] font-mono font-bold">
+                      {SEMANTIC_MEME_CATEGORIES.map((sem) => {
+                        const count = categoryCounts[sem.id] || 0;
+                        const isSelected = selectedMemeCategory === sem.id;
+                        return (
+                          <button
+                            key={sem.id}
+                            onClick={() => setSelectedMemeCategory(sem.id)}
+                            className={`px-2 py-0.5 rounded transition-all flex items-center gap-1 ${
+                              isSelected
+                                ? 'bg-cyan-700 text-white font-black shadow-xs ring-1 ring-cyan-800'
+                                : 'bg-paper-dark/20 hover:bg-paper-dark/50 text-charcoal-dark border border-charcoal-soft/20'
+                            }`}
+                            title={sem.description}
+                          >
+                            <span>{sem.icon}</span>
+                            <span>{sem.label} ({count})</span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
 
@@ -1909,6 +1976,16 @@ export default function GoofyModePage() {
 
                               {/* Top Left Badges */}
                               <div className="absolute top-1 left-1 flex flex-col gap-1 items-start">
+                                {meme.mediaType === 'gif' && (
+                                  <span className="text-[8px] font-black px-1 py-0.5 rounded bg-emerald-500 text-black">
+                                    GIF
+                                  </span>
+                                )}
+                                {(meme.sourceType === 'REAL_MEDIA' || meme.dataUrl.startsWith('/memes/')) && (
+                                  <span className="text-[8px] font-black px-1 py-0.5 rounded bg-cyan-500 text-black">
+                                    VIRAL
+                                  </span>
+                                )}
                                 {meme.rarity && meme.rarity !== 'COMMON' && (
                                   <span
                                     className={`text-[8px] font-black px-1 py-0.5 rounded ${
@@ -1981,7 +2058,7 @@ export default function GoofyModePage() {
                           </div>
 
                           {/* Action Buttons */}
-                          <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-charcoal-soft/10">
+                          <div className="grid grid-cols-3 gap-1 pt-1 border-t border-charcoal-soft/10">
                             <Button
                               variant="outline"
                               size="sm"
@@ -1989,11 +2066,11 @@ export default function GoofyModePage() {
                                 eventEngineRef.current.previewAction(
                                   'OPEN_PALM',
                                   'HAND',
-                                  undefined,
+                                  meme.soundId,
                                   meme.id
                                 )
                               }
-                              className="text-[9px] h-6 px-1 gap-1"
+                              className="text-[8px] h-6 px-1 gap-0.5"
                               title="Preview meme pop-up in camera"
                             >
                               <Sparkles className="w-2.5 h-2.5 text-amber-500" />
@@ -2003,11 +2080,27 @@ export default function GoofyModePage() {
                             <Button
                               variant="outline"
                               size="sm"
+                              onClick={() =>
+                                audioEngineRef.current.playSound(
+                                  meme.soundId || 'CHAD_GONG',
+                                  config.volume
+                                )
+                              }
+                              className="text-[8px] h-6 px-1 gap-0.5 bg-paper-dark/15 hover:bg-paper-dark/40"
+                              title="Preview meme sound effect"
+                            >
+                              <Music className="w-2.5 h-2.5 text-cyan-600" />
+                              <span>AUDIO</span>
+                            </Button>
+
+                            <Button
+                              variant="outline"
+                              size="sm"
                               onClick={() => setAssignModalMeme(meme)}
-                              className="text-[9px] h-6 px-1 gap-1 bg-paper-dark/20 hover:bg-paper-dark/50"
+                              className="text-[8px] h-6 px-1 gap-0.5 bg-paper-dark/20 hover:bg-paper-dark/50"
                               title="Assign this meme to a hand gesture or dual combo"
                             >
-                              <span>ASSIGN TO...</span>
+                              <span>ASSIGN</span>
                             </Button>
                           </div>
                         </div>

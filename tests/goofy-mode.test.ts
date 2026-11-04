@@ -12,6 +12,8 @@ import {
 import { GoofyEventEngine } from '../modules/pose/goofy-event-engine';
 import {
   DEFAULT_MEME_LIBRARY,
+  ORIGINAL_VECTOR_MEMES,
+  REAL_MEDIA_MEMES,
   getDefaultMemeForAction,
   getMemeById,
   filterMemesByCategory,
@@ -20,6 +22,7 @@ import {
   getRareMeme,
   getPresetById,
 } from '../modules/pose/goofy-meme-library';
+import { SemanticMemeMatcher } from '../modules/pose/goofy-semantic-matcher';
 import { Landmark3D } from '../modules/hand/types';
 import { PoseLandmark } from '../modules/pose/types';
 import {
@@ -31,6 +34,7 @@ import {
   DEFAULT_SOUND_LIBRARY,
   BUILTIN_MEME_PRESETS,
   GOOFY_ACTION_RECOMMENDED_MEMES,
+  SEMANTIC_MEME_CATEGORIES,
   MemeCategory,
   MemePresetId,
 } from '../modules/pose/goofy-types';
@@ -912,13 +916,41 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
     });
   });
 
-  describe('GoofyMemeLibrary: Original Vector SVGs & Action Mappings (V3 Upgrade)', () => {
-    it('contains at least 50 (specifically 68) original vector SVG memes with valid data URLs and stable IDs', () => {
-      expect(DEFAULT_MEME_LIBRARY.length).toBe(68);
-      expect(DEFAULT_MEME_LIBRARY.length).toBeGreaterThanOrEqual(50);
+  describe('GoofyMemeLibrary: Real Media Assets, Original Vectors & Semantic Matching (V3 Real Meme Engine)', () => {
+    it('contains 42 authentic real media memes locally served with valid mediaTypes and categories', () => {
+      expect(REAL_MEDIA_MEMES.length).toBe(42);
+
+      const realIdSet = new Set<string>();
+      let gifCount = 0;
+      let imgCount = 0;
+
+      for (const meme of REAL_MEDIA_MEMES) {
+        expect(meme.id).toBeTruthy();
+        expect(realIdSet.has(meme.id)).toBe(false);
+        realIdSet.add(meme.id);
+
+        expect(meme.title).toBeTruthy();
+        expect(meme.caption).toBeTruthy();
+        expect(meme.category).toBeTruthy();
+        expect(meme.sourceType).toBe('REAL_MEDIA');
+        expect(meme.dataUrl).toMatch(/^\/memes\//);
+
+        if (meme.mediaType === 'gif') gifCount++;
+        if (meme.mediaType === 'image') imgCount++;
+
+        expect(['image', 'gif']).toContain(meme.mediaType);
+        expect(meme.soundId).toBeDefined();
+      }
+
+      expect(gifCount).toBe(12);
+      expect(imgCount).toBe(30);
+    });
+
+    it('contains 68 original vector SVG memes with valid data URLs and stable IDs', () => {
+      expect(ORIGINAL_VECTOR_MEMES.length).toBe(68);
 
       const idSet = new Set<string>();
-      for (const meme of DEFAULT_MEME_LIBRARY) {
+      for (const meme of ORIGINAL_VECTOR_MEMES) {
         expect(meme.id).toBeTruthy();
         expect(idSet.has(meme.id)).toBe(false);
         idSet.add(meme.id);
@@ -933,15 +965,74 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
       }
     });
 
-    it('returns appropriate default memes for body poses and hand gestures', () => {
-      const tPoseMeme = getDefaultMemeForAction('T_POSE');
-      expect(tPoseMeme.id).toBe('MEME_SURPRISED_PIKACHU');
+    it('DEFAULT_MEME_LIBRARY combines real media (42) and vector memes (68) for 110 total presets', () => {
+      expect(DEFAULT_MEME_LIBRARY.length).toBe(110);
+      expect(DEFAULT_MEME_LIBRARY.slice(0, 42)).toEqual(REAL_MEDIA_MEMES);
+    });
 
+    it('returns appropriate real media default memes for hand gestures', () => {
       const thumbsUpMeme = getDefaultMemeForAction('THUMBS_UP');
-      expect(thumbsUpMeme.id).toBe('MEME_MAXIMUM_AURA');
+      expect(thumbsUpMeme.id).toBe('REAL_MEME_GIGACHAD');
+
+      const openPalmMeme = getDefaultMemeForAction('OPEN_PALM');
+      expect(openPalmMeme.id).toBe('REAL_MEME_CONFUSED_TRAVOLTA_GIF');
+
+      const pointingMeme = getDefaultMemeForAction('POINTING');
+      expect(pointingMeme.id).toBe('REAL_MEME_SPIDERMAN_POINTING');
 
       const pinchMeme = getDefaultMemeForAction('PINCH');
-      expect(pinchMeme.id).toBe('MEME_PINCH_GRAB');
+      expect(pinchMeme.id).toBe('REAL_MEME_THE_ROCK_EYEBROW_GIF');
+
+      const fistMeme = getDefaultMemeForAction('CLOSED_FIST');
+      expect(fistMeme.id).toBe('REAL_MEME_ARTHURS_FIST');
+    });
+
+    it('validates all 10 semantic reaction categories in SEMANTIC_MEME_CATEGORIES', () => {
+      expect(SEMANTIC_MEME_CATEGORIES.length).toBe(10);
+      const categoryIds = SEMANTIC_MEME_CATEGORIES.map((c) => c.id);
+
+      expect(categoryIds).toContain('APPROVAL_CONFIDENCE');
+      expect(categoryIds).toContain('DISAPPROVAL_REJECTION');
+      expect(categoryIds).toContain('ANGER_AGGRESSION');
+      expect(categoryIds).toContain('SURPRISE_SHOCK');
+      expect(categoryIds).toContain('CONFUSION');
+      expect(categoryIds).toContain('VICTORY_CELEBRATION');
+      expect(categoryIds).toContain('SUSPICION_JUDGEMENT');
+      expect(categoryIds).toContain('FAILURE_DISAPPOINTMENT');
+      expect(categoryIds).toContain('CHAOS_UNEXPECTED');
+      expect(categoryIds).toContain('HAND_GESTURE_REACTION');
+    });
+
+    it('SemanticMemeMatcher matches gestures to appropriate memes and applies anti-repetition memory', () => {
+      const matcher = new SemanticMemeMatcher();
+      const config = { ...DEFAULT_GOOFY_CONFIG, smartMatchingEnabled: true };
+
+      // First match for THUMBS_UP
+      const match1 = matcher.match(
+        { actionId: 'THUMBS_UP', source: 'HAND', hand: 'Right' },
+        DEFAULT_MEME_LIBRARY,
+        config
+      );
+      expect(match1).not.toBeNull();
+      expect(match1!.meme).toBeDefined();
+
+      // Second match immediately after: anti-repetition penalty prevents identical pick if candidates exist
+      const match2 = matcher.match(
+        { actionId: 'THUMBS_UP', source: 'HAND', hand: 'Right' },
+        DEFAULT_MEME_LIBRARY,
+        config
+      );
+      expect(match2).not.toBeNull();
+
+      // Third test: filter by GIFs only
+      const gifConfig = { ...config, mediaTypeFilter: 'GIFS_ONLY' as const };
+      const gifMatch = matcher.match(
+        { actionId: 'FIVE_FINGERS', source: 'HAND', hand: 'Right' },
+        DEFAULT_MEME_LIBRARY,
+        gifConfig
+      );
+      expect(gifMatch).not.toBeNull();
+      expect(gifMatch!.meme.mediaType).toBe('gif');
     });
 
     it('filters memes accurately across all requested reaction categories', () => {
@@ -1241,7 +1332,8 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
     it('GoofyEventEngine dispatches dual-hand triggers with correct source and metadata', () => {
       const audio = new GoofyAudioEngine();
       const vfx = new GoofyVisualFXEngine();
-      const engine = new GoofyEventEngine(DEFAULT_GOOFY_CONFIG, audio, vfx);
+      const config = { ...DEFAULT_GOOFY_CONFIG, smartMatchingEnabled: false };
+      const engine = new GoofyEventEngine(config, audio, vfx);
 
       const evt = engine.dispatchDualHandTrigger('DOUBLE_THUMBS_UP', 0.98);
       expect(evt).not.toBeNull();

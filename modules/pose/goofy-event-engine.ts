@@ -14,11 +14,13 @@ import {
 import { GoofyAudioEngine } from './goofy-audio-engine';
 import { GoofyVisualFXEngine } from './goofy-visual-fx';
 import {
+  DEFAULT_MEME_LIBRARY,
   getDefaultMemeForAction,
   getMemeById,
   getRandomMemeForAction,
   getRareMeme,
 } from './goofy-meme-library';
+import { SemanticMemeMatcher } from './goofy-semantic-matcher';
 
 export type EventEngineListener = (
   event: UnifiedMemeEvent,
@@ -30,6 +32,7 @@ export class GoofyEventEngine {
   private audioEngine: GoofyAudioEngine;
   private visualFx: GoofyVisualFXEngine;
   private customMemes: MemeVisualDefinition[] = [];
+  private semanticMatcher: SemanticMemeMatcher = new SemanticMemeMatcher();
 
   private activePopups: ActiveMemePopup[] = [];
   private eventHistory: UnifiedMemeEvent[] = [];
@@ -46,6 +49,10 @@ export class GoofyEventEngine {
     this.config = config;
     this.audioEngine = audioEngine;
     this.visualFx = visualFx;
+  }
+
+  getSemanticMatcher(): SemanticMemeMatcher {
+    return this.semanticMatcher;
   }
 
   updateConfig(config: GoofyModeConfig): void {
@@ -98,7 +105,12 @@ export class GoofyEventEngine {
     actionId: string,
     source: 'BODY' | 'HAND' | 'DUAL_HAND',
     hand?: 'Left' | 'Right' | 'Both',
-    confidence = 0.95
+    confidence = 0.95,
+    context?: {
+      fingerCount?: number;
+      isDynamic?: boolean;
+      velocity?: { vx: number; vy: number; speed: number };
+    }
   ): UnifiedMemeEvent | null {
     // 1. Check if action is enabled in config
     const comboDef = GOOFY_DUAL_COMBO_DEFINITIONS[actionId as GoofyDualHandComboId];
@@ -135,25 +147,40 @@ export class GoofyEventEngine {
       }
     }
 
-    const caption =
-      (mapping && mapping.customCaption) ||
-      this.config.actionCustomCaptions[actionId] ||
-      defaultCaption;
-
-    // 3. Resolve sound
+    // 3. Resolve sound & meme visual via Semantic Matcher (or fallback)
     let soundId: GoofySoundId =
       (mapping && mapping.soundId) ||
       (comboDef && comboDef.defaultSoundId) ||
-      'INCEPTION_BRAAAM';
-    if (this.config.randomSoundMode) {
-      const lib = this.audioEngine.getSoundLibrary();
-      soundId = lib[Math.floor(Math.random() * lib.length)]!.id;
-    }
-
-    // 4. Resolve meme visual
+      'CHAD_GONG';
     let memeDef: MemeVisualDefinition;
+    let matchScore: number | undefined;
+    let matchReason: string | undefined;
 
-    if (
+    if (this.config.smartMatchingEnabled !== false) {
+      const allAvailableMemes = [...DEFAULT_MEME_LIBRARY, ...this.customMemes];
+      const matchResult = this.semanticMatcher.match(
+        {
+          actionId,
+          source,
+          hand,
+          confidence,
+          fingerCount: context?.fingerCount,
+          isDynamic: context?.isDynamic,
+          velocity: context?.velocity,
+        },
+        allAvailableMemes,
+        this.config
+      );
+
+      if (matchResult) {
+        memeDef = matchResult.meme;
+        soundId = matchResult.soundId;
+        matchScore = matchResult.score;
+        matchReason = matchResult.reason;
+      } else {
+        memeDef = getDefaultMemeForAction(actionId);
+      }
+    } else if (
       this.config.enableRareReactions &&
       Math.random() < (this.config.rareReactionProbability ?? 0.10)
     ) {
@@ -172,6 +199,17 @@ export class GoofyEventEngine {
         getMemeById(assignedMemeId, this.customMemes) ||
         getDefaultMemeForAction(actionId);
     }
+
+    if (this.config.randomSoundMode) {
+      const lib = this.audioEngine.getSoundLibrary();
+      soundId = lib[Math.floor(Math.random() * lib.length)]!.id;
+    }
+
+    const caption =
+      (mapping && mapping.customCaption) ||
+      this.config.actionCustomCaptions[actionId] ||
+      memeDef.caption ||
+      defaultCaption;
 
     this.lastMemeIdByAction.set(actionId, memeDef.id);
     this.recentMemeIds = [
@@ -251,9 +289,12 @@ export class GoofyEventEngine {
         memeId: memeDef.id,
         memeTitle: memeDef.title,
         memeUrl: (mapping && mapping.customImageUrl) || memeDef.dataUrl,
+        mediaType: memeDef.mediaType || (memeDef.dataUrl.endsWith('.gif') ? 'gif' : 'image'),
+        sourceType: memeDef.sourceType || (memeDef.dataUrl.startsWith('/memes/') ? 'REAL_MEDIA' : 'ORIGINAL_SVG'),
         caption,
         soundId,
         soundName: playedSoundName,
+        soundUrl: mapping?.customAudioUrl,
         timestamp: now,
         durationMs,
         rotationDeg,
@@ -261,6 +302,8 @@ export class GoofyEventEngine {
         category: memeDef.category,
         rarity: memeDef.rarity,
         animationStyle: this.config.popupAnimationStyle || 'CLASSIC',
+        matchScore,
+        matchReason,
       };
 
       this.activePopups.push(popup);
@@ -304,9 +347,14 @@ export class GoofyEventEngine {
    */
   dispatchDualHandTrigger(
     comboId: GoofyDualHandComboId,
-    confidence = 0.98
+    confidence = 0.98,
+    context?: {
+      fingerCount?: number;
+      isDynamic?: boolean;
+      velocity?: { vx: number; vy: number; speed: number };
+    }
   ): UnifiedMemeEvent | null {
-    return this.dispatchActionTrigger(comboId, 'DUAL_HAND', 'Both', confidence);
+    return this.dispatchActionTrigger(comboId, 'DUAL_HAND', 'Both', confidence, context);
   }
 
   /**
