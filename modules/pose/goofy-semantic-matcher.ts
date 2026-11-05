@@ -57,6 +57,49 @@ const GESTURE_CATEGORY_AFFINITY: Record<string, MemeCategory[]> = {
   SECRET_YOU_ARE_BREATHTAKING: ['APPROVAL_CONFIDENCE', 'HAND_GESTURE_REACTION'],
 };
 
+/**
+ * Semantic Thematic Angles for distinct gesture connotations
+ */
+export const GESTURE_THEMATIC_ANGLES: Record<string, string[]> = {
+  THUMBS_UP: ['CHAD_APPROVAL', 'MAXIMUM_AURA', 'PERFECT_EXECUTION', 'W_MOMENT', 'WISE_SANCTION'],
+  THUMBS_DOWN: ['SKILL_ISSUE', 'SEVERE_L', 'DISAPPOINTMENT', 'GAME_OVER', 'ABSOLUTE_NO'],
+  CLOSED_FIST: ['ANGER_UNLEASHED', 'BOSS_ENERGY', 'GOD_TIER_POWER', 'INFINITE_AURA', 'RAGE'],
+  OPEN_PALM: ['STOP_RIGHT_THERE', 'WAIT_A_MINUTE', 'ACCEPTANCE_OF_DOOM', 'PEAK_SOLIDARITY'],
+  PEACE_SIGN: ['W_MOMENT', 'CELEBRATION', 'HYPE_ENERGY', 'CHAD_APPROVAL'],
+  POINTING: ['POINTING_REVELATION', 'I_KNOW_THAT_REFERENCE', 'DETECTIVE_SUSPICION', 'FLAVOR_FLEX'],
+  PINCH: ['DELICATE_PRECISION', 'SKEPTICAL_DOUBT', 'SMUG_MOCKERY', 'QUESTION_MARKS'],
+  THREE_FINGERS: ['BIG_BRAIN', 'TRANSCENDENCE', 'OVERCOMPLICATED_LOGIC', 'PHILOSOPHICAL_DILEMMA'],
+  FOUR_FINGERS: ['BIG_BRAIN', 'INFINITE_WISDOM', 'SUPREME_INTELLECT'],
+  FIVE_FINGERS: ['UNFATHOMABLE_TRUTH', 'BRAIN_EXPLODED', 'HIGH_DEMAND', 'SKY_SCREAM', 'HYPE_ENERGY'],
+  SWIPE_LEFT: ['SKILL_ISSUE', 'DISMISSED', 'SEVERE_L', 'MARKET_CRASH'],
+  SWIPE_RIGHT: ['ACTION_HERO', 'UNBOTHERED_AURA', 'FINANCIAL_WIN', 'BIG_GAINS', 'MAXIMUM_AURA'],
+
+  // Dual Combos
+  DOUBLE_THUMBS_UP: ['MAXIMUM_AURA', 'CHAD_APPROVAL', 'W_MOMENT', 'PEAK_SOLIDARITY'],
+  BOTH_HANDS_OPEN: ['CHAOS_ENERGY', 'FIRE_EVERYWHERE', 'UNFATHOMABLE_TRUTH', 'SKY_SCREAM'],
+  BOTH_HANDS_FIST: ['GOD_TIER_POWER', 'INFINITE_AURA', 'BOSS_ENERGY', 'GOAT_CELEBRATION'],
+  DOUBLE_PEACE: ['CELEBRATION', 'HYPE_ENERGY', 'W_MOMENT'],
+  THUMBS_UP_AND_DOWN: ['DILEMMA', 'TOTAL_BEWILDERMENT', 'SKILL_ISSUE'],
+  PERFECT_TEN: ['TRANSCENDENCE', 'INFINITE_WISDOM', 'SUPREME_INTELLECT', 'HYPE_ENERGY'],
+  DOUBLE_THREE: ['OVERCOMPLICATED_LOGIC', 'BIG_BRAIN'],
+  ROCK_PAPER_SCISSORS: ['CHAOTIC_THREAT', 'DELICATE_PRECISION'],
+  SECRET_HEART_HANDS: ['FLAVOR_FLEX', 'PEAK_SOLIDARITY', 'W_MOMENT'],
+  SECRET_MATRIX_DODGE: ['ACTION_HERO', 'UNBOTHERED_AURA', 'MAXIMUM_AURA'],
+  SECRET_YOU_ARE_BREATHTAKING: ['MAXIMUM_AURA', 'CHAD_APPROVAL', 'POINTING_REVELATION'],
+};
+
+/**
+ * Preset mode affinities towards emotional tones
+ */
+export const PRESET_EMOTIONAL_AFFINITIES: Record<string, string[]> = {
+  CHAOS_MODE: ['CHAOS', 'RAGE', 'SURPRISED'],
+  CLEAN_COMEDY: ['CONFIDENCE', 'VICTORY', 'WHOLESOME'],
+  ULTRA_DRAMA: ['RAGE', 'MYSTERY', 'DISMAY'],
+  MAXIMUM_AURA: ['CONFIDENCE', 'VICTORY'],
+  FAILURE_COMPILATION: ['DISMAY', 'IRONY', 'SARCASM'],
+  UNHINGED_MODE: ['CHAOS', 'RAGE', 'IRONY'],
+};
+
 export class SemanticMemeMatcher {
   // Recent meme memory per action to prevent immediate repetition
   private recentMemesByAction: Map<string, string[]> = new Map();
@@ -106,9 +149,14 @@ export class SemanticMemeMatcher {
       Math.random() < (config.rareReactionProbability ?? 0.12)
     ) {
       const rarePool = availableMemes.filter(
-        (m) =>
-          (m.rarity === 'LEGENDARY' || m.rarity === 'RARE') &&
-          this.isMemeEligibleForAction(m, actionId)
+        (m) => {
+          if (config.mediaTypeFilter === 'GIFS_ONLY' && m.mediaType !== 'gif') return false;
+          if (config.mediaTypeFilter === 'IMAGES_ONLY' && m.mediaType === 'gif') return false;
+          return (
+            (m.rarity === 'LEGENDARY' || m.rarity === 'RARE') &&
+            this.isMemeEligibleForAction(m, actionId)
+          );
+        }
       );
       if (rarePool.length > 0) {
         const picked = rarePool[Math.floor(Math.random() * rarePool.length)]!;
@@ -120,7 +168,11 @@ export class SemanticMemeMatcher {
     // 3. User Multi-Meme Assignment Pool (if configured)
     const multiAssigned = config.multiMemeAssignments?.[actionId];
     if (multiAssigned && multiAssigned.length > 0) {
-      const userPool = availableMemes.filter((m) => multiAssigned.includes(m.id));
+      const userPool = availableMemes.filter((m) => {
+        if (config.mediaTypeFilter === 'GIFS_ONLY' && m.mediaType !== 'gif') return false;
+        if (config.mediaTypeFilter === 'IMAGES_ONLY' && m.mediaType === 'gif') return false;
+        return multiAssigned.includes(m.id);
+      });
       if (userPool.length > 0) {
         const candidate = this.selectDiverseCandidate(actionId, userPool, config);
         this.recordRecent(actionId, candidate.id);
@@ -179,6 +231,29 @@ export class SemanticMemeMatcher {
         score += 25;
       }
 
+      // Thematic angle resonance (+35 per angle match, up to +70)
+      const actionThematics = GESTURE_THEMATIC_ANGLES[actionId];
+      if (actionThematics && meme.thematicAngles && meme.thematicAngles.length > 0) {
+        let matchingAngles = 0;
+        for (const angle of meme.thematicAngles) {
+          if (actionThematics.includes(angle)) matchingAngles++;
+        }
+        score += Math.min(70, matchingAngles * 35);
+      }
+
+      // Emotional tone preset synergy (+30)
+      if (meme.emotionalTone && config.activePresetId) {
+        const favoredTones = PRESET_EMOTIONAL_AFFINITIES[config.activePresetId];
+        if (favoredTones && favoredTones.includes(meme.emotionalTone)) {
+          score += 30;
+        }
+      }
+
+      // High confidence gesture execution boost (+20)
+      if (context.confidence && context.confidence > 0.85) {
+        score += 20;
+      }
+
       // Anti-Repetition Penalty: Heavily penalize recently played memes for this action
       if (config.preventImmediateRepetition !== false && recentList.length > 0) {
         const recencyIndex = recentList.indexOf(meme.id);
@@ -198,10 +273,16 @@ export class SemanticMemeMatcher {
 
     // 5. Select from top candidates
     if (scoredCandidates.length === 0) {
-      // Fallback: Pick any meme tagged with suggested action or first available
+      // Fallback: Pick any meme tagged with suggested action or first available matching media filter
+      const pool = availableMemes.filter((m) => {
+        if (config.mediaTypeFilter === 'GIFS_ONLY' && m.mediaType !== 'gif') return false;
+        if (config.mediaTypeFilter === 'IMAGES_ONLY' && m.mediaType === 'gif') return false;
+        return true;
+      });
+      const validPool = pool.length > 0 ? pool : availableMemes;
       const fallback =
-        availableMemes.find((m) => m.suggestedActions?.includes(actionId as any)) ||
-        availableMemes[0]!;
+        validPool.find((m) => m.suggestedActions?.includes(actionId as any)) ||
+        validPool[0]!;
       return this.buildResult(fallback, actionId, 50, 'Fallback match', config);
     }
 
@@ -243,7 +324,8 @@ export class SemanticMemeMatcher {
   }
 
   /**
-   * Weighted lottery pick
+   * Temperature-based softmax lottery pick
+   * Provides intelligent balance between top-scoring affinity and unexpected variety
    */
   private weightedPick(candidates: { meme: MemeVisualDefinition; score: number }[]): {
     meme: MemeVisualDefinition;
@@ -251,20 +333,18 @@ export class SemanticMemeMatcher {
   } {
     if (candidates.length === 1) return candidates[0]!;
 
-    // Normalize positive scores
-    const minScore = Math.min(...candidates.map((c) => c.score));
-    const baseOffset = minScore < 1 ? Math.abs(minScore) + 5 : 0;
-    const adjusted = candidates.map((c) => ({
-      ...c,
-      weight: Math.max(5, c.score + baseOffset),
-    }));
+    // Softmax temperature distribution (T=30.0 gives responsive balance)
+    const temperature = 30.0;
+    const maxScore = candidates[0]!.score;
+    const expWeights = candidates.map((c) => Math.exp((c.score - maxScore) / temperature));
+    const totalExp = expWeights.reduce((sum, w) => sum + w, 0);
 
-    const totalWeight = adjusted.reduce((acc, c) => acc + c.weight, 0);
-    let rand = Math.random() * totalWeight;
-
-    for (const item of adjusted) {
-      if (rand <= item.weight) return item;
-      rand -= item.weight;
+    let rand = Math.random() * totalExp;
+    for (let i = 0; i < candidates.length; i++) {
+      rand -= expWeights[i]!;
+      if (rand <= 0) {
+        return candidates[i]!;
+      }
     }
     return candidates[0]!;
   }

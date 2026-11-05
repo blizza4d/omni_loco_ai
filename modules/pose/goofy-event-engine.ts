@@ -68,6 +68,10 @@ export class GoofyEventEngine {
     return this.recentMemeIds;
   }
 
+  getRecentlyUsedMemeIds(): string[] {
+    return [...this.recentMemeIds];
+  }
+
   subscribe(listener: EventEngineListener): () => void {
     this.listeners.add(listener);
     return () => {
@@ -217,13 +221,18 @@ export class GoofyEventEngine {
       ...this.recentMemeIds.filter((id) => id !== memeDef.id),
     ].slice(0, 15);
 
-    // 5. Simultaneous Event Arbitration
+    // 5. Simultaneous Event & Concurrency Arbitration
     const now = performance.now();
     const durationMs = this.config.memeDurationMs || 1500;
+    const concurrency = this.config.popupConcurrencyPolicy || 'ALLOW_SIMULTANEOUS';
+    const maxSimultaneous = this.config.maxSimultaneousPopups || 2;
 
-    if (source === 'DUAL_HAND') {
-      // Dual-hand combos take top priority and clear single-hand popups for clarity
+    if (concurrency === 'REPLACE_EXISTING' || source === 'DUAL_HAND') {
+      // Dual-hand combos and REPLACE_EXISTING take center stage by clearing active popups
       this.activePopups = [];
+    } else if (concurrency === 'QUEUE_SEQUENTIAL' && this.activePopups.length > 0) {
+      // Sequentially wait until previous active popup duration finishes
+      return null;
     } else if (this.activePopups.length > 0) {
       const policy = this.config.simultaneousPolicy || 'ALLOW_BOTH';
       if (policy === 'REPLACE_OLDEST') {
@@ -248,9 +257,9 @@ export class GoofyEventEngine {
       } else if (policy === 'BODY_PRIORITY' && source === 'HAND') {
         const hasActiveBody = this.activePopups.some((p) => p.actionSource === 'BODY');
         if (hasActiveBody) return null; // Yield to body
-      } else if (policy === 'ALLOW_BOTH') {
-        // Cap simultaneous popups to 2
-        if (this.activePopups.length >= 2) {
+      } else {
+        // ALLOW_SIMULTANEOUS: Cap to configured maxSimultaneous (default 2)
+        while (this.activePopups.length >= maxSimultaneous) {
           this.activePopups.shift();
         }
       }

@@ -368,6 +368,7 @@ export class GoofyHandStateMachine {
   private candidateGesture: GoofyHandGestureType | null = null;
   private candidateStartTime = 0;
   private lastTriggerTime = 0;
+  private lastTriggeredGesture: GoofyHandGestureType | null = null;
   private hasTriggeredCurrentGesture = false;
 
   private minHoldMs: number;
@@ -402,10 +403,20 @@ export class GoofyHandStateMachine {
       return { triggered: false, gesture: null, handedness };
     }
 
+    // Adaptive cooldown: redundant triggers of the SAME gesture use the full cooldownMs (750ms).
+    // An intentional transition to a distinct secondary gesture uses an adaptive secondary cooldown (350ms)
+    // so deliberate secondary gestures are not dropped while rapid redundant inputs are throttled.
+    const isDistinctSecondary =
+      this.lastTriggeredGesture !== null && gesture !== this.lastTriggeredGesture;
+    const requiredCooldown = isDistinctSecondary
+      ? Math.min(350, this.cooldownMs * 0.5)
+      : this.cooldownMs;
+
     // Dynamic Fast-Path (Swipes)
     if (isDynamic) {
-      if (timestamp - this.lastTriggerTime >= this.cooldownMs) {
+      if (timestamp - this.lastTriggerTime >= requiredCooldown) {
         this.lastTriggerTime = timestamp;
+        this.lastTriggeredGesture = gesture;
         this.activeGesture = gesture;
         return { triggered: true, gesture, handedness };
       }
@@ -425,11 +436,12 @@ export class GoofyHandStateMachine {
     if (heldDuration >= this.minHoldMs) {
       this.activeGesture = gesture;
 
-      // Single-trigger guarantee: fire only once while held, respecting cooldown
+      // Single-trigger guarantee: fire only once while held, respecting adaptive cooldown
       if (!this.hasTriggeredCurrentGesture) {
-        if (timestamp - this.lastTriggerTime >= this.cooldownMs) {
+        if (timestamp - this.lastTriggerTime >= requiredCooldown) {
           this.hasTriggeredCurrentGesture = true;
           this.lastTriggerTime = timestamp;
+          this.lastTriggeredGesture = gesture;
           return { triggered: true, gesture, handedness };
         }
       }
@@ -443,6 +455,7 @@ export class GoofyHandStateMachine {
     this.candidateGesture = null;
     this.candidateStartTime = 0;
     this.lastTriggerTime = 0;
+    this.lastTriggeredGesture = null;
     this.hasTriggeredCurrentGesture = false;
   }
 }
@@ -542,6 +555,7 @@ export class GoofyDualHandStateMachine {
   private candidateCombo: GoofyDualHandComboId | null = null;
   private candidateStartTime = 0;
   private lastTriggerTime = 0;
+  private lastTriggeredCombo: GoofyDualHandComboId | null = null;
   private hasTriggeredCurrentCombo = false;
 
   private minHoldMs: number;
@@ -600,14 +614,23 @@ export class GoofyDualHandStateMachine {
       return { status: 'CANDIDATE', triggered: false, combo, activeCombo: this.activeCombo };
     }
 
+    // Adaptive cooldown: redundant triggers of the SAME combo use the full cooldownMs.
+    // Transition to a distinct secondary combo uses an adaptive secondary cooldown (380ms).
+    const isDistinctSecondary =
+      this.lastTriggeredCombo !== null && combo !== this.lastTriggeredCombo;
+    const requiredCooldown = isDistinctSecondary
+      ? Math.min(380, this.cooldownMs * 0.5)
+      : this.cooldownMs;
+
     const heldDuration = timestamp - this.candidateStartTime;
     if (heldDuration >= this.minHoldMs) {
       this.activeCombo = combo;
 
       if (!this.hasTriggeredCurrentCombo) {
-        if (timestamp - this.lastTriggerTime >= this.cooldownMs) {
+        if (timestamp - this.lastTriggerTime >= requiredCooldown) {
           this.hasTriggeredCurrentCombo = true;
           this.lastTriggerTime = timestamp;
+          this.lastTriggeredCombo = combo;
           return { status: 'TRIGGERED', triggered: true, combo, activeCombo: combo };
         }
         return { status: 'COOLDOWN', triggered: false, combo, activeCombo: combo };
@@ -623,6 +646,7 @@ export class GoofyDualHandStateMachine {
     this.candidateCombo = null;
     this.candidateStartTime = 0;
     this.lastTriggerTime = 0;
+    this.lastTriggeredCombo = null;
     this.hasTriggeredCurrentCombo = false;
   }
 }

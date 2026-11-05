@@ -176,6 +176,7 @@ export type PopupAnimationStyle =
   | 'MINIMAL'
   | 'EXPLOSIVE'
   | 'RETRO_ARCADE'
+  | 'CHAOS'
   | 'NO_ANIMATION';
 
 export type MemePresetId =
@@ -208,6 +209,8 @@ export interface MemeVisualDefinition {
   rarity?: MemeRarity;
   isFavorite?: boolean;
   createdAt?: number;
+  emotionalTone?: 'CONFIDENCE' | 'IRONY' | 'DISMAY' | 'RAGE' | 'HYPE' | 'SARCASM' | 'MYSTERY' | 'CHAOS' | 'VICTORY' | 'CONFUSED' | 'SURPRISED';
+  thematicAngles?: string[];
 }
 
 export interface PoseSoundMapping {
@@ -299,6 +302,10 @@ export interface GoofyModeConfig {
   preferredCategories?: MemeCategory[]; // User's preferred reaction categories
   mediaTypeFilter?: 'ALL' | 'GIFS_ONLY' | 'IMAGES_ONLY'; // Filter active meme media
   multiMemeAssignments?: Record<string, string[]>; // Action ID -> array of meme IDs
+  popupConcurrencyPolicy?: 'REPLACE_EXISTING' | 'ALLOW_SIMULTANEOUS' | 'QUEUE_SEQUENTIAL'; // Behavior when new gesture triggers during active popup
+  maxSimultaneousPopups?: number; // Max concurrent on screen (default 2)
+  recentlyUsedMemeIds?: string[]; // History of last 20 triggered memes for workspace review
+  gestureSensitivity?: 'HIGH' | 'MEDIUM' | 'RELAXED'; // Classification threshold sensitivity
 }
 
 export interface GoofyTriggerEvent {
@@ -1195,6 +1202,10 @@ export const DEFAULT_GOOFY_CONFIG: GoofyModeConfig = {
   preferredCategories: [],
   mediaTypeFilter: 'ALL',
   multiMemeAssignments: {},
+  popupConcurrencyPolicy: 'ALLOW_SIMULTANEOUS',
+  maxSimultaneousPopups: 2,
+  recentlyUsedMemeIds: [],
+  gestureSensitivity: 'HIGH',
 };
 
 export interface MemePresetDefinition {
@@ -1226,7 +1237,7 @@ export const BUILTIN_MEME_PRESETS: MemePresetDefinition[] = [
     name: 'CHAOS MODE',
     description: 'High volatility, explosive screen popups, random reactions, and wild sound triggers.',
     icon: '🔥',
-    animationStyle: 'EXPLOSIVE',
+    animationStyle: 'CHAOS',
     randomMemeMode: true,
     randomSoundMode: true,
     enableRareReactions: true,

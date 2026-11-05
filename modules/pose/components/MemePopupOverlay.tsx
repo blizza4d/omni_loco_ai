@@ -72,12 +72,14 @@ export function MemePopupOverlay({
         {popups.map((popup) => {
           const animStyle = popup.animationStyle || defaultAnimationStyle;
           const isExplosive = animStyle === 'EXPLOSIVE';
+          const isChaos = animStyle === 'CHAOS';
           const isRetro = animStyle === 'RETRO_ARCADE';
           const isMinimal = animStyle === 'MINIMAL';
           const isNoAnim = animStyle === 'NO_ANIMATION';
 
           let animClass = 'animate-meme-classic';
           if (isExplosive) animClass = 'animate-meme-explosive';
+          else if (isChaos) animClass = 'animate-meme-chaos';
           else if (isRetro) animClass = 'animate-meme-retro';
           else if (isMinimal) animClass = 'animate-meme-minimal';
           else if (isNoAnim) animClass = 'animate-none';
@@ -94,13 +96,14 @@ export function MemePopupOverlay({
                 maxHeight: popups.length > 1 ? '68vh' : '88vh',
               }}
             >
-              {/* Explosive Comic Starburst Backdrop */}
-              {isExplosive && (
+              {/* Explosive & Chaos Comic Starburst Backdrop */}
+              {(isExplosive || isChaos) && (
                 <div
-                  className="absolute inset-[-40px] pointer-events-none -z-10 opacity-75 animate-pulse"
+                  className="absolute inset-[-50px] pointer-events-none -z-10 opacity-85 animate-pulse"
                   style={{
-                    background:
-                      'radial-gradient(circle, rgba(250,204,21,0.5) 0%, rgba(239,68,68,0.3) 50%, transparent 70%)',
+                    background: isChaos
+                      ? 'radial-gradient(circle, rgba(236,72,153,0.6) 0%, rgba(168,85,247,0.4) 40%, rgba(6,182,212,0.3) 70%, transparent 90%)'
+                      : 'radial-gradient(circle, rgba(250,204,21,0.5) 0%, rgba(239,68,68,0.3) 50%, transparent 70%)',
                   }}
                 />
               )}
@@ -272,6 +275,28 @@ export function MemePopupOverlay({
           }
         }
 
+        @keyframes memeChaos {
+          0% {
+            opacity: 0;
+            transform: scale(0.1) rotate(-25deg);
+            filter: hue-rotate(180deg) invert(0.3);
+          }
+          40% {
+            opacity: 1;
+            transform: scale(1.35) rotate(12deg);
+            filter: hue-rotate(90deg) saturate(2);
+          }
+          75% {
+            transform: scale(0.9) rotate(-8deg);
+            filter: hue-rotate(0deg) saturate(1.5);
+          }
+          100% {
+            opacity: 1;
+            transform: scale(1) rotate(0deg);
+            filter: none;
+          }
+        }
+
         @keyframes memeMinimal {
           0% {
             opacity: 0;
@@ -308,6 +333,10 @@ export function MemePopupOverlay({
           animation: memeExplosive 0.32s cubic-bezier(0.18, 1.25, 0.4, 1) forwards;
         }
 
+        .animate-meme-chaos {
+          animation: memeChaos 0.35s cubic-bezier(0.15, 1.45, 0.45, 1) forwards;
+        }
+
         .animate-meme-minimal {
           animation: memeMinimal 0.18s ease-out forwards;
         }
@@ -319,6 +348,7 @@ export function MemePopupOverlay({
         @media (prefers-reduced-motion: reduce) {
           .animate-meme-classic,
           .animate-meme-explosive,
+          .animate-meme-chaos,
           .animate-meme-minimal,
           .animate-meme-retro {
             animation: none !important;
