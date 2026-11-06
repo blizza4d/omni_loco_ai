@@ -3,6 +3,8 @@ import {
   GoofyHandGestureType,
   GoofyDualHandComboId,
   HandClassificationResult,
+  HandRecognitionState,
+  HandStateMachineResult,
   GOOFY_HAND_METADATA,
 } from './goofy-types';
 
@@ -12,12 +14,20 @@ interface VelocityPoint {
   time: number;
 }
 
+interface FingerEvalResult {
+  isExtended: boolean;
+  isCurled: boolean;
+  extensionRatio: number;
+}
+
 export class GoofyHandClassifier {
-  private lastPinchState = false;
-  private velocityHistory: VelocityPoint[] = [];
-  private lastSwipeTime = 0;
-  private swipeCooldownMs = 450;
+  // Separate per-hand tracking state to prevent dual-hand contamination
+  private lastPinchStates: Map<'Left' | 'Right', boolean> = new Map();
+  private velocityHistories: Map<'Left' | 'Right', VelocityPoint[]> = new Map();
+  private lastSwipeTimes: Map<'Left' | 'Right', number> = new Map();
   private smoothedLandmarks: Map<'Left' | 'Right', Landmark3D[]> = new Map();
+
+  private swipeCooldownMs = 600;
   private smoothingAlpha = 0.68;
 
   private dist3D(a: Landmark3D, b: Landmark3D): number {
@@ -67,7 +77,58 @@ export class GoofyHandClassifier {
   }
 
   /**
-   * Classify 21 3D hand landmarks into one of the 12 supported Goofy hand gestures
+   * Anatomical finger state evaluation using proximal phalanx normalization
+   * and joint collinearity (scale-invariant and orientation-invariant).
+   */
+  private evaluateFinger(
+    mcp: Landmark3D,
+    pip: Landmark3D,
+    dip: Landmark3D,
+    tip: Landmark3D,
+    wrist: Landmark3D
+  ): FingerEvalResult {
+    const proxLen = Math.max(0.001, this.dist3D(mcp, pip));
+    const mcpToTip = this.dist3D(mcp, tip);
+    const wristToTip = this.dist3D(wrist, tip);
+    const wristToPip = this.dist3D(wrist, pip);
+
+    // Directional collinearity dot product
+    const v1 = {
+      x: (pip.x - mcp.x) / proxLen,
+      y: (pip.y - mcp.y) / proxLen,
+      z: ((pip.z || 0) - (mcp.z || 0)) / proxLen,
+    };
+    const dPipTip = Math.max(0.001, this.dist3D(pip, tip));
+    const v2 = {
+      x: (tip.x - pip.x) / dPipTip,
+      y: (tip.y - pip.y) / dPipTip,
+      z: ((tip.z || 0) - (pip.z || 0)) / dPipTip,
+    };
+    const dot = v1.x * v2.x + v1.y * v2.y + v1.z * v2.z;
+
+    const extensionRatio = mcpToTip / proxLen;
+
+    // Full straight extension
+    const isExtended =
+      extensionRatio > 1.62 &&
+      wristToTip > wristToPip * 1.04 &&
+      dot > 0.40;
+
+    // Curled tightly into palm
+    const isCurled =
+      (extensionRatio < 1.25 || dot < 0.15) &&
+      mcpToTip < proxLen * 1.35;
+
+    return {
+      isExtended,
+      isCurled: !isExtended && isCurled,
+      extensionRatio,
+    };
+  }
+
+  /**
+   * Classify 21 3D hand landmarks into one of the supported Goofy hand gestures.
+   * If hand posture is ambiguous or unrecognised, returns gesture: null (UNKNOWN).
    */
   classify(
     rawLandmarks: Landmark3D[],
@@ -77,6 +138,8 @@ export class GoofyHandClassifier {
   ): HandClassificationResult {
     if (!rawLandmarks || rawLandmarks.length < 21) {
       this.smoothedLandmarks.delete(handedness);
+      this.velocityHistories.delete(handedness);
+      this.lastPinchStates.delete(handedness);
       return {
         gesture: null,
         handedness,
@@ -84,6 +147,7 @@ export class GoofyHandClassifier {
         label: 'NO HAND DETECTED',
         comicCaption: 'SHOW YOUR HAND TO TRIGGER MEMES!',
         fingerCount: 0,
+        rejectionReason: 'NO_LANDMARKS',
       };
     }
 
@@ -97,224 +161,244 @@ export class GoofyHandClassifier {
 
     const indexMCP = landmarks[5]!;
     const indexPIP = landmarks[6]!;
+    const indexDIP = landmarks[7]!;
     const indexTip = landmarks[8]!;
 
     const middleMCP = landmarks[9]!;
     const middlePIP = landmarks[10]!;
+    const middleDIP = landmarks[11]!;
     const middleTip = landmarks[12]!;
 
     const ringMCP = landmarks[13]!;
     const ringPIP = landmarks[14]!;
+    const ringDIP = landmarks[15]!;
     const ringTip = landmarks[16]!;
 
     const pinkyMCP = landmarks[17]!;
     const pinkyPIP = landmarks[18]!;
+    const pinkyDIP = landmarks[19]!;
     const pinkyTip = landmarks[20]!;
 
     // Invariant Palm Scale Normalization (wrist to middle MCP)
     const palmScale = Math.max(0.01, this.dist3D(wrist, middleMCP));
 
-    // Finger Extended Heuristics (tip distance to wrist > PIP distance to wrist * 1.15)
-    const indexExtended = this.dist3D(wrist, indexTip) > this.dist3D(wrist, indexPIP) * 1.14;
-    const middleExtended = this.dist3D(wrist, middleTip) > this.dist3D(wrist, middlePIP) * 1.14;
-    const ringExtended = this.dist3D(wrist, ringTip) > this.dist3D(wrist, ringPIP) * 1.14;
-    const pinkyExtended = this.dist3D(wrist, pinkyTip) > this.dist3D(wrist, pinkyPIP) * 1.14;
+    // Evaluate non-thumb fingers with invariant bone ratios
+    const indexState = this.evaluateFinger(indexMCP, indexPIP, indexDIP, indexTip, wrist);
+    const middleState = this.evaluateFinger(middleMCP, middlePIP, middleDIP, middleTip, wrist);
+    const ringState = this.evaluateFinger(ringMCP, ringPIP, ringDIP, ringTip, wrist);
+    const pinkyState = this.evaluateFinger(pinkyMCP, pinkyPIP, pinkyDIP, pinkyTip, wrist);
 
-    // Finger Curled Heuristics
-    const indexCurled = this.dist3D(wrist, indexTip) < this.dist3D(wrist, indexPIP) * 1.05;
-    const middleCurled = this.dist3D(wrist, middleTip) < this.dist3D(wrist, middlePIP) * 1.05;
-    const ringCurled = this.dist3D(wrist, ringTip) < this.dist3D(wrist, ringPIP) * 1.05;
-    const pinkyCurled = this.dist3D(wrist, pinkyTip) < this.dist3D(wrist, pinkyPIP) * 1.05;
+    // Thumb State Evaluation
+    const thumbProxLen = Math.max(0.001, this.dist3D(thumbMCP, thumbIP));
+    const thumbMcpToTip = this.dist3D(thumbMCP, thumbTip);
+    const thumbToPinky = this.dist3D(thumbTip, pinkyMCP) / palmScale;
+    const thumbToIndex = this.dist3D(thumbTip, indexMCP) / palmScale;
 
-    // Thumb State
-    const thumbTipToPinky = this.dist3D(thumbTip, pinkyMCP) / palmScale;
-    const thumbExtended = thumbTipToPinky > 0.85 && this.dist3D(thumbTip, thumbMCP) / palmScale > 0.45;
-    const thumbTucked = thumbTipToPinky < 0.65;
+    const thumbExtended =
+      thumbMcpToTip > thumbProxLen * 1.30 &&
+      (thumbToPinky > 0.70 || thumbToIndex > 0.45);
+
+    const thumbTucked =
+      thumbToPinky < 0.65 ||
+      (thumbToIndex < 0.35 && thumbMcpToTip < thumbProxLen * 1.30);
+
+    // Thumb Vertical Direction in screen space (y is inverted: smaller y is UP)
+    const thumbPointingUp =
+      thumbTip.y < thumbIP.y - 0.035 &&
+      thumbTip.y < thumbMCP.y - 0.035;
+
+    const thumbPointingDown =
+      thumbTip.y > thumbIP.y + 0.035 &&
+      thumbTip.y > thumbMCP.y + 0.035;
 
     // Count extended non-thumb fingers
     const extendedFourCount =
-      (indexExtended ? 1 : 0) +
-      (middleExtended ? 1 : 0) +
-      (ringExtended ? 1 : 0) +
-      (pinkyExtended ? 1 : 0);
+      (indexState.isExtended ? 1 : 0) +
+      (middleState.isExtended ? 1 : 0) +
+      (ringState.isExtended ? 1 : 0) +
+      (pinkyState.isExtended ? 1 : 0);
+
+    const curledFourCount =
+      (indexState.isCurled ? 1 : 0) +
+      (middleState.isCurled ? 1 : 0) +
+      (ringState.isCurled ? 1 : 0) +
+      (pinkyState.isCurled ? 1 : 0);
+
+    const fingerCount = (thumbExtended ? 1 : 0) + extendedFourCount;
+
+    // ─────────────────────────────────────────────────────────────
+    // PINCH HYSTERESIS (Per-Hand Tracking)
+    // ─────────────────────────────────────────────────────────────
+    const pinchRawDist = this.dist3D(thumbTip, indexTip);
+    const normalizedPinchDist = pinchRawDist / palmScale;
+    let isPinching = this.lastPinchStates.get(handedness) || false;
+
+    if (isPinching) {
+      if (normalizedPinchDist > 0.38) isPinching = false;
+    } else {
+      if (normalizedPinchDist < 0.28) isPinching = true;
+    }
+
+    // Crucial Disambiguation: A complete 4-finger clenched fist cannot be a pinch!
+    const indexTipToMCP = this.dist3D(indexTip, indexMCP) / palmScale;
+    if (curledFourCount === 4 && indexTipToMCP < 0.35) {
+      isPinching = false;
+    }
+    this.lastPinchStates.set(handedness, isPinching);
 
     const candidates: { gesture: GoofyHandGestureType; score: number; isDynamic?: boolean }[] = [];
 
     // ─────────────────────────────────────────────────────────────
-    // DYNAMIC GESTURES: SWIPE LEFT & SWIPE RIGHT
-    // Temporal velocity buffer over past 250ms
+    // DYNAMIC GESTURES: SWIPE LEFT & SWIPE RIGHT (Strict Per-Hand History)
     // ─────────────────────────────────────────────────────────────
-    this.velocityHistory.push({ x: wrist.x, y: wrist.y, time: timestamp });
+    let vHistory = this.velocityHistories.get(handedness) || [];
+    vHistory.push({ x: wrist.x, y: wrist.y, time: timestamp });
     const windowStart = timestamp - 250;
-    this.velocityHistory = this.velocityHistory.filter((p) => p.time >= windowStart);
+    vHistory = vHistory.filter((p) => p.time >= windowStart);
+    this.velocityHistories.set(handedness, vHistory);
 
-    if (
-      this.velocityHistory.length >= 3 &&
-      timestamp - this.lastSwipeTime > this.swipeCooldownMs
-    ) {
-      const oldest = this.velocityHistory[0]!;
-      const newest = this.velocityHistory[this.velocityHistory.length - 1]!;
+    const lastSwipe = this.lastSwipeTimes.get(handedness) || 0;
+    if (vHistory.length >= 3 && timestamp - lastSwipe > this.swipeCooldownMs) {
+      const oldest = vHistory[0]!;
+      const newest = vHistory[vHistory.length - 1]!;
       const dt = (newest.time - oldest.time) / 1000;
-      if (dt > 0.08) {
-        const rawVx = (newest.x - oldest.x) / dt;
-        const vx = isMirrored ? -rawVx : rawVx;
-        const vy = (newest.y - oldest.y) / dt;
+
+      if (dt >= 0.08) {
+        const rawDx = newest.x - oldest.x;
+        const dx = isMirrored ? -rawDx : rawDx;
+        const dy = newest.y - oldest.y;
+        const vx = dx / dt;
+        const vy = dy / dt;
         const speed = Math.sqrt(vx * vx + vy * vy);
 
-        if (speed > 1.15 && Math.abs(vx) > Math.abs(vy) * 1.35) {
-          this.lastSwipeTime = timestamp;
+        // Require deliberate lateral displacement (>= 15% screen width) and velocity dominance
+        if (Math.abs(dx) >= 0.15 && speed >= 1.20 && Math.abs(vx) > Math.abs(vy) * 1.8) {
+          this.lastSwipeTimes.set(handedness, timestamp);
           if (vx > 0) {
-            candidates.push({ gesture: 'SWIPE_RIGHT', score: 0.94, isDynamic: true });
+            candidates.push({ gesture: 'SWIPE_RIGHT', score: 0.95, isDynamic: true });
           } else {
-            candidates.push({ gesture: 'SWIPE_LEFT', score: 0.94, isDynamic: true });
+            candidates.push({ gesture: 'SWIPE_LEFT', score: 0.95, isDynamic: true });
           }
         }
       }
     }
 
     // ─────────────────────────────────────────────────────────────
-    // GESTURE 1: PINCH
-    // Distance between thumb tip and index tip with hysteresis
+    // STATIC GESTURES EVALUATION (Strict Mutual Exclusivity)
     // ─────────────────────────────────────────────────────────────
-    const pinchRawDist = this.dist3D(thumbTip, indexTip);
-    const normalizedPinchDist = pinchRawDist / palmScale;
-    let isPinching = this.lastPinchState;
-    if (this.lastPinchState) {
-      if (normalizedPinchDist > 0.45) isPinching = false;
-    } else {
-      if (normalizedPinchDist < 0.32) isPinching = true;
-    }
-    this.lastPinchState = isPinching;
 
-    if (isPinching) {
+    // 1. PINCH
+    // Index and thumb form pinch loop, index not curled into palm, and other fingers not all in fist
+    if (isPinching && curledFourCount < 4 && indexTipToMCP > 0.35) {
       candidates.push({
         gesture: 'PINCH',
-        score: Math.min(0.98, Math.max(0.75, 1.0 - (normalizedPinchDist - 0.1) * 2)),
+        score: Math.min(0.98, Math.max(0.80, 1.0 - (normalizedPinchDist - 0.1) * 2)),
       });
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // GESTURE 2: THUMBS UP
-    // 4 fingers curled, thumb extended vertically upward (y smaller than IP)
-    // ─────────────────────────────────────────────────────────────
-    const thumbPointingUp = thumbTip.y < thumbIP.y - 0.035 && thumbTip.y < indexMCP.y;
-    if (thumbPointingUp && indexCurled && middleCurled && ringCurled && pinkyCurled) {
+    // 2. THUMBS UP
+    // All 4 non-thumb fingers are curled, thumb extended vertically upward
+    else if (curledFourCount === 4 && thumbPointingUp && !thumbPointingDown) {
       candidates.push({
         gesture: 'THUMBS_UP',
         score: 0.96,
       });
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // GESTURE 3: THUMBS DOWN
-    // 4 fingers curled, thumb extended vertically downward (y larger than IP)
-    // ─────────────────────────────────────────────────────────────
-    const thumbPointingDown = thumbTip.y > thumbIP.y + 0.035 && thumbTip.y > wrist.y;
-    if (thumbPointingDown && indexCurled && middleCurled && ringCurled && pinkyCurled) {
+    // 3. THUMBS DOWN
+    // All 4 non-thumb fingers are curled, thumb extended vertically downward
+    else if (curledFourCount === 4 && thumbPointingDown && !thumbPointingUp) {
       candidates.push({
         gesture: 'THUMBS_DOWN',
+        score: 0.96,
+      });
+    }
+
+    // 4. CLOSED FIST
+    // All 4 non-thumb fingers are curled tightly into palm, thumb not pointing up or down
+    else if (curledFourCount === 4 && !thumbPointingUp && !thumbPointingDown && !isPinching) {
+      candidates.push({
+        gesture: 'CLOSED_FIST',
         score: 0.95,
       });
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // GESTURE 4: CLOSED FIST
-    // All 4 fingers curled and thumb tucked/curled
-    // ─────────────────────────────────────────────────────────────
-    if (indexCurled && middleCurled && ringCurled && pinkyCurled && !thumbPointingUp && !thumbPointingDown) {
+    // 5. POINTING
+    // Index extended, middle, ring, pinky curled, not pinching
+    else if (
+      indexState.isExtended &&
+      middleState.isCurled &&
+      ringState.isCurled &&
+      pinkyState.isCurled &&
+      !isPinching
+    ) {
       candidates.push({
-        gesture: 'CLOSED_FIST',
+        gesture: 'POINTING',
         score: 0.94,
       });
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // GESTURE 5: POINTING
-    // Index finger extended, other 3 fingers curled, non-pinch
-    // ─────────────────────────────────────────────────────────────
-    if (indexExtended && middleCurled && ringCurled && pinkyCurled && !isPinching) {
+    // 6. PEACE SIGN
+    // Index and middle extended in a distinct V, ring and pinky curled
+    else if (
+      indexState.isExtended &&
+      middleState.isExtended &&
+      ringState.isCurled &&
+      pinkyState.isCurled &&
+      !isPinching
+    ) {
+      const tipsDist = this.dist2D(indexTip, middleTip) / palmScale;
+      if (tipsDist > 0.18) {
+        candidates.push({
+          gesture: 'PEACE_SIGN',
+          score: 0.94,
+        });
+      }
+    }
+
+    // 7. THREE FINGERS
+    // Index, middle, and ring extended, pinky curled, not pinching
+    else if (
+      indexState.isExtended &&
+      middleState.isExtended &&
+      ringState.isExtended &&
+      pinkyState.isCurled &&
+      !isPinching
+    ) {
       candidates.push({
-        gesture: 'POINTING',
+        gesture: 'THREE_FINGERS',
         score: 0.93,
       });
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // GESTURE 6: PEACE SIGN (V-SIGN)
-    // Index and middle fingers extended in a V-shape, ring & pinky curled
-    // ─────────────────────────────────────────────────────────────
-    if (indexExtended && middleExtended && ringCurled && pinkyCurled && !isPinching) {
-      const tipsDist = this.dist2D(indexTip, middleTip) / palmScale;
-      if (tipsDist > 0.22) {
-        candidates.push({
-          gesture: 'PEACE_SIGN',
-          score: 0.93,
-        });
-      }
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // GESTURE 7: THREE FINGERS
-    // Index, middle, and ring extended, pinky curled
-    // ─────────────────────────────────────────────────────────────
-    if (indexExtended && middleExtended && ringExtended && pinkyCurled && !isPinching) {
-      candidates.push({
-        gesture: 'THREE_FINGERS',
-        score: 0.92,
-      });
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // GESTURE 8: FOUR FINGERS
+    // 8. FOUR FINGERS
     // All 4 non-thumb fingers extended, thumb tucked
-    // ─────────────────────────────────────────────────────────────
-    if (indexExtended && middleExtended && ringExtended && pinkyExtended && thumbTucked) {
+    else if (extendedFourCount === 4 && thumbTucked) {
       candidates.push({
         gesture: 'FOUR_FINGERS',
-        score: 0.92,
+        score: 0.93,
       });
     }
 
-    // Count total extended fingers (0 to 5)
-    const fingerCount = (thumbExtended ? 1 : 0) + extendedFourCount;
-
-    // ─────────────────────────────────────────────────────────────
-    // GESTURE 9 & 10: FIVE FINGERS vs OPEN PALM
-    // Resolves overlapping classification:
-    // FIVE FINGERS: radially spread wide in counting gesture (span > 2.2 * palmScale)
-    // OPEN PALM: flat stop palm facing camera (span <= 2.2 * palmScale)
-    // ─────────────────────────────────────────────────────────────
-    if (indexExtended && middleExtended && ringExtended && pinkyExtended && thumbExtended) {
-      const spread = this.dist3D(thumbTip, pinkyTip);
-      const normalizedSpread = spread / palmScale;
-
-      if (normalizedSpread > 2.2) {
+    // 9 & 10. FIVE FINGERS vs OPEN PALM
+    else if (extendedFourCount === 4) {
+      const spread = this.dist3D(thumbTip, pinkyTip) / palmScale;
+      if (thumbExtended && spread > 2.15) {
+        // Radially spread wide in counting fan
         candidates.push({
           gesture: 'FIVE_FINGERS',
           score: 0.96,
-        });
-        candidates.push({
-          gesture: 'OPEN_PALM',
-          score: 0.90,
         });
       } else {
+        // Flat stop palm facing camera
         candidates.push({
           gesture: 'OPEN_PALM',
-          score: 0.96,
-        });
-        candidates.push({
-          gesture: 'FIVE_FINGERS',
-          score: 0.90,
+          score: 0.94,
         });
       }
-    } else if (extendedFourCount === 4) {
-      candidates.push({
-        gesture: 'OPEN_PALM',
-        score: 0.91,
-      });
     }
 
-    // Sort by priority (dynamic actions take precedence)
+    // Sort by priority (dynamic actions take precedence only if genuine lateral movement detected)
     candidates.sort((a, b) => {
       if (a.isDynamic && !b.isDynamic) return -1;
       if (!a.isDynamic && b.isDynamic) return 1;
@@ -332,35 +416,51 @@ export class GoofyHandClassifier {
         comicCaption: meta ? meta.defaultCaption : 'GESTURE DETECTED',
         fingerCount,
         isDynamic: top.isDynamic,
+        fingerStates: {
+          thumb: thumbExtended,
+          index: indexState.isExtended,
+          middle: middleState.isExtended,
+          ring: ringState.isExtended,
+          pinky: pinkyState.isExtended,
+        },
       };
     }
 
+    // STRICT UNKNOWN STATE: Ambiguous or unclassified hand posture
     return {
       gesture: null,
       handedness,
       confidence: 0,
-      label: 'HAND TRACKED',
+      label: 'UNKNOWN GESTURE',
       comicCaption: 'HOLD A RECOGNISABLE GESTURE TO TRIGGER MEMES',
       fingerCount,
+      rejectionReason: 'AMBIGUOUS_GESTURE',
+      fingerStates: {
+        thumb: thumbExtended,
+        index: indexState.isExtended,
+        middle: middleState.isExtended,
+        ring: ringState.isExtended,
+        pinky: pinkyState.isExtended,
+      },
     };
   }
 
   reset(): void {
-    this.lastPinchState = false;
-    this.velocityHistory = [];
-    this.lastSwipeTime = 0;
+    this.lastPinchStates.clear();
+    this.velocityHistories.clear();
+    this.lastSwipeTimes.clear();
     this.smoothedLandmarks.clear();
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// HAND GESTURE TEMPORAL STATE MACHINE
-// Enforces hold-time validation, dynamic fast-path, and single-trigger guarantees
+// HAND GESTURE TEMPORAL STATE MACHINE (Strict Validation & Release Protocol)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface HandStateMachineOptions {
   minHoldMs?: number;
   cooldownMs?: number;
+  releaseThresholdMs?: number;
 }
 
 export class GoofyHandStateMachine {
@@ -371,83 +471,223 @@ export class GoofyHandStateMachine {
   private lastTriggeredGesture: GoofyHandGestureType | null = null;
   private hasTriggeredCurrentGesture = false;
 
+  // Release detection
+  private nullGestureStartTime = 0;
+  private releaseThresholdMs: number;
+
+  // Sliding consensus voting window (N = 6 frames / ~150ms)
+  private rollingWindow: { gesture: GoofyHandGestureType | null; time: number }[] = [];
+  private votingWindowMs = 150;
+  private consensusThreshold = 0.60;
+
   private minHoldMs: number;
   private cooldownMs: number;
 
   constructor(options: HandStateMachineOptions = {}) {
-    this.minHoldMs = options.minHoldMs ?? 160;
+    this.minHoldMs = options.minHoldMs ?? 200;
     this.cooldownMs = options.cooldownMs ?? 750;
+    this.releaseThresholdMs = options.releaseThresholdMs ?? 140;
   }
 
   updateConfig(options: HandStateMachineOptions): void {
     if (options.minHoldMs !== undefined) this.minHoldMs = options.minHoldMs;
     if (options.cooldownMs !== undefined) this.cooldownMs = options.cooldownMs;
+    if (options.releaseThresholdMs !== undefined) this.releaseThresholdMs = options.releaseThresholdMs;
   }
 
   process(
     classification: HandClassificationResult,
     timestamp = performance.now()
-  ): {
-    triggered: boolean;
-    gesture: GoofyHandGestureType | null;
-    handedness: 'Left' | 'Right';
-  } {
-    const { gesture, handedness, isDynamic } = classification;
+  ): HandStateMachineResult {
+    const { gesture: rawGesture, handedness, isDynamic, confidence } = classification;
 
-    // Tracking Lost / No Gesture
-    if (!gesture) {
-      this.activeGesture = null;
-      this.candidateGesture = null;
-      this.candidateStartTime = 0;
-      this.hasTriggeredCurrentGesture = false;
-      return { triggered: false, gesture: null, handedness };
+    // 1. Maintain sliding consensus voting window
+    if (this.rollingWindow.length > 0 && timestamp < this.rollingWindow[this.rollingWindow.length - 1]!.time) {
+      this.rollingWindow = this.rollingWindow.filter((w) => w.time <= timestamp);
+    }
+    this.rollingWindow.push({ gesture: rawGesture, time: timestamp });
+    const cutoff = timestamp - this.votingWindowMs;
+    this.rollingWindow = this.rollingWindow.filter((w) => w.time >= cutoff);
+
+    // Dynamic Swipes Fast-Path (verified lateral travel from classifier)
+    if (isDynamic && rawGesture) {
+      if (timestamp - this.lastTriggerTime >= this.cooldownMs) {
+        this.lastTriggerTime = timestamp;
+        this.lastTriggeredGesture = rawGesture;
+        this.activeGesture = rawGesture;
+        this.hasTriggeredCurrentGesture = true;
+        return {
+          triggered: true,
+          gesture: rawGesture,
+          rawGesture,
+          stabilizedGesture: rawGesture,
+          handedness,
+          state: 'TRIGGERED',
+          holdDurationMs: 0,
+          confidence,
+          rejectionReason: null,
+        };
+      }
+      return {
+        triggered: false,
+        gesture: rawGesture,
+        rawGesture,
+        stabilizedGesture: rawGesture,
+        handedness,
+        state: 'COOLDOWN',
+        holdDurationMs: 0,
+        confidence,
+        rejectionReason: 'COOLDOWN_ACTIVE',
+      };
     }
 
-    // Adaptive cooldown: redundant triggers of the SAME gesture use the full cooldownMs (750ms).
-    // An intentional transition to a distinct secondary gesture uses an adaptive secondary cooldown (350ms)
-    // so deliberate secondary gestures are not dropped while rapid redundant inputs are throttled.
+    // 2. Compute majority consensus gesture in rolling window
+    const counts = new Map<GoofyHandGestureType, number>();
+    for (const item of this.rollingWindow) {
+      if (item.gesture) {
+        counts.set(item.gesture, (counts.get(item.gesture) || 0) + 1);
+      }
+    }
+
+    let stabilizedGesture: GoofyHandGestureType | null = null;
+    let highestCount = 0;
+    counts.forEach((count, g) => {
+      if (count > highestCount) {
+        highestCount = count;
+        stabilizedGesture = g;
+      }
+    });
+
+    // Require at least consensusThreshold agreement in window
+    const consensusRatio = this.rollingWindow.length > 0 ? highestCount / this.rollingWindow.length : 0;
+    if (consensusRatio < this.consensusThreshold) {
+      stabilizedGesture = null;
+    }
+
+    // 3. Handle Absence / Unknown Release
+    if (!stabilizedGesture) {
+      this.candidateGesture = null;
+      this.candidateStartTime = 0;
+      if (this.nullGestureStartTime === 0) {
+        this.nullGestureStartTime = timestamp;
+      }
+      if (timestamp - this.nullGestureStartTime >= this.releaseThresholdMs) {
+        // Clean release detected: allow re-triggering of next gesture
+        this.hasTriggeredCurrentGesture = false;
+        this.activeGesture = null;
+      }
+
+      return {
+        triggered: false,
+        gesture: null,
+        rawGesture,
+        stabilizedGesture: null,
+        handedness,
+        state: rawGesture === null ? 'NO_HANDS' : 'SEARCHING',
+        holdDurationMs: 0,
+        confidence: 0,
+        rejectionReason: rawGesture === null ? 'NO_HANDS_DETECTED' : 'AMBIGUOUS_GESTURE',
+      };
+    }
+
+    // Stabilized gesture exists: check if releasing previous trigger
+    if (this.nullGestureStartTime > 0 && timestamp - this.nullGestureStartTime >= this.releaseThresholdMs) {
+      this.hasTriggeredCurrentGesture = false;
+      this.activeGesture = null;
+    }
+    this.nullGestureStartTime = 0;
+
+    // 4. Candidate Tracking & Hold-Time Accumulation
+    if (stabilizedGesture !== this.candidateGesture) {
+      this.candidateGesture = stabilizedGesture;
+      this.candidateStartTime = timestamp;
+      this.hasTriggeredCurrentGesture = false;
+
+      return {
+        triggered: false,
+        gesture: stabilizedGesture,
+        rawGesture,
+        stabilizedGesture,
+        handedness,
+        state: 'CANDIDATE',
+        holdDurationMs: 0,
+        confidence,
+        rejectionReason: 'HOLDING_FOR_CONFIRMATION',
+      };
+    }
+
+    const holdDurationMs = timestamp - this.candidateStartTime;
+
+    // 5. Check if held long enough to achieve CONFIRMED status
+    if (holdDurationMs < this.minHoldMs) {
+      return {
+        triggered: false,
+        gesture: stabilizedGesture,
+        rawGesture,
+        stabilizedGesture,
+        handedness,
+        state: 'CANDIDATE',
+        holdDurationMs,
+        confidence,
+        rejectionReason: `HOLDING_FOR_CONFIRMATION_${Math.round(holdDurationMs)}/${this.minHoldMs}`,
+      };
+    }
+
+    // Confirmed stable hold achieved!
+    this.activeGesture = stabilizedGesture;
+
+    // 6. Single-Trigger Guarantee: Fire only once per continuous hold
+    if (this.hasTriggeredCurrentGesture) {
+      return {
+        triggered: false,
+        gesture: stabilizedGesture,
+        rawGesture,
+        stabilizedGesture,
+        handedness,
+        state: 'TRIGGERED',
+        holdDurationMs,
+        confidence,
+        rejectionReason: 'WAITING_FOR_RELEASE',
+      };
+    }
+
+    // 7. Check Cooldown
     const isDistinctSecondary =
-      this.lastTriggeredGesture !== null && gesture !== this.lastTriggeredGesture;
+      this.lastTriggeredGesture !== null && stabilizedGesture !== this.lastTriggeredGesture;
     const requiredCooldown = isDistinctSecondary
       ? Math.min(350, this.cooldownMs * 0.5)
       : this.cooldownMs;
 
-    // Dynamic Fast-Path (Swipes)
-    if (isDynamic) {
-      if (timestamp - this.lastTriggerTime >= requiredCooldown) {
-        this.lastTriggerTime = timestamp;
-        this.lastTriggeredGesture = gesture;
-        this.activeGesture = gesture;
-        return { triggered: true, gesture, handedness };
-      }
-      return { triggered: false, gesture, handedness };
+    if (timestamp - this.lastTriggerTime < requiredCooldown) {
+      return {
+        triggered: false,
+        gesture: stabilizedGesture,
+        rawGesture,
+        stabilizedGesture,
+        handedness,
+        state: 'COOLDOWN',
+        holdDurationMs,
+        confidence,
+        rejectionReason: 'COOLDOWN_ACTIVE',
+      };
     }
 
-    // Static Gesture: Candidate evaluation
-    if (gesture !== this.candidateGesture) {
-      this.candidateGesture = gesture;
-      this.candidateStartTime = timestamp;
-      this.hasTriggeredCurrentGesture = false;
-      return { triggered: false, gesture, handedness };
-    }
+    // Genuine confirmed recognition event!
+    this.hasTriggeredCurrentGesture = true;
+    this.lastTriggerTime = timestamp;
+    this.lastTriggeredGesture = stabilizedGesture;
 
-    // Check hold duration
-    const heldDuration = timestamp - this.candidateStartTime;
-    if (heldDuration >= this.minHoldMs) {
-      this.activeGesture = gesture;
-
-      // Single-trigger guarantee: fire only once while held, respecting adaptive cooldown
-      if (!this.hasTriggeredCurrentGesture) {
-        if (timestamp - this.lastTriggerTime >= requiredCooldown) {
-          this.hasTriggeredCurrentGesture = true;
-          this.lastTriggerTime = timestamp;
-          this.lastTriggeredGesture = gesture;
-          return { triggered: true, gesture, handedness };
-        }
-      }
-    }
-
-    return { triggered: false, gesture, handedness };
+    return {
+      triggered: true,
+      gesture: stabilizedGesture,
+      rawGesture,
+      stabilizedGesture,
+      handedness,
+      state: 'CONFIRMED',
+      holdDurationMs,
+      confidence,
+      rejectionReason: null,
+    };
   }
 
   reset(): void {
@@ -457,6 +697,8 @@ export class GoofyHandStateMachine {
     this.lastTriggerTime = 0;
     this.lastTriggeredGesture = null;
     this.hasTriggeredCurrentGesture = false;
+    this.nullGestureStartTime = 0;
+    this.rollingWindow = [];
   }
 }
 
@@ -557,6 +799,7 @@ export class GoofyDualHandStateMachine {
   private lastTriggerTime = 0;
   private lastTriggeredCombo: GoofyDualHandComboId | null = null;
   private hasTriggeredCurrentCombo = false;
+  private nullComboStartTime = 0;
 
   private minHoldMs: number;
   private cooldownMs: number;
@@ -600,12 +843,23 @@ export class GoofyDualHandStateMachine {
     }
 
     if (!combo) {
-      this.activeCombo = null;
       this.candidateCombo = null;
       this.candidateStartTime = 0;
-      this.hasTriggeredCurrentCombo = false;
+      if (this.nullComboStartTime === 0) {
+        this.nullComboStartTime = timestamp;
+      }
+      if (timestamp - this.nullComboStartTime >= 140) {
+        this.activeCombo = null;
+        this.hasTriggeredCurrentCombo = false;
+      }
       return { status: 'IDLE', triggered: false, combo: null, activeCombo: null };
     }
+
+    if (this.nullComboStartTime > 0 && timestamp - this.nullComboStartTime >= 140) {
+      this.activeCombo = null;
+      this.hasTriggeredCurrentCombo = false;
+    }
+    this.nullComboStartTime = 0;
 
     if (combo !== this.candidateCombo) {
       this.candidateCombo = combo;

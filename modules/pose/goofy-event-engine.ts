@@ -17,8 +17,6 @@ import {
   DEFAULT_MEME_LIBRARY,
   getDefaultMemeForAction,
   getMemeById,
-  getRandomMemeForAction,
-  getRareMeme,
 } from './goofy-meme-library';
 import { SemanticMemeMatcher } from './goofy-semantic-matcher';
 
@@ -156,7 +154,7 @@ export class GoofyEventEngine {
       (mapping && mapping.soundId) ||
       (comboDef && comboDef.defaultSoundId) ||
       'CHAD_GONG';
-    let memeDef: MemeVisualDefinition;
+    let memeDef: MemeVisualDefinition | null = null;
     let matchScore: number | undefined;
     let matchReason: string | undefined;
 
@@ -182,26 +180,38 @@ export class GoofyEventEngine {
         matchScore = matchResult.score;
         matchReason = matchResult.reason;
       } else {
-        memeDef = getDefaultMemeForAction(actionId);
+        // STRICT: If no eligible meme matches, do NOT display an unrelated fallback meme!
+        memeDef = null;
+        matchReason = 'No eligible meme assigned for gesture';
       }
-    } else if (
-      this.config.enableRareReactions &&
-      Math.random() < (this.config.rareReactionProbability ?? 0.10)
-    ) {
-      memeDef = getRareMeme(this.customMemes);
     } else if (this.config.randomMemeMode) {
-      const lastId = this.lastMemeIdByAction.get(actionId);
-      memeDef = getRandomMemeForAction(actionId, this.customMemes, lastId);
+      // Pick random strictly among eligible memes for this gesture
+      const eligible = this.semanticMatcher.getCandidatesForAction(
+        actionId,
+        [...DEFAULT_MEME_LIBRARY, ...this.customMemes],
+        this.config
+      );
+      if (eligible.length > 0) {
+        const lastId = this.lastMemeIdByAction.get(actionId);
+        const filtered = eligible.filter((m) => m.id !== lastId);
+        memeDef = filtered.length > 0
+          ? filtered[Math.floor(Math.random() * filtered.length)]!
+          : eligible[0]!;
+      } else {
+        memeDef = null;
+        matchReason = 'No eligible meme found in random mode';
+      }
     } else {
       const assignedMemeId =
         (mapping && mapping.memeId) ||
         this.config.actionMemeMappings[actionId] ||
-        (comboDef && comboDef.defaultMemeId) ||
-        getDefaultMemeForAction(actionId).id;
+        (comboDef && comboDef.defaultMemeId);
 
-      memeDef =
-        getMemeById(assignedMemeId, this.customMemes) ||
-        getDefaultMemeForAction(actionId);
+      if (assignedMemeId) {
+        memeDef = getMemeById(assignedMemeId, this.customMemes) || null;
+      } else {
+        memeDef = getDefaultMemeForAction(actionId) || null;
+      }
     }
 
     if (this.config.randomSoundMode) {
@@ -212,14 +222,16 @@ export class GoofyEventEngine {
     const caption =
       (mapping && mapping.customCaption) ||
       this.config.actionCustomCaptions[actionId] ||
-      memeDef.caption ||
+      memeDef?.caption ||
       defaultCaption;
 
-    this.lastMemeIdByAction.set(actionId, memeDef.id);
-    this.recentMemeIds = [
-      memeDef.id,
-      ...this.recentMemeIds.filter((id) => id !== memeDef.id),
-    ].slice(0, 15);
+    if (memeDef) {
+      this.lastMemeIdByAction.set(actionId, memeDef.id);
+      this.recentMemeIds = [
+        memeDef.id,
+        ...this.recentMemeIds.filter((id) => id !== memeDef.id),
+      ].slice(0, 15);
+    }
 
     // 5. Simultaneous Event & Concurrency Arbitration
     const now = performance.now();
@@ -288,7 +300,7 @@ export class GoofyEventEngine {
     const eventId = `evt-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
     const rotationDeg = Math.round((Math.random() * 6 - 3) * 10) / 10;
 
-    if (this.config.enableMemePopups) {
+    if (this.config.enableMemePopups && memeDef) {
       const popup: ActiveMemePopup = {
         id: eventId,
         actionId,
@@ -334,12 +346,12 @@ export class GoofyEventEngine {
       caption,
       soundId,
       soundName: playedSoundName,
-      memeId: memeDef.id,
-      memeTitle: memeDef.title,
+      memeId: memeDef ? memeDef.id : 'NONE',
+      memeTitle: memeDef ? memeDef.title : 'No Matching Meme',
       confidence,
       isManualPreview: false,
-      category: memeDef.category,
-      rarity: memeDef.rarity,
+      category: memeDef?.category,
+      rarity: memeDef?.rarity,
     };
 
     this.eventHistory.unshift(unifiedEvent);

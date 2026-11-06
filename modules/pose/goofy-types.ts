@@ -108,6 +108,14 @@ export interface PoseClassificationResult {
   };
 }
 
+export type HandRecognitionState =
+  | 'NO_HANDS'
+  | 'SEARCHING'
+  | 'CANDIDATE'
+  | 'CONFIRMED'
+  | 'TRIGGERED'
+  | 'COOLDOWN';
+
 export interface HandClassificationResult {
   gesture: GoofyHandGestureType | null;
   handedness: 'Left' | 'Right';
@@ -116,6 +124,26 @@ export interface HandClassificationResult {
   comicCaption: string;
   fingerCount?: number;
   isDynamic?: boolean;
+  fingerStates?: {
+    thumb: boolean;
+    index: boolean;
+    middle: boolean;
+    ring: boolean;
+    pinky: boolean;
+  };
+  rejectionReason?: string;
+}
+
+export interface HandStateMachineResult {
+  triggered: boolean;
+  gesture: GoofyHandGestureType | null;
+  rawGesture: GoofyHandGestureType | null;
+  stabilizedGesture: GoofyHandGestureType | null;
+  handedness: 'Left' | 'Right';
+  state: HandRecognitionState;
+  holdDurationMs: number;
+  confidence: number;
+  rejectionReason: string | null;
 }
 
 export interface SoundDefinition {

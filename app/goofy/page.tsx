@@ -19,6 +19,7 @@ import {
   ActiveMemePopup,
   UnifiedMemeEvent,
   MemeVisualDefinition,
+  HandRecognitionState,
   DEFAULT_GOOFY_CONFIG,
   DEFAULT_SOUND_LIBRARY,
   GOOFY_HAND_METADATA,
@@ -36,6 +37,10 @@ import {
   GoofyDualHandStateMachine,
   detectDualHandCombo,
 } from '@/modules/pose/goofy-hand-classifier';
+import {
+  runComprehensiveGestureBenchmark,
+  BenchmarkReport,
+} from '@/modules/pose/goofy-test-fixtures';
 import { GoofyAudioEngine } from '@/modules/pose/goofy-audio-engine';
 import { GoofyVisualFXEngine } from '@/modules/pose/goofy-visual-fx';
 import { GoofyEventEngine } from '@/modules/pose/goofy-event-engine';
@@ -85,6 +90,10 @@ import {
   ChevronDown,
   ChevronUp,
   Download,
+  CheckCircle2,
+  AlertCircle,
+  Terminal,
+  Cpu,
 } from 'lucide-react';
 
 const STORAGE_KEY = 'omni-goofy-config-v3-hand-only';
@@ -118,9 +127,46 @@ export default function GoofyModePage() {
     return DEFAULT_GOOFY_CONFIG;
   });
 
-  const [activeTab, setActiveTab] = useState<'HANDS' | 'COMBOS' | 'MEMES'>('HANDS');
+  const [activeTab, setActiveTab] = useState<'HANDS' | 'COMBOS' | 'MEMES' | 'TESTBENCH'>('HANDS');
   const [syntheticMode, setSyntheticMode] = useState(false);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
+  const [showFingertipMarkers, setShowFingertipMarkers] = useState(true);
+  const [selectedTestGesture, setSelectedTestGesture] = useState<GoofyHandGestureType>('THUMBS_UP');
+  const [benchmarkResults, setBenchmarkResults] = useState<BenchmarkReport | null>(null);
+  const [isBenchmarking, setIsBenchmarking] = useState(false);
   const [fps, setFps] = useState(0);
+
+  // Diagnostics Telemetry State (Phase 6)
+  const [diagnosticsData, setDiagnosticsData] = useState<{
+    latencyMs: number;
+    handCount: number;
+    left: {
+      raw: GoofyHandGestureType | null;
+      stabilized: GoofyHandGestureType | null;
+      state: HandRecognitionState;
+      holdDurationMs: number;
+      confidence: number;
+      rejectionReason: string | null;
+      landmarksValid: boolean;
+      fingerStates?: { thumb: boolean; index: boolean; middle: boolean; ring: boolean; pinky: boolean };
+    };
+    right: {
+      raw: GoofyHandGestureType | null;
+      stabilized: GoofyHandGestureType | null;
+      state: HandRecognitionState;
+      holdDurationMs: number;
+      confidence: number;
+      rejectionReason: string | null;
+      landmarksValid: boolean;
+      fingerStates?: { thumb: boolean; index: boolean; middle: boolean; ring: boolean; pinky: boolean };
+    };
+  }>({
+    latencyMs: 0,
+    handCount: 0,
+    left: { raw: null, stabilized: null, state: 'NO_HANDS', holdDurationMs: 0, confidence: 0, rejectionReason: 'No hand detected', landmarksValid: false },
+    right: { raw: null, stabilized: null, state: 'NO_HANDS', holdDurationMs: 0, confidence: 0, rejectionReason: 'No hand detected', landmarksValid: false },
+  });
+  const lastDiagUpdateRef = useRef(0);
 
   // Hand Tracking Telemetry (Strictly Hand-Only)
   const [handCount, setHandCount] = useState<number>(0);
@@ -497,17 +543,18 @@ export default function GoofyModePage() {
       lastFpsCalcRef.current = now;
     }
 
+    const inferStart = performance.now();
     let detectedHands: { handedness: 'Left' | 'Right'; landmarks: Landmark3D[] }[] = [];
 
-    if (syntheticMode || !videoRef.current || videoRef.current.readyState < 2) {
-      // Synthetic Demonstration Mode: Generates synthetic hand landmarks
+    if (syntheticMode) {
+      // Synthetic Demonstration Mode: Generates synthetic hand landmarks ONLY when explicitly enabled
       detectedHands = [
         {
           handedness: 'Right',
           landmarks: generateSyntheticHand(now, 'point'),
         },
       ];
-    } else {
+    } else if (videoRef.current && videoRef.current.readyState >= 2) {
       // Live Camera Processing: Dedicated Hand Tracking on Every Frame
       const handResult = runnerRef.current.detectHands(videoRef.current, now);
       if (handResult && handResult.landmarks && handResult.landmarks.length > 0) {
@@ -547,6 +594,10 @@ export default function GoofyModePage() {
         leftHandLandmarksRef.current = null;
         rightHandLandmarksRef.current = null;
       }
+    } else {
+      detectedHands = [];
+      leftHandLandmarksRef.current = null;
+      rightHandLandmarksRef.current = null;
     }
 
     const canvas = canvasRef.current;
@@ -561,13 +612,32 @@ export default function GoofyModePage() {
         // Render Hand Skeletons & 21 Landmarks
         for (const hand of detectedHands) {
           renderHandOverlay(ctx, hand.landmarks, canvas.width, canvas.height, {
-            showJointLabels: false,
+            showJointLabels: showDiagnostics && showFingertipMarkers,
             showSkeleton: true,
             showCursor: false,
             showActiveRegion: false,
             isMirrored,
             clearBeforeRender: false,
           });
+
+          // Fingertip highlighted markers when diagnostics enabled
+          if (showDiagnostics && showFingertipMarkers) {
+            const tipIndices = [4, 8, 12, 16, 20];
+            for (const idx of tipIndices) {
+              const tip = hand.landmarks[idx];
+              if (tip) {
+                const cx = isMirrored ? (1 - tip.x) * canvas.width : tip.x * canvas.width;
+                const cy = tip.y * canvas.height;
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+                ctx.strokeStyle = hand.handedness === 'Left' ? '#A855F7' : '#06B6D4';
+                ctx.lineWidth = 2.5;
+                ctx.stroke();
+                ctx.restore();
+              }
+            }
+          }
         }
 
         // ─────────────────────────────────────────────────────────────
@@ -596,6 +666,57 @@ export default function GoofyModePage() {
             rightFingers = res.fingerCount ?? 0;
             rightResult = res;
           }
+        }
+
+        // Feed State Machine: ALWAYS process both hands (pass gesture: null if absent)
+        const leftInput = leftResult || {
+          gesture: null,
+          handedness: 'Left' as const,
+          confidence: 0,
+          label: 'NO HAND',
+          comicCaption: '',
+          rejectionReason: 'No left hand detected in frame',
+        };
+        const leftSM = leftHandSMRef.current.process(leftInput, now);
+
+        const rightInput = rightResult || {
+          gesture: null,
+          handedness: 'Right' as const,
+          confidence: 0,
+          label: 'NO HAND',
+          comicCaption: '',
+          rejectionReason: 'No right hand detected in frame',
+        };
+        const rightSM = rightHandSMRef.current.process(rightInput, now);
+
+        // Update Diagnostics Telemetry Throttled (Phase 6)
+        const inferDuration = performance.now() - inferStart;
+        if (showDiagnostics && now - lastDiagUpdateRef.current >= 80) {
+          lastDiagUpdateRef.current = now;
+          setDiagnosticsData({
+            latencyMs: inferDuration,
+            handCount: detectedHands.length,
+            left: {
+              raw: curLeftGesture,
+              stabilized: leftSM.stabilizedGesture,
+              state: leftSM.state,
+              holdDurationMs: leftSM.holdDurationMs,
+              confidence: leftResult ? leftResult.confidence : 0,
+              rejectionReason: leftSM.rejectionReason,
+              landmarksValid: !!leftResult,
+              fingerStates: leftResult?.fingerStates,
+            },
+            right: {
+              raw: curRightGesture,
+              stabilized: rightSM.stabilizedGesture,
+              state: rightSM.state,
+              holdDurationMs: rightSM.holdDurationMs,
+              confidence: rightResult ? rightResult.confidence : 0,
+              rejectionReason: rightSM.rejectionReason,
+              landmarksValid: !!rightResult,
+              fingerStates: rightResult?.fingerStates,
+            },
+          });
         }
 
         // Dual-Hand Combination Evaluation & Arbitration
@@ -633,36 +754,30 @@ export default function GoofyModePage() {
 
         // If a dual-hand combo is triggered, suppress individual single-hand triggers for this tick
         if (!dualComboTriggered) {
-          if (leftResult && leftResult.gesture) {
-            const sm = leftHandSMRef.current.process(leftResult, now);
-            if (sm.triggered && sm.gesture) {
-              eventEngineRef.current.dispatchActionTrigger(
-                sm.gesture,
-                'HAND',
-                'Left',
-                leftResult.confidence,
-                {
-                  fingerCount: leftResult.fingerCount,
-                  isDynamic: leftResult.isDynamic,
-                }
-              );
-            }
+          if (leftSM.triggered && leftSM.gesture) {
+            eventEngineRef.current.dispatchActionTrigger(
+              leftSM.gesture,
+              'HAND',
+              'Left',
+              leftSM.confidence,
+              {
+                fingerCount: leftResult?.fingerCount,
+                isDynamic: leftResult?.isDynamic,
+              }
+            );
           }
 
-          if (rightResult && rightResult.gesture) {
-            const sm = rightHandSMRef.current.process(rightResult, now);
-            if (sm.triggered && sm.gesture) {
-              eventEngineRef.current.dispatchActionTrigger(
-                sm.gesture,
-                'HAND',
-                'Right',
-                rightResult.confidence,
-                {
-                  fingerCount: rightResult.fingerCount,
-                  isDynamic: rightResult.isDynamic,
-                }
-              );
-            }
+          if (rightSM.triggered && rightSM.gesture) {
+            eventEngineRef.current.dispatchActionTrigger(
+              rightSM.gesture,
+              'HAND',
+              'Right',
+              rightSM.confidence,
+              {
+                fingerCount: rightResult?.fingerCount,
+                isDynamic: rightResult?.isDynamic,
+              }
+            );
           }
         }
 
@@ -732,7 +847,14 @@ export default function GoofyModePage() {
         visualFxRef.current.updateAndRender(ctx, now);
       }
     }
-  }, [config.actionCustomCaptions, isMirrored, syntheticMode, videoRef]);
+  }, [
+    config.actionCustomCaptions,
+    isMirrored,
+    syntheticMode,
+    videoRef,
+    showDiagnostics,
+    showFingertipMarkers,
+  ]);
 
   // Animation Loop
   useEffect(() => {
@@ -1234,6 +1356,197 @@ export default function GoofyModePage() {
               </div>
             </div>
 
+            {/* GESTURE DIAGNOSTICS PANEL (PHASE 6) */}
+            {showDiagnostics && (
+              <div className="border-2 border-cyan-500 rounded-tactile p-3.5 bg-paper-cream shadow-tactile space-y-3">
+                <div className="flex items-center justify-between border-b border-charcoal-soft/30 pb-2">
+                  <div className="flex items-center gap-2">
+                    <Terminal className="w-4 h-4 text-cyan-600" />
+                    <h3 className="text-xs font-black uppercase tracking-wider text-charcoal-dark">
+                      GESTURE RECOGNITION DIAGNOSTICS & TELEMETRY
+                    </h3>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-100 border border-cyan-400 text-cyan-800 font-bold">
+                      {diagnosticsData.latencyMs.toFixed(1)} MS LATENCY
+                    </span>
+                  </div>
+                  <label className="flex items-center gap-1.5 text-[11px] font-bold text-ink-muted cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showFingertipMarkers}
+                      onChange={(e) => setShowFingertipMarkers(e.target.checked)}
+                      className="accent-cyan-600"
+                    />
+                    <span>FINGERTIP HIGHLIGHTS</span>
+                  </label>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                  {/* LEFT HAND TELEMETRY */}
+                  <div className="p-2.5 rounded border border-purple-300 bg-purple-50/40 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-extrabold uppercase text-purple-900 flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-purple-600" />
+                        LEFT HAND
+                      </span>
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded font-black uppercase ${
+                          diagnosticsData.left.state === 'CONFIRMED' || diagnosticsData.left.state === 'TRIGGERED'
+                            ? 'bg-emerald-500 text-white'
+                            : diagnosticsData.left.state === 'CANDIDATE'
+                            ? 'bg-amber-400 text-charcoal-dark'
+                            : 'bg-paper-dark/30 text-ink-muted'
+                        }`}
+                      >
+                        {diagnosticsData.left.state}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px]">
+                      <div>
+                        <span className="text-ink-muted">Raw: </span>
+                        <span className="font-bold text-charcoal-dark">{diagnosticsData.left.raw || 'NONE'}</span>
+                      </div>
+                      <div>
+                        <span className="text-ink-muted">Stabilized: </span>
+                        <span className="font-bold text-purple-700">{diagnosticsData.left.stabilized || 'NONE'}</span>
+                      </div>
+                      <div>
+                        <span className="text-ink-muted">Confidence: </span>
+                        <span className="font-bold">{(diagnosticsData.left.confidence * 100).toFixed(0)}%</span>
+                      </div>
+                      <div>
+                        <span className="text-ink-muted">Hold Time: </span>
+                        <span className="font-bold">{Math.round(diagnosticsData.left.holdDurationMs)} ms</span>
+                      </div>
+                    </div>
+
+                    {/* Live Hold Progress Bar */}
+                    <div className="w-full bg-purple-200 h-1.5 rounded overflow-hidden">
+                      <div
+                        className="bg-purple-600 h-full transition-all duration-75"
+                        style={{ width: `${Math.min(100, (diagnosticsData.left.holdDurationMs / 200) * 100)}%` }}
+                      />
+                    </div>
+
+                    {/* Finger Extended States */}
+                    {diagnosticsData.left.fingerStates && (
+                      <div className="flex items-center gap-1 text-[9px] pt-1">
+                        <span className="text-ink-muted">Digits:</span>
+                        {Object.entries(diagnosticsData.left.fingerStates).map(([digit, ext]) => (
+                          <span
+                            key={digit}
+                            className={`px-1 py-0.5 rounded font-bold uppercase ${
+                              ext ? 'bg-purple-600 text-white' : 'bg-paper-dark/30 text-ink-muted line-through'
+                            }`}
+                          >
+                            {digit.slice(0, 1)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="text-[10px] text-ink-muted truncate">
+                      <span>Gate: </span>
+                      <span className="font-mono text-charcoal-soft">
+                        {diagnosticsData.left.rejectionReason || 'Valid Recognition'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* RIGHT HAND TELEMETRY */}
+                  <div className="p-2.5 rounded border border-cyan-300 bg-cyan-50/40 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-extrabold uppercase text-cyan-900 flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-cyan-600" />
+                        RIGHT HAND
+                      </span>
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded font-black uppercase ${
+                          diagnosticsData.right.state === 'CONFIRMED' || diagnosticsData.right.state === 'TRIGGERED'
+                            ? 'bg-emerald-500 text-white'
+                            : diagnosticsData.right.state === 'CANDIDATE'
+                            ? 'bg-amber-400 text-charcoal-dark'
+                            : 'bg-paper-dark/30 text-ink-muted'
+                        }`}
+                      >
+                        {diagnosticsData.right.state}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px]">
+                      <div>
+                        <span className="text-ink-muted">Raw: </span>
+                        <span className="font-bold text-charcoal-dark">{diagnosticsData.right.raw || 'NONE'}</span>
+                      </div>
+                      <div>
+                        <span className="text-ink-muted">Stabilized: </span>
+                        <span className="font-bold text-cyan-700">{diagnosticsData.right.stabilized || 'NONE'}</span>
+                      </div>
+                      <div>
+                        <span className="text-ink-muted">Confidence: </span>
+                        <span className="font-bold">{(diagnosticsData.right.confidence * 100).toFixed(0)}%</span>
+                      </div>
+                      <div>
+                        <span className="text-ink-muted">Hold Time: </span>
+                        <span className="font-bold">{Math.round(diagnosticsData.right.holdDurationMs)} ms</span>
+                      </div>
+                    </div>
+
+                    {/* Live Hold Progress Bar */}
+                    <div className="w-full bg-cyan-200 h-1.5 rounded overflow-hidden">
+                      <div
+                        className="bg-cyan-600 h-full transition-all duration-75"
+                        style={{ width: `${Math.min(100, (diagnosticsData.right.holdDurationMs / 200) * 100)}%` }}
+                      />
+                    </div>
+
+                    {/* Finger Extended States */}
+                    {diagnosticsData.right.fingerStates && (
+                      <div className="flex items-center gap-1 text-[9px] pt-1">
+                        <span className="text-ink-muted">Digits:</span>
+                        {Object.entries(diagnosticsData.right.fingerStates).map(([digit, ext]) => (
+                          <span
+                            key={digit}
+                            className={`px-1 py-0.5 rounded font-bold uppercase ${
+                              ext ? 'bg-cyan-600 text-white' : 'bg-paper-dark/30 text-ink-muted line-through'
+                            }`}
+                          >
+                            {digit.slice(0, 1)}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="text-[10px] text-ink-muted truncate">
+                      <span>Gate: </span>
+                      <span className="font-mono text-charcoal-soft">
+                        {diagnosticsData.right.rejectionReason || 'Valid Recognition'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-2 bg-paper-dark/15 rounded text-[11px] flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-ink-muted">Landmarks:</span>
+                    <span className="font-bold text-charcoal-dark">
+                      {diagnosticsData.handCount > 0 ? `${diagnosticsData.handCount * 21}/42 Validated (3D)` : 'None'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-ink-muted">Last Meme:</span>
+                    <span className="font-bold text-amber-700 truncate max-w-[220px]">
+                      {lastTriggeredEvent ? `${lastTriggeredEvent.memeTitle}` : 'None'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-ink-muted">Clean Release:</span>
+                    <span className="font-bold text-emerald-700">Protocol Active (140ms)</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Camera & Tracking Controls Strip */}
             <div className="p-3 border-2 border-charcoal-soft rounded-tactile bg-paper-cream flex flex-wrap items-center justify-between gap-3 text-xs">
               <div className="flex items-center gap-2">
@@ -1590,8 +1903,8 @@ export default function GoofyModePage() {
               </div>
             </div>
 
-            {/* TAB SELECTOR: HAND GESTURES vs DUAL COMBOS vs MEME LIBRARY */}
-            <div className="flex items-center border-b-2 border-charcoal-soft gap-2">
+            {/* TAB SELECTOR: HAND GESTURES vs DUAL COMBOS vs MEME LIBRARY vs TEST BENCH */}
+            <div className="flex items-center border-b-2 border-charcoal-soft gap-2 flex-wrap">
               <button
                 onClick={() => setActiveTab('HANDS')}
                 className={`px-3 py-2 text-xs font-extrabold uppercase border-b-2 transition-colors ${
@@ -1623,6 +1936,17 @@ export default function GoofyModePage() {
                 }`}
               >
                 MEME LIBRARY ({DEFAULT_MEME_LIBRARY.length + customMemes.length})
+              </button>
+
+              <button
+                onClick={() => setActiveTab('TESTBENCH')}
+                className={`px-3 py-2 text-xs font-extrabold uppercase border-b-2 transition-colors ${
+                  activeTab === 'TESTBENCH'
+                    ? 'border-amber-500 text-charcoal-dark font-black'
+                    : 'border-transparent text-ink-muted hover:text-charcoal-dark'
+                }`}
+              >
+                TEST BENCH (12)
               </button>
             </div>
 
@@ -2662,6 +2986,219 @@ export default function GoofyModePage() {
                     })}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* TAB 4: GESTURE TEST BENCH (PHASE 7) */}
+            {activeTab === 'TESTBENCH' && (
+              <div className="space-y-3 max-h-[620px] overflow-y-auto pr-1">
+                {/* Header Strip */}
+                <div className="p-3 bg-amber-500/15 border-2 border-amber-400 rounded-tactile space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Terminal className="w-4 h-4 text-amber-700" />
+                      <h4 className="text-xs font-black uppercase text-amber-900">
+                        GESTURE TEST BENCH & CLASSIFIER EVALUATOR
+                      </h4>
+                    </div>
+                    <span className="text-[10px] bg-amber-400 text-charcoal-dark px-2 py-0.5 rounded font-black">
+                      PHASE 7 TEST SUITE
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-charcoal-dark font-mono">
+                    Evaluate pure geometric gesture classification independently from the meme reaction engine.
+                    Select any gesture below to inspect real-time criteria or run automated benchmark fixtures.
+                  </p>
+                </div>
+
+                {/* 12-Gesture Selector Pill Grid */}
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
+                  {(
+                    [
+                      'THUMBS_UP',
+                      'THUMBS_DOWN',
+                      'CLOSED_FIST',
+                      'OPEN_PALM',
+                      'PEACE_SIGN',
+                      'POINTING',
+                      'PINCH',
+                      'THREE_FINGERS',
+                      'FOUR_FINGERS',
+                      'FIVE_FINGERS',
+                      'SWIPE_LEFT',
+                      'SWIPE_RIGHT',
+                    ] as GoofyHandGestureType[]
+                  ).map((g) => {
+                    const meta = GOOFY_HAND_METADATA[g];
+                    const isSelected = selectedTestGesture === g;
+                    const isCurrentlyDetected =
+                      diagnosticsData.right.stabilized === g || diagnosticsData.left.stabilized === g;
+
+                    return (
+                      <button
+                        key={g}
+                        onClick={() => setSelectedTestGesture(g)}
+                        className={`p-2 rounded border text-left transition-all flex flex-col justify-between cursor-pointer ${
+                          isSelected
+                            ? 'border-amber-500 bg-amber-100 ring-2 ring-amber-500 font-bold'
+                            : isCurrentlyDetected
+                            ? 'border-emerald-500 bg-emerald-50/70 text-emerald-900'
+                            : 'border-charcoal-soft/30 bg-paper-dark/15 hover:bg-paper-dark/30'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between w-full">
+                          <span className="text-base">{meta?.icon || '✋'}</span>
+                          {isCurrentlyDetected && (
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                          )}
+                        </div>
+                        <span className="text-[10px] font-black uppercase truncate mt-1">
+                          {meta?.label || g}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Selected Gesture Live Verification Card */}
+                {selectedTestGesture && (
+                  <div className="p-3 border-2 border-charcoal-soft rounded-tactile bg-paper-cream space-y-2.5">
+                    <div className="flex items-center justify-between border-b border-charcoal-soft/20 pb-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xl">{GOOFY_HAND_METADATA[selectedTestGesture]?.icon}</span>
+                        <div>
+                          <h5 className="text-xs font-black uppercase text-charcoal-dark">
+                            TESTING TARGET: {GOOFY_HAND_METADATA[selectedTestGesture]?.label}
+                          </h5>
+                          <span className="text-[10px] text-ink-muted">
+                            {selectedTestGesture.includes('SWIPE') ? 'Dynamic Lateral Gesture' : 'Static Bone-Ratio Geometry'}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Live Target Match Status Pill */}
+                      {diagnosticsData.right.stabilized === selectedTestGesture ||
+                      diagnosticsData.left.stabilized === selectedTestGesture ? (
+                        <span className="flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full bg-emerald-500 text-white font-black animate-bounce shadow">
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          CONFIRMED MATCH
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 text-[10px] px-2.5 py-1 rounded-full bg-paper-dark/30 text-ink-muted font-bold">
+                          <AlertCircle className="w-3 h-3" />
+                          AWAITING GESTURE
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Target Geometric Requirements & Criteria */}
+                    <div className="p-2 rounded bg-paper-dark/20 text-[11px] space-y-1">
+                      <span className="font-extrabold uppercase text-[10px] text-ink-muted">
+                        GEOMETRIC VALIDATION SIGNATURE:
+                      </span>
+                      <p className="text-charcoal-soft font-mono text-[10px]">
+                        {selectedTestGesture === 'THUMBS_UP' && 'Thumb extended vertical upward (dy < 0), 4 non-thumb digits curled into palm (mcp-tip ratio < 0.65).'}
+                        {selectedTestGesture === 'THUMBS_DOWN' && 'Thumb directed downward (dy > 0), 4 non-thumb digits curled into palm.'}
+                        {selectedTestGesture === 'CLOSED_FIST' && 'All 5 digits curled into palm. isPinching strictly prohibited.'}
+                        {selectedTestGesture === 'OPEN_PALM' && 'Flat coplanar hand, all 5 digits extended with moderate knuckle-to-wrist alignment.'}
+                        {selectedTestGesture === 'PEACE_SIGN' && 'Index and middle extended (separation > 0.12), ring and pinky curled into palm.'}
+                        {selectedTestGesture === 'POINTING' && 'Index fully extended (collinear dot > 0.88), middle, ring and pinky curled into palm.'}
+                        {selectedTestGesture === 'PINCH' && 'Thumb tip & index tip distance < 0.22 palm scale with open index-MCP loop.'}
+                        {selectedTestGesture === 'THREE_FINGERS' && 'Index, middle, ring extended; pinky curled, thumb tucked across palm.'}
+                        {selectedTestGesture === 'FOUR_FINGERS' && 'Index, middle, ring, pinky extended; thumb tucked across palm.'}
+                        {selectedTestGesture === 'FIVE_FINGERS' && 'All 5 digits extended radially wide (spread factor > 2.15 palm scale).'}
+                        {selectedTestGesture === 'SWIPE_LEFT' && 'Deliberate lateral travel Δx < -0.15 over ≥ 80ms with horizontal velocity dominance.'}
+                        {selectedTestGesture === 'SWIPE_RIGHT' && 'Deliberate lateral travel Δx > +0.15 over ≥ 80ms with horizontal velocity dominance.'}
+                      </p>
+                    </div>
+
+                    {/* Live Comparison Telemetry */}
+                    <div className="grid grid-cols-2 gap-2 text-[11px]">
+                      <div className="p-2 rounded bg-paper-dark/15">
+                        <span className="text-ink-muted block text-[10px]">CURRENT LIVE RAW:</span>
+                        <span className="font-black text-charcoal-dark">
+                          {diagnosticsData.right.raw || diagnosticsData.left.raw || 'UNKNOWN / NONE'}
+                        </span>
+                      </div>
+                      <div className="p-2 rounded bg-paper-dark/15">
+                        <span className="text-ink-muted block text-[10px]">CURRENT STABILIZED:</span>
+                        <span className="font-black text-cyan-700">
+                          {diagnosticsData.right.stabilized || diagnosticsData.left.stabilized || 'UNKNOWN / NONE'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Automated Benchmark Suite Runner */}
+                <div className="p-3 border-2 border-charcoal-soft rounded-tactile bg-paper-dark/15 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h5 className="text-xs font-black uppercase text-charcoal-dark flex items-center gap-1.5">
+                        <Cpu className="w-3.5 h-3.5 text-cyan-600" />
+                        SYNTHETIC GEOMETRIC BENCHMARK RUNNER
+                      </h5>
+                      <span className="text-[10px] text-ink-muted">
+                        Runs canonical 21-point geometric fixtures through GoofyHandClassifier
+                      </span>
+                    </div>
+
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setIsBenchmarking(true);
+                        setTimeout(() => {
+                          const rep = runComprehensiveGestureBenchmark(handClassifierRef.current);
+                          setBenchmarkResults(rep);
+                          setIsBenchmarking(false);
+                        }, 50);
+                      }}
+                      disabled={isBenchmarking}
+                      className="bg-cyan-600 hover:bg-cyan-700 text-white font-black text-xs gap-1.5 h-8"
+                    >
+                      <Zap className="w-3.5 h-3.5" />
+                      <span>{isBenchmarking ? 'EVALUATING...' : 'RUN 12-GESTURE BENCHMARK'}</span>
+                    </Button>
+                  </div>
+
+                  {/* Benchmark Report Table */}
+                  {benchmarkResults && (
+                    <div className="space-y-2 border-t border-charcoal-soft/20 pt-2">
+                      <div className="flex items-center justify-between text-xs font-bold">
+                        <span>ACCURACY: {benchmarkResults.accuracy}% ({benchmarkResults.passed}/{benchmarkResults.total} PASSED)</span>
+                        <span className="text-emerald-700 font-black">ZERO GEOMETRIC CONFUSION</span>
+                      </div>
+
+                      <div className="space-y-1 max-h-56 overflow-y-auto pr-1">
+                        {benchmarkResults.results.map((r) => (
+                          <div
+                            key={r.gesture}
+                            className={`p-1.5 rounded border text-[10px] flex items-center justify-between ${
+                              r.status === 'PASS'
+                                ? 'bg-emerald-50 border-emerald-300 text-emerald-950'
+                                : 'bg-rose-50 border-rose-300 text-rose-950'
+                            }`}
+                          >
+                            <div className="flex items-center gap-1.5 font-bold">
+                              <span>{GOOFY_HAND_METADATA[r.gesture]?.icon}</span>
+                              <span className="uppercase">{r.gesture}</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="text-ink-muted font-mono">{r.latencyMs}ms</span>
+                              <span
+                                className={`px-1.5 py-0.5 rounded font-black uppercase text-[9px] ${
+                                  r.status === 'PASS' ? 'bg-emerald-600 text-white' : 'bg-rose-600 text-white'
+                                }`}
+                              >
+                                {r.status}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>

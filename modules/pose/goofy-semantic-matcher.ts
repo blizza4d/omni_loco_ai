@@ -89,6 +89,197 @@ export const GESTURE_THEMATIC_ANGLES: Record<string, string[]> = {
 };
 
 /**
+ * Strict Gesture Eligible Meme Collections.
+ * Every recognised hand gesture or dual combo is strictly partitioned into
+ * eligible meme visual candidates. Random selection or scoring CANNOT pick
+ * memes outside of these explicit associations.
+ */
+export const GESTURE_ELIGIBLE_MEMES: Record<string, string[]> = {
+  THUMBS_UP: [
+    'REAL_MEME_GIGACHAD',
+    'REAL_MEME_KEANU_BREATHTAKING_GIF',
+    'REAL_MEME_DICAPRIO_TOAST_GIF',
+    'REAL_MEME_SUCCESS_KID_GIF',
+    'REAL_MEME_RONALDO_SIU_GIF',
+    'REAL_MEME_SALT_BAE_GIF',
+    'REAL_MEME_NODDING_GANDALF_GIF',
+    'REAL_MEME_EPIC_HANDSHAKE',
+    'REAL_MEME_GREAT_GATSBY_CHEERS_GIF',
+    'PRESET_MEME_GIGACHAD',
+    'PRESET_MEME_SUCCESS_KID',
+  ],
+  THUMBS_DOWN: [
+    'REAL_MEME_SAD_PABLO',
+    'REAL_MEME_EMOTIONAL_DAMAGE_GIF',
+    'REAL_MEME_NOT_STONKS_FALLING',
+    'REAL_MEME_NO_GOD_PLEASE_NO_GIF',
+    'REAL_MEME_GRUMPY_CAT_NO',
+    'REAL_MEME_FACEPALM_PICARD',
+    'REAL_MEME_DANCING_COFFIN_GIF',
+    'REAL_MEME_BAD_LUCK_BRIAN',
+    'REAL_MEME_FINE_DOG_FIRE_GIF',
+    'REAL_MEME_THIS_IS_FINE',
+    'PRESET_MEME_SAD_KEANU',
+    'PRESET_MEME_DISASTER_GIRL',
+  ],
+  CLOSED_FIST: [
+    'REAL_MEME_ARTHURS_FIST',
+    'REAL_MEME_BUFF_DOGE',
+    'REAL_MEME_ULTRA_INSTINCT_SHAGGY_GIF',
+    'REAL_MEME_BATMAN_SLAP',
+    'REAL_MEME_CAT_WITH_KNIFE',
+    'REAL_MEME_EXPLOSION_WALK_GIF',
+    'REAL_MEME_SUCCESS_KID_GIF',
+    'PRESET_MEME_ANGRY_CAT',
+    'PRESET_MEME_BUFF_DOGE',
+  ],
+  OPEN_PALM: [
+    'REAL_MEME_CONFUSED_TRAVOLTA_GIF',
+    'REAL_MEME_BLINKING_GUY_GIF',
+    'REAL_MEME_SURPRISED_PIKACHU',
+    'REAL_MEME_SPONGEBOB_AIGHT_GIF',
+    'REAL_MEME_HOMER_BUSHES_GIF',
+    'REAL_MEME_CONFUSED_NICK_YOUNG',
+    'REAL_MEME_FINE_DOG_FIRE_GIF',
+    'REAL_MEME_THIS_IS_FINE',
+    'PRESET_MEME_SURPRISED_PIKACHU',
+    'PRESET_MEME_CONFUSED_NICK',
+  ],
+  PEACE_SIGN: [
+    'REAL_MEME_SHAQ_SHIMMY_GIF',
+    'REAL_MEME_ABSOLUTE_CINEMA_IMG',
+    'REAL_MEME_NODDING_GANDALF_GIF',
+    'REAL_MEME_CELEBRATION_DANCE_GIF',
+    'REAL_MEME_RONALDO_SIU_GIF',
+    'REAL_MEME_DICAPRIO_TOAST_GIF',
+    'REAL_MEME_KPOP_HEART_GIF',
+    'PRESET_MEME_DOGE_COOL',
+  ],
+  POINTING: [
+    'REAL_MEME_SPIDERMAN_POINTING',
+    'REAL_MEME_LEONARDO_POINTING_TV',
+    'REAL_MEME_KEANU_BREATHTAKING_GIF',
+    'REAL_MEME_ROLL_SAFE',
+    'REAL_MEME_ROLL_SAFE_THINK_HD',
+    'REAL_MEME_MEGAMIND_NO_BITCHES',
+    'REAL_MEME_WOMAN_YELLING_CAT',
+    'PRESET_MEME_POINTING_SPIDERMAN',
+    'PRESET_MEME_ROLL_SAFE',
+  ],
+  PINCH: [
+    'REAL_MEME_THE_ROCK_EYEBROW_GIF',
+    'REAL_MEME_SALT_BAE_GIF',
+    'REAL_MEME_FUTURAMA_FRY',
+    'REAL_MEME_SQUINTING_THOR',
+    'REAL_MEME_DOUBT_PRESS_X',
+    'REAL_MEME_IS_THIS_A_PIGEON',
+    'REAL_MEME_TRADE_OFFER',
+    'PRESET_MEME_SALT_BAE',
+    'PRESET_MEME_FUTURAMA_FRY',
+  ],
+  THREE_FINGERS: [
+    'REAL_MEME_THREE_DRAGONS',
+    'REAL_MEME_MATH_LADY_CALCULATION',
+    'REAL_MEME_PHILOSORAPTOR_THOUGHT',
+    'REAL_MEME_EXPANDING_BRAIN',
+    'REAL_MEME_EXPANDING_BRAIN_ASCENSION',
+    'PRESET_MEME_EXPANDING_BRAIN',
+  ],
+  FOUR_FINGERS: [
+    'REAL_MEME_UNO_DRAW_25',
+    'REAL_MEME_TWO_BUTTONS',
+    'REAL_MEME_TWO_BUTTONS_CHOICE',
+    'REAL_MEME_GALAXY_BRAIN_ASCENDING_GIF',
+    'REAL_MEME_MIND_BLOWN_GALAXY_GIF',
+    'PRESET_MEME_BIG_BRAIN',
+  ],
+  FIVE_FINGERS: [
+    'REAL_MEME_MIND_BLOWN_GIF',
+    'REAL_MEME_MIND_BLOWN_GALAXY_GIF',
+    'REAL_MEME_GALAXY_BRAIN_ASCENDING_GIF',
+    'REAL_MEME_SCREAMING_COWBOY_GIF',
+    'REAL_MEME_CONFUSED_TRAVOLTA_GIF',
+    'REAL_MEME_BLINKING_GUY_GIF',
+    'PRESET_MEME_MIND_BLOWN',
+    'PRESET_MEME_EXPLODING_HEAD',
+  ],
+  SWIPE_LEFT: [
+    'REAL_MEME_SPONGEBOB_AIGHT_GIF',
+    'REAL_MEME_HOMER_BUSHES_GIF',
+    'REAL_MEME_NOT_STONKS_FALLING',
+    'REAL_MEME_EMOTIONAL_DAMAGE_GIF',
+    'REAL_MEME_DISTRACTED_BF',
+    'REAL_MEME_DISTRACTED_CAT',
+    'PRESET_MEME_DISTRACTED_BF',
+  ],
+  SWIPE_RIGHT: [
+    'REAL_MEME_LEFT_EXIT',
+    'REAL_MEME_STONKS_RISING',
+    'REAL_MEME_EXPLOSION_WALK_GIF',
+    'REAL_MEME_SUCCESS_KID_GIF',
+    'REAL_MEME_RONALDO_SIU_GIF',
+    'PRESET_MEME_SUCCESS_KID',
+  ],
+
+  // Dual Combos
+  DOUBLE_THUMBS_UP: [
+    'REAL_MEME_GIGACHAD',
+    'REAL_MEME_GREAT_GATSBY_CHEERS_GIF',
+    'REAL_MEME_RONALDO_SIU_GIF',
+    'REAL_MEME_EPIC_HANDSHAKE',
+    'REAL_MEME_SUCCESS_KID_GIF',
+    'PRESET_MEME_GIGACHAD',
+  ],
+  BOTH_HANDS_OPEN: [
+    'REAL_MEME_CONFUSED_TRAVOLTA_GIF',
+    'REAL_MEME_BLINKING_GUY_GIF',
+    'REAL_MEME_FINE_DOG_FIRE_GIF',
+    'REAL_MEME_SCREAMING_COWBOY_GIF',
+    'PRESET_MEME_SURPRISED_PIKACHU',
+  ],
+  BOTH_HANDS_FIST: [
+    'REAL_MEME_BUFF_DOGE',
+    'REAL_MEME_ULTRA_INSTINCT_SHAGGY_GIF',
+    'REAL_MEME_ARTHURS_FIST',
+    'PRESET_MEME_BUFF_DOGE',
+  ],
+  DOUBLE_PEACE: [
+    'REAL_MEME_ABSOLUTE_CINEMA_IMG',
+    'REAL_MEME_SHAQ_SHIMMY_GIF',
+    'REAL_MEME_NODDING_GANDALF_GIF',
+    'REAL_MEME_CELEBRATION_DANCE_GIF',
+  ],
+  THUMBS_UP_AND_DOWN: [
+    'REAL_MEME_THIS_IS_FINE',
+    'REAL_MEME_FINE_DOG_FIRE_GIF',
+    'REAL_MEME_TWO_BUTTONS',
+    'REAL_MEME_TWO_BUTTONS_CHOICE',
+  ],
+  PERFECT_TEN: [
+    'REAL_MEME_MIND_BLOWN_GIF',
+    'REAL_MEME_MIND_BLOWN_GALAXY_GIF',
+    'REAL_MEME_GALAXY_BRAIN_ASCENDING_GIF',
+    'REAL_MEME_ABSOLUTE_CINEMA_IMG',
+  ],
+  DOUBLE_THREE: [
+    'REAL_MEME_THREE_DRAGONS',
+    'REAL_MEME_MATH_LADY_CALCULATION',
+    'REAL_MEME_EXPANDING_BRAIN_ASCENSION',
+  ],
+  ROCK_PAPER_SCISSORS: [
+    'REAL_MEME_ARTHURS_FIST',
+    'REAL_MEME_SPIDERMAN_POINTING',
+    'REAL_MEME_BATMAN_SLAP',
+  ],
+  SECRET_HEART_HANDS: ['REAL_MEME_KPOP_HEART_GIF'],
+  SECRET_MATRIX_DODGE: ['REAL_MEME_MATRIX_DODGE_GIF'],
+  SECRET_YOU_ARE_BREATHTAKING: [
+    'REAL_MEME_KEANU_BREATHTAKING_GIF',
+    'REAL_MEME_LEONARDO_POINTING_TV',
+  ],
+};
+
+/**
  * Preset mode affinities towards emotional tones
  */
 export const PRESET_EMOTIONAL_AFFINITIES: Record<string, string[]> = {
@@ -116,6 +307,8 @@ export class SemanticMemeMatcher {
    * Main semantic matching function.
    * Given an action context and available memes, scores all candidates and picks
    * an appropriate, diverse, semantically matching meme.
+   * STRICT: Only memes eligible for this specific gesture are considered.
+   * If no eligible meme exists, returns null (no random or unrelated memes).
    */
   match(
     context: GestureMatchingContext,
@@ -143,20 +336,26 @@ export class SemanticMemeMatcher {
       }
     }
 
+    // Filter candidate pool strictly to memes eligible for this action
+    const eligiblePool = availableMemes.filter((m) => {
+      if (config.mediaTypeFilter === 'GIFS_ONLY' && m.mediaType !== 'gif') return false;
+      if (config.mediaTypeFilter === 'IMAGES_ONLY' && m.mediaType === 'gif') return false;
+      return this.isMemeEligibleForAction(m, actionId, config);
+    });
+
+    // STRICT REJECTION: If no meme is eligible for this gesture, return null.
+    // Never fall back to arbitrary or default memes.
+    if (eligiblePool.length === 0) {
+      return null;
+    }
+
     // 2. Rare Reaction Lottery (if enabled and triggered)
     if (
       config.enableRareReactions &&
       Math.random() < (config.rareReactionProbability ?? 0.12)
     ) {
-      const rarePool = availableMemes.filter(
-        (m) => {
-          if (config.mediaTypeFilter === 'GIFS_ONLY' && m.mediaType !== 'gif') return false;
-          if (config.mediaTypeFilter === 'IMAGES_ONLY' && m.mediaType === 'gif') return false;
-          return (
-            (m.rarity === 'LEGENDARY' || m.rarity === 'RARE') &&
-            this.isMemeEligibleForAction(m, actionId)
-          );
-        }
+      const rarePool = eligiblePool.filter(
+        (m) => m.rarity === 'LEGENDARY' || m.rarity === 'RARE'
       );
       if (rarePool.length > 0) {
         const picked = rarePool[Math.floor(Math.random() * rarePool.length)]!;
@@ -168,11 +367,7 @@ export class SemanticMemeMatcher {
     // 3. User Multi-Meme Assignment Pool (if configured)
     const multiAssigned = config.multiMemeAssignments?.[actionId];
     if (multiAssigned && multiAssigned.length > 0) {
-      const userPool = availableMemes.filter((m) => {
-        if (config.mediaTypeFilter === 'GIFS_ONLY' && m.mediaType !== 'gif') return false;
-        if (config.mediaTypeFilter === 'IMAGES_ONLY' && m.mediaType === 'gif') return false;
-        return multiAssigned.includes(m.id);
-      });
+      const userPool = eligiblePool.filter((m) => multiAssigned.includes(m.id));
       if (userPool.length > 0) {
         const candidate = this.selectDiverseCandidate(actionId, userPool, config);
         this.recordRecent(actionId, candidate.id);
@@ -180,17 +375,13 @@ export class SemanticMemeMatcher {
       }
     }
 
-    // 4. Candidate Scoring Engine
+    // 4. Candidate Scoring Engine (operates strictly within eligiblePool)
     const scoredCandidates: { meme: MemeVisualDefinition; score: number }[] = [];
     const recentList = this.recentMemesByAction.get(actionId) || [];
     const affinities = GESTURE_CATEGORY_AFFINITY[actionId] || [];
 
-    for (const meme of availableMemes) {
-      // Check media type filter
-      if (config.mediaTypeFilter === 'GIFS_ONLY' && meme.mediaType !== 'gif') continue;
-      if (config.mediaTypeFilter === 'IMAGES_ONLY' && meme.mediaType === 'gif') continue;
-
-      let score = 0;
+    for (const meme of eligiblePool) {
+      let score = 50; // Base score for eligible candidates
 
       // Direct gesture tag match (+100)
       if (
@@ -206,9 +397,9 @@ export class SemanticMemeMatcher {
         score += 45;
       }
 
-      // Semantic category affinity match (+55)
+      // Semantic category affinity match (+30)
       if (affinities.includes(meme.category)) {
-        score += 55;
+        score += 30;
       }
 
       // Dynamic swipe / movement affinity (+35)
@@ -266,30 +457,24 @@ export class SemanticMemeMatcher {
         }
       }
 
-      if (score > 20) {
-        scoredCandidates.push({ meme, score });
-      }
+      scoredCandidates.push({ meme, score });
     }
 
     // 5. Select from top candidates
     if (scoredCandidates.length === 0) {
-      // Fallback: Pick any meme tagged with suggested action or first available matching media filter
-      const pool = availableMemes.filter((m) => {
-        if (config.mediaTypeFilter === 'GIFS_ONLY' && m.mediaType !== 'gif') return false;
-        if (config.mediaTypeFilter === 'IMAGES_ONLY' && m.mediaType === 'gif') return false;
-        return true;
-      });
-      const validPool = pool.length > 0 ? pool : availableMemes;
-      const fallback =
-        validPool.find((m) => m.suggestedActions?.includes(actionId as any)) ||
-        validPool[0]!;
-      return this.buildResult(fallback, actionId, 50, 'Fallback match', config);
+      const fallback = this.selectDiverseCandidate(actionId, eligiblePool, config);
+      this.recordRecent(actionId, fallback.id);
+      return this.buildResult(fallback, actionId, 50, 'Eligible candidate match', config);
     }
 
     scoredCandidates.sort((a, b) => b.score - a.score);
 
+    // Filter positive candidates or fallback to best
+    const positiveCandidates = scoredCandidates.filter((c) => c.score > 0);
+    const poolToSample = positiveCandidates.length > 0 ? positiveCandidates : scoredCandidates;
+
     // Pick among top 4 with weighted random to maintain variety
-    const topSlice = scoredCandidates.slice(0, 4);
+    const topSlice = poolToSample.slice(0, 4);
     const chosen = this.weightedPick(topSlice);
 
     this.recordRecent(actionId, chosen.meme.id);
@@ -297,15 +482,34 @@ export class SemanticMemeMatcher {
   }
 
   /**
-   * Helper to check if meme matches action directly
+   * Helper to check if a meme is strictly eligible for an action.
+   * A meme is eligible IF AND ONLY IF:
+   * 1. Its ID is in GESTURE_ELIGIBLE_MEMES[actionId], OR
+   * 2. Its gestureTags / comboTags / suggestedActions explicitly mention actionId, OR
+   * 3. The user explicitly assigned it in config.multiMemeAssignments[actionId] or config.actionMemeMappings[actionId].
    */
-  private isMemeEligibleForAction(meme: MemeVisualDefinition, actionId: string): boolean {
-    return (
+  public isMemeEligibleForAction(
+    meme: MemeVisualDefinition,
+    actionId: string,
+    config?: GoofyModeConfig
+  ): boolean {
+    const list = GESTURE_ELIGIBLE_MEMES[actionId];
+    if (list && list.includes(meme.id)) return true;
+
+    if (
       meme.gestureTags?.includes(actionId as GoofyHandGestureType) ||
       meme.comboTags?.includes(actionId as GoofyDualHandComboId) ||
-      meme.suggestedActions?.includes(actionId as any) ||
-      false
-    );
+      meme.suggestedActions?.includes(actionId as any)
+    ) {
+      return true;
+    }
+
+    if (config?.multiMemeAssignments?.[actionId]?.includes(meme.id)) return true;
+    if (config?.actionMemeMappings?.[actionId] === meme.id) return true;
+    if (config?.handMappings?.[actionId as GoofyHandGestureType]?.memeId === meme.id) return true;
+    if (config?.dualHandMappings?.[actionId as GoofyDualHandComboId]?.memeId === meme.id) return true;
+
+    return false;
   }
 
   /**
@@ -392,19 +596,13 @@ export class SemanticMemeMatcher {
   }
 
   /**
-   * Retrieves all candidate memes for a given action
+   * Retrieves all strictly eligible candidate memes for a given action
    */
   getCandidatesForAction(
     actionId: string,
-    availableMemes: MemeVisualDefinition[]
+    availableMemes: MemeVisualDefinition[],
+    config?: GoofyModeConfig
   ): MemeVisualDefinition[] {
-    const affinities = GESTURE_CATEGORY_AFFINITY[actionId] || [];
-    return availableMemes.filter(
-      (m) =>
-        m.gestureTags?.includes(actionId as GoofyHandGestureType) ||
-        m.comboTags?.includes(actionId as GoofyDualHandComboId) ||
-        m.suggestedActions?.includes(actionId as any) ||
-        affinities.includes(m.category)
-    );
+    return availableMemes.filter((m) => this.isMemeEligibleForAction(m, actionId, config));
   }
 }

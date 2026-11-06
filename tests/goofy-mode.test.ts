@@ -22,7 +22,11 @@ import {
   getRareMeme,
   getPresetById,
 } from '../modules/pose/goofy-meme-library';
-import { SemanticMemeMatcher } from '../modules/pose/goofy-semantic-matcher';
+import { SemanticMemeMatcher, GESTURE_ELIGIBLE_MEMES } from '../modules/pose/goofy-semantic-matcher';
+import {
+  generateGestureFixture,
+  runComprehensiveGestureBenchmark,
+} from '../modules/pose/goofy-test-fixtures';
 import { Landmark3D } from '../modules/hand/types';
 import { PoseLandmark } from '../modules/pose/types';
 import {
@@ -1619,6 +1623,247 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
       expect(result!.meme).toBeDefined();
       expect(result!.score).toBeGreaterThan(50);
       expect(result!.soundId).toBeDefined();
+    });
+  });
+
+  describe('Goofy Model Critical Fix: Real Hand Recognition, Zero Random Memes & State Machine Integrity', () => {
+    let classifier: GoofyHandClassifier;
+
+    beforeEach(() => {
+      classifier = new GoofyHandClassifier();
+    });
+
+    it('passes 100% of canonical geometric fixtures in comprehensive benchmark', () => {
+      const report = runComprehensiveGestureBenchmark(classifier);
+      expect(report.total).toBe(12);
+      expect(report.passed).toBe(12);
+      expect(report.accuracy).toBe(100);
+      for (const res of report.results) {
+        expect(res.status).toBe('PASS');
+        expect(res.predicted).toBe(res.expected);
+      }
+    });
+
+    it('unambiguously distinguishes CLOSED_FIST from PINCH with zero collision', () => {
+      const fistFixture = generateGestureFixture('CLOSED_FIST', 'Right');
+      const fistRes = classifier.classify(fistFixture, 'Right', 1000);
+
+      expect(fistRes.gesture).toBe('CLOSED_FIST');
+      expect(fistRes.gesture).not.toBe('PINCH');
+      expect(fistRes.confidence).toBeGreaterThanOrEqual(0.90);
+
+      const pinchFixture = generateGestureFixture('PINCH', 'Right');
+      const pinchRes = classifier.classify(pinchFixture, 'Right', 1100);
+
+      expect(pinchRes.gesture).toBe('PINCH');
+      expect(pinchRes.gesture).not.toBe('CLOSED_FIST');
+      expect(pinchRes.confidence).toBeGreaterThanOrEqual(0.80);
+    });
+
+    it('returns strict UNKNOWN for ambiguous, mutilated or half-formed hand postures', () => {
+      const ambiguousHand = createBaseHandLandmarks();
+      // Curl index halfway, leave others extended or irregular
+      ambiguousHand[8] = { x: 0.48, y: 0.60, z: 0.05 };
+      ambiguousHand[12] = { x: 0.50, y: 0.62, z: 0.05 };
+      ambiguousHand[16] = { x: 0.54, y: 0.55, z: 0 };
+      ambiguousHand[20] = { x: 0.58, y: 0.68, z: 0.02 };
+
+      const res = classifier.classify(ambiguousHand, 'Right', 1000);
+      expect(res.gesture).toBeNull();
+      expect(res.label).toBe('UNKNOWN GESTURE');
+      expect(res.confidence).toBe(0);
+      expect(res.rejectionReason).toBe('AMBIGUOUS_GESTURE');
+    });
+
+    it('never triggers a swipe gesture on a stationary hand or hand entrance', () => {
+      const hand = createBaseHandLandmarks();
+      hand[0] = { x: 0.40, y: 0.60, z: 0 };
+
+      // Frame 1: Entry into frame
+      const r1 = classifier.classify(hand, 'Right', 1000);
+      expect(r1.gesture).not.toBe('SWIPE_LEFT');
+      expect(r1.gesture).not.toBe('SWIPE_RIGHT');
+
+      // Subsequent frames: Static hold
+      const r2 = classifier.classify(hand, 'Right', 1050);
+      expect(r2.gesture).not.toBe('SWIPE_LEFT');
+      expect(r2.gesture).not.toBe('SWIPE_RIGHT');
+
+      const r3 = classifier.classify(hand, 'Right', 1100);
+      expect(r3.gesture).not.toBe('SWIPE_LEFT');
+      expect(r3.gesture).not.toBe('SWIPE_RIGHT');
+    });
+
+    it('tracks dual-hand velocities independently without cross-hand contamination', () => {
+      // Left hand stays static at x = 0.25
+      const leftHand = createBaseHandLandmarks();
+      leftHand[0] = { x: 0.25, y: 0.60, z: 0 };
+
+      // Right hand moves rapidly from x = 0.40 to x = 0.75
+      const right1 = createBaseHandLandmarks();
+      right1[0] = { x: 0.40, y: 0.60, z: 0 };
+
+      const right2 = createBaseHandLandmarks();
+      right2[0] = { x: 0.55, y: 0.60, z: 0 };
+
+      const right3 = createBaseHandLandmarks();
+      right3[0] = { x: 0.75, y: 0.60, z: 0 };
+
+      // Process alternating hands
+      classifier.classify(leftHand, 'Left', 1000);
+      classifier.classify(right1, 'Right', 1000);
+
+      classifier.classify(leftHand, 'Left', 1050);
+      classifier.classify(right2, 'Right', 1050);
+
+      const leftRes = classifier.classify(leftHand, 'Left', 1100);
+      const rightRes = classifier.classify(right3, 'Right', 1100);
+
+      // Left hand must NOT be classified as swipe (it remained stationary)
+      expect(leftRes.gesture).not.toBe('SWIPE_RIGHT');
+      expect(leftRes.gesture).not.toBe('SWIPE_LEFT');
+
+      // Right hand detected swipe
+      expect(rightRes.gesture).toBe('SWIPE_RIGHT');
+    });
+
+    it('enforces minHoldMs and single-trigger guarantee in GoofyHandStateMachine', () => {
+      const sm = new GoofyHandStateMachine({ minHoldMs: 200, cooldownMs: 600 });
+      const thumbsUp = {
+        gesture: 'THUMBS_UP' as GoofyHandGestureType,
+        handedness: 'Right' as const,
+        confidence: 0.95,
+        label: 'THUMBS UP',
+        comicCaption: 'CHAD ENERGY',
+      };
+
+      // Frame 1: Candidate begins (hold: 0ms)
+      const r1 = sm.process(thumbsUp, 1000);
+      expect(r1.triggered).toBe(false);
+      expect(r1.state).toBe('CANDIDATE');
+
+      // Frame 2: Hold insufficient (100ms < 200ms)
+      const r2 = sm.process(thumbsUp, 1100);
+      expect(r2.triggered).toBe(false);
+      expect(r2.state).toBe('CANDIDATE');
+      expect(r2.holdDurationMs).toBe(100);
+
+      // Frame 3: Hold satisfied (220ms >= 200ms) -> Triggers!
+      const r3 = sm.process(thumbsUp, 1220);
+      expect(r3.triggered).toBe(true);
+      expect(r3.state).toBe('CONFIRMED');
+      expect(r3.gesture).toBe('THUMBS_UP');
+
+      // Frame 4: Held continuously without release -> Must NOT repeat trigger
+      const r4 = sm.process(thumbsUp, 1300);
+      expect(r4.triggered).toBe(false);
+      expect(r4.state).toBe('TRIGGERED');
+      expect(r4.rejectionReason).toBe('WAITING_FOR_RELEASE');
+
+      const r5 = sm.process(thumbsUp, 1600);
+      expect(r5.triggered).toBe(false);
+      expect(r5.state).toBe('TRIGGERED');
+    });
+
+    it('requires clean release (>= 140ms) before allowing re-trigger of the same gesture', () => {
+      const sm = new GoofyHandStateMachine({ minHoldMs: 150, cooldownMs: 300, releaseThresholdMs: 140 });
+      const fist = {
+        gesture: 'CLOSED_FIST' as GoofyHandGestureType,
+        handedness: 'Right' as const,
+        confidence: 0.95,
+        label: 'CLOSED FIST',
+        comicCaption: 'BOSS ENERGY',
+      };
+      const nullHand = {
+        gesture: null,
+        handedness: 'Right' as const,
+        confidence: 0,
+        label: 'NO HAND',
+        comicCaption: '',
+      };
+
+      // 1. Initial trigger
+      sm.process(fist, 1000);
+      const r1 = sm.process(fist, 1180);
+      expect(r1.triggered).toBe(true);
+
+      // 2. Hand released for only 50ms (< 140ms threshold)
+      sm.process(nullHand, 1200);
+      sm.process(nullHand, 1250);
+
+      // 3. User immediately shows fist again without completing clean release
+      sm.process(fist, 1280);
+      const r2 = sm.process(fist, 1450);
+      // Still locked awaiting clean release
+      expect(r2.triggered).toBe(false);
+
+      // 4. User releases cleanly for 160ms (>= 140ms threshold)
+      sm.process(nullHand, 1500);
+      sm.process(nullHand, 1660);
+
+      // 5. Now fist can trigger again
+      sm.process(fist, 1700);
+      sm.process(fist, 1750);
+      const r3 = sm.process(fist, 1900);
+      expect(r3.triggered).toBe(true);
+      expect(r3.gesture).toBe('CLOSED_FIST');
+    });
+
+    it('SemanticMemeMatcher strictly selects memes eligible for the specific recognised gesture', () => {
+      const matcher = new SemanticMemeMatcher();
+      const config = { ...DEFAULT_GOOFY_CONFIG, smartMatchingEnabled: true };
+
+      // THUMBS_UP test
+      const thumbsUpResult = matcher.match(
+        { actionId: 'THUMBS_UP', source: 'HAND', confidence: 0.95 },
+        DEFAULT_MEME_LIBRARY,
+        config
+      );
+      expect(thumbsUpResult).not.toBeNull();
+      expect(matcher.isMemeEligibleForAction(thumbsUpResult!.meme, 'THUMBS_UP', config)).toBe(true);
+
+      // THUMBS_DOWN test
+      const thumbsDownResult = matcher.match(
+        { actionId: 'THUMBS_DOWN', source: 'HAND', confidence: 0.95 },
+        DEFAULT_MEME_LIBRARY,
+        config
+      );
+      expect(thumbsDownResult).not.toBeNull();
+      expect(matcher.isMemeEligibleForAction(thumbsDownResult!.meme, 'THUMBS_DOWN', config)).toBe(true);
+
+      // Never selects a thumbs down meme for thumbs up
+      expect(matcher.isMemeEligibleForAction(thumbsDownResult!.meme, 'THUMBS_UP', config)).toBe(false);
+    });
+
+    it('returns null and displays no popup when no eligible meme exists for an action', () => {
+      const matcher = new SemanticMemeMatcher();
+      const config = { ...DEFAULT_GOOFY_CONFIG, smartMatchingEnabled: true };
+
+      // Action with no eligible memes in pool
+      const result = matcher.match(
+        { actionId: 'NON_EXISTENT_UNKNOWN_ACTION', source: 'HAND', confidence: 0.95 },
+        DEFAULT_MEME_LIBRARY,
+        config
+      );
+      expect(result).toBeNull();
+    });
+
+    it('GoofyEventEngine creates no active popup when meme matching returns null', () => {
+      const audio = new GoofyAudioEngine();
+      const vfx = new GoofyVisualFXEngine();
+      const config = { ...DEFAULT_GOOFY_CONFIG, smartMatchingEnabled: true };
+      const engine = new GoofyEventEngine(config, audio, vfx);
+
+      // Dispatch an action that has no eligible meme
+      const evt = engine.dispatchActionTrigger('UNKNOWN_UNASSIGNED_ACTION', 'HAND', 'Right');
+
+      // History logs the recognition event
+      expect(evt).not.toBeNull();
+      expect(evt!.memeId).toBe('NONE');
+      expect(evt!.memeTitle).toBe('No Matching Meme');
+
+      // But NO active popup is added to activePopups
+      expect(engine.getActivePopups().length).toBe(0);
     });
   });
 });
