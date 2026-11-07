@@ -111,10 +111,14 @@ export interface PoseClassificationResult {
 export type HandRecognitionState =
   | 'NO_HANDS'
   | 'SEARCHING'
+  | 'HAND_DETECTED'
+  | 'LANDMARKS_UNSTABLE'
+  | 'UNKNOWN_GESTURE'
   | 'CANDIDATE'
   | 'CONFIRMED'
   | 'TRIGGERED'
-  | 'COOLDOWN';
+  | 'COOLDOWN'
+  | 'TRACKING_LOST';
 
 export interface HandClassificationResult {
   gesture: GoofyHandGestureType | null;

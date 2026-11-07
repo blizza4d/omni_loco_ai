@@ -44,6 +44,24 @@ export class GoofyHandClassifier {
   }
 
   /**
+   * Angle in degrees between vector b->a and vector b->c
+   */
+  private angleBetween3D(a: Landmark3D, b: Landmark3D, c: Landmark3D): number {
+    const v1x = a.x - b.x;
+    const v1y = a.y - b.y;
+    const v1z = (a.z || 0) - (b.z || 0);
+    const v2x = c.x - b.x;
+    const v2y = c.y - b.y;
+    const v2z = (c.z || 0) - (b.z || 0);
+    const d1 = Math.sqrt(v1x * v1x + v1y * v1y + v1z * v1z);
+    const d2 = Math.sqrt(v2x * v2x + v2y * v2y + v2z * v2z);
+    if (d1 < 1e-4 || d2 < 1e-4) return 0;
+    const dot = v1x * v2x + v1y * v2y + v1z * v2z;
+    const cosVal = Math.max(-1, Math.min(1, dot / (d1 * d2)));
+    return Math.acos(cosVal) * (180 / Math.PI);
+  }
+
+  /**
    * Exponential moving average jitter-smoothing filter per hand
    */
   private applySmoothing(raw: Landmark3D[], handedness: 'Left' | 'Right'): Landmark3D[] {
@@ -110,9 +128,9 @@ export class GoofyHandClassifier {
 
     // Full straight extension
     const isExtended =
-      extensionRatio > 1.62 &&
-      wristToTip > wristToPip * 1.04 &&
-      dot > 0.40;
+      extensionRatio > 1.65 &&
+      wristToTip > wristToPip * 1.06 &&
+      dot > 0.55;
 
     // Curled tightly into palm
     const isCurled =
@@ -129,12 +147,15 @@ export class GoofyHandClassifier {
   /**
    * Classify 21 3D hand landmarks into one of the supported Goofy hand gestures.
    * If hand posture is ambiguous or unrecognised, returns gesture: null (UNKNOWN).
+   * Supports optional worldLandmarks (metric meters) and neural modelGestureHint.
    */
   classify(
     rawLandmarks: Landmark3D[],
     handedness: 'Left' | 'Right' = 'Right',
     timestamp = performance.now(),
-    isMirrored = false
+    isMirrored = false,
+    worldLandmarks?: Landmark3D[],
+    modelGestureHint?: { category: string; score: number }
   ): HandClassificationResult {
     if (!rawLandmarks || rawLandmarks.length < 21) {
       this.smoothedLandmarks.delete(handedness);
@@ -191,23 +212,31 @@ export class GoofyHandClassifier {
     // Thumb State Evaluation
     const thumbProxLen = Math.max(0.001, this.dist3D(thumbMCP, thumbIP));
     const thumbMcpToTip = this.dist3D(thumbMCP, thumbTip);
+    const thumbWristToTip = this.dist3D(wrist, thumbTip);
     const thumbToPinky = this.dist3D(thumbTip, pinkyMCP) / palmScale;
     const thumbToIndex = this.dist3D(thumbTip, indexMCP) / palmScale;
 
     const thumbExtended =
-      thumbMcpToTip > thumbProxLen * 1.30 &&
-      (thumbToPinky > 0.70 || thumbToIndex > 0.45);
+      (thumbMcpToTip > thumbProxLen * 1.15 || thumbWristToTip > palmScale * 0.70) &&
+      (thumbToPinky > 0.65 || thumbToIndex > 0.40);
 
     const thumbTucked =
       thumbToPinky < 0.65 ||
-      (thumbToIndex < 0.35 && thumbMcpToTip < thumbProxLen * 1.30);
+      (thumbToIndex < 0.42 && thumbMcpToTip < thumbProxLen * 1.30);
 
     // Thumb Vertical Direction in screen space (y is inverted: smaller y is UP)
+    // Enforce vertical dominance: vertical displacement must dominate horizontal (|dy| > 1.25 * |dx|)
+    const thumbDx = Math.abs(thumbTip.x - thumbMCP.x);
+    const thumbDy = thumbTip.y - thumbMCP.y; // negative is UP, positive is DOWN
+    const isVerticalDominant = Math.abs(thumbDy) > 1.25 * thumbDx;
+
     const thumbPointingUp =
+      isVerticalDominant &&
       thumbTip.y < thumbIP.y - 0.035 &&
       thumbTip.y < thumbMCP.y - 0.035;
 
     const thumbPointingDown =
+      isVerticalDominant &&
       thumbTip.y > thumbIP.y + 0.035 &&
       thumbTip.y > thumbMCP.y + 0.035;
 
@@ -247,6 +276,9 @@ export class GoofyHandClassifier {
     this.lastPinchStates.set(handedness, isPinching);
 
     const candidates: { gesture: GoofyHandGestureType; score: number; isDynamic?: boolean }[] = [];
+
+    // Neural Gesture Recognizer Prior integration (Google MediaPipe GestureRecognizer hint)
+    const neuralHint = modelGestureHint && modelGestureHint.score >= 0.50 ? modelGestureHint : null;
 
     // ─────────────────────────────────────────────────────────────
     // DYNAMIC GESTURES: SWIPE LEFT & SWIPE RIGHT (Strict Per-Hand History)
@@ -297,29 +329,38 @@ export class GoofyHandClassifier {
     }
 
     // 2. THUMBS UP
-    // All 4 non-thumb fingers are curled, thumb extended vertically upward
+    // All 4 non-thumb fingers are curled, thumb extended vertically upward (vertical dominant)
     else if (curledFourCount === 4 && thumbPointingUp && !thumbPointingDown) {
+      const neuralBonus = neuralHint?.category === 'Thumb_Up' ? 0.03 : 0;
       candidates.push({
         gesture: 'THUMBS_UP',
-        score: 0.96,
+        score: Math.min(0.99, 0.95 + neuralBonus),
       });
     }
 
     // 3. THUMBS DOWN
-    // All 4 non-thumb fingers are curled, thumb extended vertically downward
+    // All 4 non-thumb fingers are curled, thumb extended vertically downward (vertical dominant)
     else if (curledFourCount === 4 && thumbPointingDown && !thumbPointingUp) {
+      const neuralBonus = neuralHint?.category === 'Thumb_Down' ? 0.03 : 0;
       candidates.push({
         gesture: 'THUMBS_DOWN',
-        score: 0.96,
+        score: Math.min(0.99, 0.95 + neuralBonus),
       });
     }
 
     // 4. CLOSED FIST
-    // All 4 non-thumb fingers are curled tightly into palm, thumb not pointing up or down
-    else if (curledFourCount === 4 && !thumbPointingUp && !thumbPointingDown && !isPinching) {
+    // All 4 non-thumb fingers are curled tightly into palm, thumb is wrapped across curled fingers, not pointing up or down, not pinching
+    else if (
+      curledFourCount === 4 &&
+      !thumbPointingUp &&
+      !thumbPointingDown &&
+      !isPinching &&
+      (thumbToIndex < 0.50 || thumbTucked || !thumbExtended)
+    ) {
+      const neuralBonus = neuralHint?.category === 'Closed_Fist' ? 0.03 : 0;
       candidates.push({
         gesture: 'CLOSED_FIST',
-        score: 0.95,
+        score: Math.min(0.99, 0.95 + neuralBonus),
       });
     }
 
@@ -332,10 +373,14 @@ export class GoofyHandClassifier {
       pinkyState.isCurled &&
       !isPinching
     ) {
-      candidates.push({
-        gesture: 'POINTING',
-        score: 0.94,
-      });
+      const pinchDist = this.dist3D(thumbTip, indexTip) / palmScale;
+      if (pinchDist > 0.28) {
+        const neuralBonus = neuralHint?.category === 'Pointing_Up' ? 0.03 : 0;
+        candidates.push({
+          gesture: 'POINTING',
+          score: Math.min(0.99, 0.94 + neuralBonus),
+        });
+      }
     }
 
     // 6. PEACE SIGN
@@ -348,10 +393,12 @@ export class GoofyHandClassifier {
       !isPinching
     ) {
       const tipsDist = this.dist2D(indexTip, middleTip) / palmScale;
-      if (tipsDist > 0.18) {
+      const vAngle = this.angleBetween3D(indexTip, wrist, middleTip);
+      if (tipsDist > 0.16 && (vAngle >= 10 || tipsDist > 0.20)) {
+        const neuralBonus = neuralHint?.category === 'Victory' ? 0.03 : 0;
         candidates.push({
           gesture: 'PEACE_SIGN',
-          score: 0.94,
+          score: Math.min(0.99, 0.94 + neuralBonus),
         });
       }
     }
@@ -383,17 +430,20 @@ export class GoofyHandClassifier {
     // 9 & 10. FIVE FINGERS vs OPEN PALM
     else if (extendedFourCount === 4) {
       const spread = this.dist3D(thumbTip, pinkyTip) / palmScale;
-      if (thumbExtended && spread > 2.15) {
-        // Radially spread wide in counting fan
+      const fanAngle = this.angleBetween3D(indexTip, wrist, pinkyTip);
+
+      // Radially spread wide in counting fan: large fan angle AND abducted thumb
+      if (thumbExtended && (spread > 2.10 || fanAngle > 50)) {
         candidates.push({
           gesture: 'FIVE_FINGERS',
           score: 0.96,
         });
       } else {
         // Flat stop palm facing camera
+        const neuralBonus = neuralHint?.category === 'Open_Palm' ? 0.03 : 0;
         candidates.push({
           gesture: 'OPEN_PALM',
-          score: 0.94,
+          score: Math.min(0.99, 0.94 + neuralBonus),
         });
       }
     }
@@ -426,6 +476,16 @@ export class GoofyHandClassifier {
       };
     }
 
+    // Determine specific rejection reason for debugging
+    let rejectionReason = 'AMBIGUOUS_GESTURE';
+    if (curledFourCount === 4 && !thumbPointingUp && !thumbPointingDown && (thumbDx > 0.05 || !isVerticalDominant)) {
+      rejectionReason = 'THUMB_HORIZONTAL_NOT_UP_OR_DOWN';
+    } else if (indexState.isExtended && middleState.isExtended && ringState.isCurled && pinkyState.isCurled) {
+      rejectionReason = 'PEACE_TIPS_NOT_SPREAD_INTO_V';
+    } else if (extendedFourCount === 1 && !indexState.isExtended) {
+      rejectionReason = 'NON_INDEX_SINGLE_FINGER_EXTENDED';
+    }
+
     // STRICT UNKNOWN STATE: Ambiguous or unclassified hand posture
     return {
       gesture: null,
@@ -434,7 +494,7 @@ export class GoofyHandClassifier {
       label: 'UNKNOWN GESTURE',
       comicCaption: 'HOLD A RECOGNISABLE GESTURE TO TRIGGER MEMES',
       fingerCount,
-      rejectionReason: 'AMBIGUOUS_GESTURE',
+      rejectionReason,
       fingerStates: {
         thumb: thumbExtended,
         index: indexState.isExtended,
@@ -577,16 +637,35 @@ export class GoofyHandStateMachine {
         this.activeGesture = null;
       }
 
+      let state: HandRecognitionState = 'SEARCHING';
+      if (rawGesture === null) {
+        const reason = classification.rejectionReason || '';
+        if (
+          reason === 'NO_LANDMARKS' ||
+          reason === 'NO_HANDS_DETECTED' ||
+          reason.includes('No left hand detected') ||
+          reason.includes('No right hand detected')
+        ) {
+          state = 'NO_HANDS';
+        } else if (reason === 'TRACKING_LOST') {
+          state = 'TRACKING_LOST';
+        } else if (reason === 'LANDMARKS_UNSTABLE') {
+          state = 'LANDMARKS_UNSTABLE';
+        } else {
+          state = 'UNKNOWN_GESTURE';
+        }
+      }
+
       return {
         triggered: false,
         gesture: null,
         rawGesture,
         stabilizedGesture: null,
         handedness,
-        state: rawGesture === null ? 'NO_HANDS' : 'SEARCHING',
+        state,
         holdDurationMs: 0,
         confidence: 0,
-        rejectionReason: rawGesture === null ? 'NO_HANDS_DETECTED' : 'AMBIGUOUS_GESTURE',
+        rejectionReason: classification.rejectionReason || (rawGesture === null ? 'NO_HANDS_DETECTED' : 'AMBIGUOUS_GESTURE'),
       };
     }
 

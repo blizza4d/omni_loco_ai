@@ -25,7 +25,11 @@ import {
 import { SemanticMemeMatcher, GESTURE_ELIGIBLE_MEMES } from '../modules/pose/goofy-semantic-matcher';
 import {
   generateGestureFixture,
+  generateAmbiguousFixture,
+  rotateLandmarks,
+  scaleLandmarks,
   runComprehensiveGestureBenchmark,
+  runFullDatasetEvaluation,
 } from '../modules/pose/goofy-test-fixtures';
 import { Landmark3D } from '../modules/hand/types';
 import { PoseLandmark } from '../modules/pose/types';
@@ -33,6 +37,7 @@ import {
   GoofyPoseType,
   GoofyHandGestureType,
   GoofyDualHandComboId,
+  HandClassificationResult,
   GOOFY_DUAL_COMBO_DEFINITIONS,
   DEFAULT_GOOFY_CONFIG,
   DEFAULT_SOUND_LIBRARY,
@@ -1864,6 +1869,313 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
 
       // But NO active popup is added to activePopups
       expect(engine.getActivePopups().length).toBe(0);
+    });
+  });
+
+  describe('Goofy Model V5 — Acceptance Criteria Verification Suite (Phase 9)', () => {
+    let classifier: GoofyHandClassifier;
+    let sm: GoofyHandStateMachine;
+
+    beforeEach(() => {
+      classifier = new GoofyHandClassifier();
+      sm = new GoofyHandStateMachine({ minHoldMs: 200, cooldownMs: 750, releaseThresholdMs: 140 });
+    });
+
+    // 1. An empty frame produces NO HAND DETECTED
+    it('1. Empty frame produces NO HAND DETECTED with null gesture and NO_HANDS state', () => {
+      const res = classifier.classify([], 'Right', 1000);
+      expect(res.gesture).toBeNull();
+      expect(res.label).toBe('NO HAND DETECTED');
+      expect(res.rejectionReason).toBe('NO_LANDMARKS');
+
+      const smRes = sm.process(res, 1000);
+      expect(smRes.triggered).toBe(false);
+      expect(smRes.state).toBe('NO_HANDS');
+      expect(smRes.gesture).toBeNull();
+    });
+
+    // 2. A real visible hand produces a valid hand detection and landmarks
+    it('2. A real visible hand produces valid hand classification and landmarks', () => {
+      const palm = generateGestureFixture('OPEN_PALM', 'Right');
+      const res = classifier.classify(palm, 'Right', 1000);
+      expect(res.gesture).toBe('OPEN_PALM');
+      expect(res.confidence).toBeGreaterThanOrEqual(0.90);
+      expect(res.fingerStates?.thumb).toBe(true);
+      expect(res.fingerStates?.index).toBe(true);
+    });
+
+    // 3. Two visible hands are identified separately where supported
+    it('3. Two visible hands maintain independent tracking and velocity history without crosstalk', () => {
+      const leftClassifier = new GoofyHandClassifier();
+      const leftSM = new GoofyHandStateMachine();
+      const rightSM = new GoofyHandStateMachine();
+
+      const leftFixture = generateGestureFixture('PEACE_SIGN', 'Left');
+      const rightFixture = generateGestureFixture('THUMBS_UP', 'Right');
+
+      const resL = leftClassifier.classify(leftFixture, 'Left', 1000);
+      const resR = classifier.classify(rightFixture, 'Right', 1000);
+
+      expect(resL.gesture).toBe('PEACE_SIGN');
+      expect(resL.handedness).toBe('Left');
+
+      expect(resR.gesture).toBe('THUMBS_UP');
+      expect(resR.handedness).toBe('Right');
+
+      // Hold both for 200ms
+      leftSM.process(resL, 1000);
+      rightSM.process(resR, 1000);
+      const leftFinal = leftSM.process(resL, 1205);
+      const rightFinal = rightSM.process(resR, 1205);
+
+      expect(leftFinal.triggered).toBe(true);
+      expect(leftFinal.gesture).toBe('PEACE_SIGN');
+      expect(rightFinal.triggered).toBe(true);
+      expect(rightFinal.gesture).toBe('THUMBS_UP');
+    });
+
+    // 4. A thumbs-up is classified as THUMBS_UP
+    it('4. Thumbs-up is classified as THUMBS_UP', () => {
+      const fixture = generateGestureFixture('THUMBS_UP', 'Right');
+      const res = classifier.classify(fixture, 'Right', 1000);
+      expect(res.gesture).toBe('THUMBS_UP');
+      expect(res.confidence).toBeGreaterThanOrEqual(0.94);
+    });
+
+    // 5. A thumbs-down is classified as THUMBS_DOWN
+    it('5. Thumbs-down is classified as THUMBS_DOWN', () => {
+      const fixture = generateGestureFixture('THUMBS_DOWN', 'Right');
+      const res = classifier.classify(fixture, 'Right', 1000);
+      expect(res.gesture).toBe('THUMBS_DOWN');
+      expect(res.confidence).toBeGreaterThanOrEqual(0.94);
+    });
+
+    // 6. An open palm is classified consistently
+    it('6. Open palm is classified consistently as OPEN_PALM', () => {
+      const fixture = generateGestureFixture('OPEN_PALM', 'Right');
+      const res = classifier.classify(fixture, 'Right', 1000);
+      expect(res.gesture).toBe('OPEN_PALM');
+      expect(res.confidence).toBeGreaterThanOrEqual(0.93);
+    });
+
+    // 7. A closed fist is classified consistently
+    it('7. Closed fist is classified consistently as CLOSED_FIST', () => {
+      const fixture = generateGestureFixture('CLOSED_FIST', 'Right');
+      const res = classifier.classify(fixture, 'Right', 1000);
+      expect(res.gesture).toBe('CLOSED_FIST');
+      expect(res.confidence).toBeGreaterThanOrEqual(0.94);
+    });
+
+    // 8. A peace sign is distinguished from a generic two-finger configuration
+    it('8. Peace sign is distinguished from generic closed two-finger configuration', () => {
+      // Distinct V-shape
+      const peaceFixture = generateGestureFixture('PEACE_SIGN', 'Right');
+      const peaceRes = classifier.classify(peaceFixture, 'Right', 1000);
+      expect(peaceRes.gesture).toBe('PEACE_SIGN');
+
+      // Tightly closed two fingers (tips touching without V spread)
+      classifier.reset();
+      const closedTwo = generateAmbiguousFixture('CLOSED_TWO_FINGERS');
+      const closedRes = classifier.classify(closedTwo, 'Right', 1000);
+      expect(closedRes.gesture).toBeNull();
+      expect(closedRes.label).toBe('UNKNOWN GESTURE');
+    });
+
+    // 9. Pointing is distinguished from other finger combinations
+    it('9. Pointing is distinguished from other finger combinations', () => {
+      const pointingFixture = generateGestureFixture('POINTING', 'Right');
+      const res = classifier.classify(pointingFixture, 'Right', 1000);
+      expect(res.gesture).toBe('POINTING');
+      expect(res.confidence).toBeGreaterThanOrEqual(0.93);
+    });
+
+    // 10. Pinch is detected reliably and not confused with fist
+    it('10. Pinch is detected reliably and distinguished from closed fist', () => {
+      const pinchFixture = generateGestureFixture('PINCH', 'Right');
+      const res = classifier.classify(pinchFixture, 'Right', 1000);
+      expect(res.gesture).toBe('PINCH');
+      expect(res.confidence).toBeGreaterThanOrEqual(0.80);
+
+      const fistFixture = generateGestureFixture('CLOSED_FIST', 'Right');
+      const fistRes = classifier.classify(fistFixture, 'Right', 1000);
+      expect(fistRes.gesture).toBe('CLOSED_FIST');
+    });
+
+    // 11. Dynamic swipes require actual temporal movement; still frame is never a swipe
+    it('11. Dynamic swipes require temporal displacement; still frame is never a swipe', () => {
+      // Still frame evaluation
+      const stillHand = generateGestureFixture('OPEN_PALM', 'Right');
+      const stillRes = classifier.classify(stillHand, 'Right', 1000);
+      expect(stillRes.gesture).not.toBe('SWIPE_RIGHT');
+      expect(stillRes.gesture).not.toBe('SWIPE_LEFT');
+
+      // Dynamic sequence with lateral speed
+      classifier.reset();
+      const t0 = 1000;
+      const f1 = generateGestureFixture('OPEN_PALM', 'Right');
+      f1[0] = { x: 0.30, y: 0.50, z: 0 };
+      classifier.classify(f1, 'Right', t0);
+
+      const f2 = generateGestureFixture('OPEN_PALM', 'Right');
+      f2[0] = { x: 0.45, y: 0.50, z: 0 };
+      classifier.classify(f2, 'Right', t0 + 50);
+
+      const f3 = generateGestureFixture('OPEN_PALM', 'Right');
+      f3[0] = { x: 0.65, y: 0.50, z: 0 };
+      const swipeRes = classifier.classify(f3, 'Right', t0 + 100);
+      expect(swipeRes.gesture).toBe('SWIPE_RIGHT');
+      expect(swipeRes.isDynamic).toBe(true);
+    });
+
+    // 12. Unknown gestures do not trigger fabricated labels
+    it('12. Unknown ambiguous gestures return null and UNKNOWN GESTURE label', () => {
+      // Horizontal thumb (fist with thumb pointing sideways, not up or down)
+      const horizontalThumb = generateAmbiguousFixture('HORIZONTAL_THUMB');
+      const res = classifier.classify(horizontalThumb, 'Right', 1000);
+      expect(res.gesture).toBeNull();
+      expect(res.label).toBe('UNKNOWN GESTURE');
+
+      // Loose half-bent hand
+      classifier.reset();
+      const looseHand = generateAmbiguousFixture('LOOSE_HAND');
+      const looseRes = classifier.classify(looseHand, 'Right', 1000);
+      expect(looseRes.gesture).toBeNull();
+      expect(looseRes.label).toBe('UNKNOWN GESTURE');
+    });
+
+    // 13. Tracking loss clears stale results immediately and begins clean release countdown
+    it('13. Tracking loss clears stale results immediately and reports TRACKING_LOST state', () => {
+      const fist = classifier.classify(generateGestureFixture('CLOSED_FIST', 'Right'), 'Right', 1000);
+      sm.process(fist, 1000);
+      sm.process(fist, 1205); // triggered
+
+      // Sudden tracking loss
+      const trackingLostHand: HandClassificationResult = {
+        gesture: null,
+        handedness: 'Right',
+        confidence: 0,
+        label: 'TRACKING LOST',
+        comicCaption: '',
+        rejectionReason: 'TRACKING_LOST',
+      };
+      const lostRes = sm.process(trackingLostHand, 1220);
+      expect(lostRes.state).toBe('TRACKING_LOST');
+      expect(lostRes.triggered).toBe(false);
+      expect(lostRes.gesture).toBeNull();
+    });
+
+    // 14. Reappearing hands recover correctly without instant frame-1 false trigger
+    it('14. Reappearing hands require full hold duration before triggering again', () => {
+      const fist = classifier.classify(generateGestureFixture('CLOSED_FIST', 'Right'), 'Right', 1000);
+      sm.process(fist, 1000);
+      const r1 = sm.process(fist, 1205);
+      expect(r1.triggered).toBe(true);
+
+      // Hand leaves frame for 200ms
+      const nullHand: HandClassificationResult = {
+        gesture: null,
+        handedness: 'Right',
+        confidence: 0,
+        label: 'NO HAND DETECTED',
+        comicCaption: '',
+        rejectionReason: 'NO_LANDMARKS',
+      };
+      sm.process(nullHand, 1300);
+      sm.process(nullHand, 1500);
+
+      // Hand re-enters: Frame 1 must NOT trigger immediately!
+      const reEntryFrame1 = sm.process(fist, 1510);
+      expect(reEntryFrame1.triggered).toBe(false);
+      expect(['SEARCHING', 'CANDIDATE']).toContain(reEntryFrame1.state);
+
+      // Clean release was completed by 1500 (since 1300 to 1500 is 200ms >= 140ms)
+      // Accumulate consensus and hold duration past cooldown (1205 + 750 = 1955ms)
+      sm.process(fist, 1750);
+      sm.process(fist, 1850);
+
+      // Only triggers after completing full hold time past cooldown
+      const reEntryFrameFinal = sm.process(fist, 2050);
+      expect(reEntryFrameFinal.triggered).toBe(true);
+      expect(reEntryFrameFinal.gesture).toBe('CLOSED_FIST');
+    });
+
+    // 15. Stable gestures trigger exactly one event during continuous hold
+    it('15. Stable gestures trigger exactly one event and stay in TRIGGERED state on continuous hold', () => {
+      const palm = classifier.classify(generateGestureFixture('OPEN_PALM', 'Right'), 'Right', 1000);
+      sm.process(palm, 1000);
+      sm.process(palm, 1100);
+      const trig = sm.process(palm, 1210);
+      expect(trig.triggered).toBe(true);
+
+      // Continues holding for 1000ms: must never fire duplicate triggers
+      for (let t = 1250; t <= 2200; t += 50) {
+        const holdRes = sm.process(palm, t);
+        expect(holdRes.triggered).toBe(false);
+        expect(holdRes.state).toBe('TRIGGERED');
+      }
+    });
+
+    // 16. Relevant memes appear only after confirmed events
+    it('16. Confirmed gestures map strictly to semantically relevant memes', () => {
+      const matcher = new SemanticMemeMatcher();
+      const config = { ...DEFAULT_GOOFY_CONFIG, smartMatchingEnabled: true };
+
+      const gestures: GoofyHandGestureType[] = [
+        'THUMBS_UP',
+        'THUMBS_DOWN',
+        'CLOSED_FIST',
+        'OPEN_PALM',
+        'PEACE_SIGN',
+        'POINTING',
+        'PINCH',
+      ];
+
+      for (const g of gestures) {
+        const match = matcher.match({ actionId: g, source: 'HAND', confidence: 0.95 }, DEFAULT_MEME_LIBRARY, config);
+        expect(match).not.toBeNull();
+        expect(matcher.isMemeEligibleForAction(match!.meme, g, config)).toBe(true);
+      }
+    });
+
+    // 17. The system does not randomly display memes when no gesture has been recognized
+    it('17. System displays no meme and creates no popup when gesture is null/unknown', () => {
+      const audio = new GoofyAudioEngine();
+      const vfx = new GoofyVisualFXEngine();
+      const config = { ...DEFAULT_GOOFY_CONFIG, smartMatchingEnabled: true };
+      const engine = new GoofyEventEngine(config, audio, vfx);
+
+      // State machine with null gesture
+      const nullHand: HandClassificationResult = {
+        gesture: null,
+        handedness: 'Right',
+        confidence: 0,
+        label: 'UNKNOWN GESTURE',
+        comicCaption: '',
+        rejectionReason: 'AMBIGUOUS_GESTURE',
+      };
+      const smRes = sm.process(nullHand, 1000);
+      expect(smRes.triggered).toBe(false);
+
+      // Event engine receives null or unassigned action
+      const evt = engine.dispatchActionTrigger('UNKNOWN_UNASSIGNED_ACTION', 'HAND', 'Right');
+      expect(engine.getActivePopups().length).toBe(0);
+    });
+
+    // 18. Comprehensive Multi-variation Labelled Dataset Evaluation
+    it('18. Multi-variation Dataset Evaluation achieves >= 95% accuracy with 100% unknown rejection', () => {
+      const report = runFullDatasetEvaluation(classifier);
+
+      expect(report.totalSamples).toBeGreaterThanOrEqual(60);
+      expect(report.overallAccuracy).toBeGreaterThanOrEqual(95.0);
+      expect(report.unknownRejectionRate).toBe(100);
+
+      // Check per-class precision and recall
+      for (const [cls, metric] of Object.entries(report.perClassMetrics)) {
+        if (cls !== 'UNKNOWN') {
+          expect(metric.precision).toBeGreaterThanOrEqual(0.85);
+          expect(metric.recall).toBeGreaterThanOrEqual(0.85);
+        }
+      }
     });
   });
 });

@@ -6,19 +6,40 @@
 
 import type {
   HandLandmarker,
+  GestureRecognizer,
   FaceLandmarker,
   PoseLandmarker,
   ImageClassifier,
   HandLandmarkerResult,
+  GestureRecognizerResult,
   FaceLandmarkerResult,
   PoseLandmarkerResult,
   ImageClassifierResult,
 } from '@mediapipe/tasks-vision';
 
+export interface HandPipelineConfig {
+  numHands?: number;
+  minHandDetectionConfidence?: number;
+  minHandPresenceConfidence?: number;
+  minTrackingConfidence?: number;
+}
+
+export type HandModelType = 'GESTURE_RECOGNIZER' | 'HAND_LANDMARKER' | 'SYNTHETIC' | 'NONE';
+
+export interface UnifiedHandResult {
+  landmarks: { x: number; y: number; z: number }[][];
+  worldLandmarks: { x: number; y: number; z: number }[][];
+  handedness: { index: number; score: number; categoryName: string; displayName: string }[][];
+  handednesses: { index: number; score: number; categoryName: string; displayName: string }[][];
+  gestures?: { index: number; score: number; categoryName: string; displayName: string }[][];
+  modelType: HandModelType;
+}
+
 export class MediaPipeTaskRunner {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private static visionWasmLoaded: any = null;
   private handLandmarker: HandLandmarker | null = null;
+  private gestureRecognizer: GestureRecognizer | null = null;
   private faceLandmarker: FaceLandmarker | null = null;
   private poseLandmarker: PoseLandmarker | null = null;
   private imageClassifier: ImageClassifier | null = null;
@@ -28,6 +49,7 @@ export class MediaPipeTaskRunner {
   private isDisposed = false;
   private lastTimestampMs = 0;
   private activeBackend: 'GPU' | 'CPU' | 'SYNTHETIC' = 'SYNTHETIC';
+  private activeHandModel: HandModelType = 'NONE';
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private async getVisionResolver(): Promise<any> {
@@ -51,10 +73,89 @@ export class MediaPipeTaskRunner {
     }
   }
 
-  // 1. Initialize Hand Landmarker
-  async initHandLandmarker(modelPath = '/models/hand_landmarker.task'): Promise<boolean> {
+  // 1A. Initialize Gesture Recognizer (Primary Perception Pipeline)
+  async initGestureRecognizer(
+    modelPath = '/models/gesture_recognizer.task',
+    config?: HandPipelineConfig
+  ): Promise<boolean> {
+    if (this.gestureRecognizer) return true;
+    if (this.isInitializing) return false;
+
+    const numHands = config?.numHands ?? 2;
+    const minDetect = config?.minHandDetectionConfidence ?? 0.40;
+    const minPresence = config?.minHandPresenceConfidence ?? 0.40;
+    const minTrack = config?.minTrackingConfidence ?? 0.40;
+
+    this.isDisposed = false;
+    this.isInitializing = true;
+    try {
+      const vision = await this.getVisionResolver();
+      const { GestureRecognizer } = await import('@mediapipe/tasks-vision');
+
+      // Attempt GPU delegate first
+      try {
+        const created = await GestureRecognizer.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: modelPath,
+            delegate: 'GPU',
+          },
+          runningMode: 'VIDEO',
+          numHands,
+          minHandDetectionConfidence: minDetect,
+          minHandPresenceConfidence: minPresence,
+          minTrackingConfidence: minTrack,
+        });
+        if (this.isDisposed) {
+          try { created.close(); } catch {}
+          this.isInitializing = false;
+          return false;
+        }
+        this.gestureRecognizer = created;
+        this.activeBackend = 'GPU';
+        this.activeHandModel = 'GESTURE_RECOGNIZER';
+      } catch {
+        // Fallback to CPU delegate
+        const created = await GestureRecognizer.createFromOptions(vision, {
+          baseOptions: {
+            modelAssetPath: modelPath,
+            delegate: 'CPU',
+          },
+          runningMode: 'VIDEO',
+          numHands,
+          minHandDetectionConfidence: minDetect,
+          minHandPresenceConfidence: minPresence,
+          minTrackingConfidence: minTrack,
+        });
+        if (this.isDisposed) {
+          try { created.close(); } catch {}
+          this.isInitializing = false;
+          return false;
+        }
+        this.gestureRecognizer = created;
+        this.activeBackend = 'CPU';
+        this.activeHandModel = 'GESTURE_RECOGNIZER';
+      }
+
+      this.isInitializing = false;
+      return true;
+    } catch {
+      this.isInitializing = false;
+      return false;
+    }
+  }
+
+  // 1B. Initialize Hand Landmarker
+  async initHandLandmarker(
+    modelPath = '/models/hand_landmarker.task',
+    config?: HandPipelineConfig
+  ): Promise<boolean> {
     if (this.handLandmarker) return true;
     if (this.isInitializing) return false;
+
+    const numHands = config?.numHands ?? 2;
+    const minDetect = config?.minHandDetectionConfidence ?? 0.40;
+    const minPresence = config?.minHandPresenceConfidence ?? 0.40;
+    const minTrack = config?.minTrackingConfidence ?? 0.40;
 
     this.isDisposed = false;
     this.isInitializing = true;
@@ -70,10 +171,10 @@ export class MediaPipeTaskRunner {
             delegate: 'GPU',
           },
           runningMode: 'VIDEO',
-          numHands: 2,
-          minHandDetectionConfidence: 0.5,
-          minHandPresenceConfidence: 0.5,
-          minTrackingConfidence: 0.5,
+          numHands,
+          minHandDetectionConfidence: minDetect,
+          minHandPresenceConfidence: minPresence,
+          minTrackingConfidence: minTrack,
         });
         if (this.isDisposed) {
           try { created.close(); } catch {}
@@ -82,6 +183,7 @@ export class MediaPipeTaskRunner {
         }
         this.handLandmarker = created;
         this.activeBackend = 'GPU';
+        this.activeHandModel = 'HAND_LANDMARKER';
       } catch {
         // Fallback to CPU delegate
         const created = await HandLandmarker.createFromOptions(vision, {
@@ -90,8 +192,10 @@ export class MediaPipeTaskRunner {
             delegate: 'CPU',
           },
           runningMode: 'VIDEO',
-          numHands: 2,
-          minHandDetectionConfidence: 0.5,
+          numHands,
+          minHandDetectionConfidence: minDetect,
+          minHandPresenceConfidence: minPresence,
+          minTrackingConfidence: minTrack,
         });
         if (this.isDisposed) {
           try { created.close(); } catch {}
@@ -100,6 +204,7 @@ export class MediaPipeTaskRunner {
         }
         this.handLandmarker = created;
         this.activeBackend = 'CPU';
+        this.activeHandModel = 'HAND_LANDMARKER';
       }
 
       this.isInitializing = false;
@@ -111,9 +216,32 @@ export class MediaPipeTaskRunner {
     }
   }
 
-  // Detect hands in video frame
-  detectHands(video: HTMLVideoElement, timestamp: number): HandLandmarkerResult | null {
-    if (!this.handLandmarker || this.isProcessing || video.readyState < 2) {
+  // 1C. Unified Hand Perception Initializer: Prefers GestureRecognizer, seamlessly falls back to HandLandmarker
+  async initHandPipeline(options?: {
+    preferGestureRecognizer?: boolean;
+    config?: HandPipelineConfig;
+    gestureModelPath?: string;
+    landmarkerModelPath?: string;
+  }): Promise<boolean> {
+    const preferGesture = options?.preferGestureRecognizer ?? true;
+
+    if (preferGesture) {
+      const gestureSuccess = await this.initGestureRecognizer(
+        options?.gestureModelPath ?? '/models/gesture_recognizer.task',
+        options?.config
+      );
+      if (gestureSuccess) return true;
+    }
+
+    return await this.initHandLandmarker(
+      options?.landmarkerModelPath ?? '/models/hand_landmarker.task',
+      options?.config
+    );
+  }
+
+  // Detect hands in video frame (Supports GestureRecognizer and HandLandmarker)
+  detectHands(video: HTMLVideoElement, timestamp: number): UnifiedHandResult | null {
+    if ((!this.gestureRecognizer && !this.handLandmarker) || this.isProcessing || video.readyState < 2) {
       return null;
     }
 
@@ -123,13 +251,50 @@ export class MediaPipeTaskRunner {
 
     try {
       this.isProcessing = true;
-      const result = this.handLandmarker.detectForVideo(video, safeTimestamp);
+
+      if (this.gestureRecognizer) {
+        const result = this.gestureRecognizer.recognizeForVideo(video, safeTimestamp);
+        this.isProcessing = false;
+        if (!result || !result.landmarks || result.landmarks.length === 0) {
+          return null;
+        }
+        const handedness = result.handedness || result.handednesses || [];
+        return {
+          landmarks: result.landmarks,
+          worldLandmarks: result.worldLandmarks || [],
+          handedness,
+          handednesses: handedness,
+          gestures: result.gestures || [],
+          modelType: 'GESTURE_RECOGNIZER',
+        };
+      }
+
+      if (this.handLandmarker) {
+        const result = this.handLandmarker.detectForVideo(video, safeTimestamp);
+        this.isProcessing = false;
+        if (!result || !result.landmarks || result.landmarks.length === 0) {
+          return null;
+        }
+        const handedness = result.handedness || result.handednesses || [];
+        return {
+          landmarks: result.landmarks,
+          worldLandmarks: result.worldLandmarks || [],
+          handedness,
+          handednesses: handedness,
+          modelType: 'HAND_LANDMARKER',
+        };
+      }
+
       this.isProcessing = false;
-      return result;
+      return null;
     } catch {
       this.isProcessing = false;
       return null;
     }
+  }
+
+  getActiveHandModel(): HandModelType {
+    return this.activeHandModel;
   }
 
   // 2. Initialize Face Landmarker (with blendshapes and matrix)
@@ -365,12 +530,19 @@ export class MediaPipeTaskRunner {
 
   dispose(): void {
     this.isDisposed = true;
+    if (this.gestureRecognizer) {
+      try {
+        this.gestureRecognizer.close();
+      } catch {}
+      this.gestureRecognizer = null;
+    }
     if (this.handLandmarker) {
       try {
         this.handLandmarker.close();
       } catch {}
       this.handLandmarker = null;
     }
+    this.activeHandModel = 'NONE';
     if (this.faceLandmarker) {
       try {
         this.faceLandmarker.close();

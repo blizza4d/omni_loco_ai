@@ -39,7 +39,9 @@ import {
 } from '@/modules/pose/goofy-hand-classifier';
 import {
   runComprehensiveGestureBenchmark,
+  runFullDatasetEvaluation,
   BenchmarkReport,
+  DetailedEvaluationReport,
 } from '@/modules/pose/goofy-test-fixtures';
 import { GoofyAudioEngine } from '@/modules/pose/goofy-audio-engine';
 import { GoofyVisualFXEngine } from '@/modules/pose/goofy-visual-fx';
@@ -134,6 +136,11 @@ export default function GoofyModePage() {
   const [selectedTestGesture, setSelectedTestGesture] = useState<GoofyHandGestureType>('THUMBS_UP');
   const [benchmarkResults, setBenchmarkResults] = useState<BenchmarkReport | null>(null);
   const [isBenchmarking, setIsBenchmarking] = useState(false);
+  const [evaluationReport, setEvaluationReport] = useState<DetailedEvaluationReport | null>(null);
+  const [isEvaluatingDataset, setIsEvaluatingDataset] = useState(false);
+  const [activeHandModelName, setActiveHandModelName] = useState<string>('GESTURE_RECOGNIZER');
+  const [capturedSamples, setCapturedSamples] = useState<{ id: string; label: string; timestamp: number; landmarks: Landmark3D[]; handedness: 'Left' | 'Right' }[]>([]);
+  const [sampleCaptureLabel, setSampleCaptureLabel] = useState<string>('THUMBS_UP');
   const [fps, setFps] = useState(0);
 
   // Diagnostics Telemetry State (Phase 6)
@@ -351,7 +358,7 @@ export default function GoofyModePage() {
     return () => unsubscribe();
   }, []);
 
-  // Initialize MediaPipe Hand Landmarker ONLY (Zero body pose overhead)
+  // Initialize MediaPipe Hand Perception Pipeline (Prefers GestureRecognizer, fallbacks to HandLandmarker)
   useEffect(() => {
     let mounted = true;
     const runner = runnerRef.current;
@@ -359,9 +366,24 @@ export default function GoofyModePage() {
     const audioEngine = audioEngineRef.current;
 
     runner
-      .initHandLandmarker('/models/hand_landmarker.task')
+      .initHandPipeline({
+        preferGestureRecognizer: true,
+        gestureModelPath: '/models/gesture_recognizer.task',
+        landmarkerModelPath: '/models/hand_landmarker.task',
+        config: {
+          numHands: 2,
+          minHandDetectionConfidence: 0.40,
+          minHandPresenceConfidence: 0.40,
+          minTrackingConfidence: 0.40,
+        },
+      })
+      .then(() => {
+        if (mounted) {
+          setActiveHandModelName(runner.getActiveHandModel());
+        }
+      })
       .catch((err) => {
-        console.warn('[GoofyModel] MediaPipe hand loader notice:', err);
+        console.warn('[GoofyModel] MediaPipe hand perception pipeline notice:', err);
       });
 
     return () => {
@@ -544,14 +566,29 @@ export default function GoofyModePage() {
     }
 
     const inferStart = performance.now();
-    let detectedHands: { handedness: 'Left' | 'Right'; landmarks: Landmark3D[] }[] = [];
+    let detectedHands: {
+      handedness: 'Left' | 'Right';
+      landmarks: Landmark3D[];
+      worldLandmarks?: Landmark3D[];
+      modelGestureHint?: { category: string; score: number };
+      bbox?: { minX: number; maxX: number; minY: number; maxY: number };
+    }[] = [];
 
     if (syntheticMode) {
       // Synthetic Demonstration Mode: Generates synthetic hand landmarks ONLY when explicitly enabled
+      const synthLm = generateSyntheticHand(now, 'point');
+      let minX = 1, maxX = 0, minY = 1, maxY = 0;
+      for (const pt of synthLm) {
+        if (pt.x < minX) minX = pt.x;
+        if (pt.x > maxX) maxX = pt.x;
+        if (pt.y < minY) minY = pt.y;
+        if (pt.y > maxY) maxY = pt.y;
+      }
       detectedHands = [
         {
           handedness: 'Right',
-          landmarks: generateSyntheticHand(now, 'point'),
+          landmarks: synthLm,
+          bbox: { minX, maxX, minY, maxY },
         },
       ];
     } else if (videoRef.current && videoRef.current.readyState >= 2) {
@@ -565,9 +602,32 @@ export default function GoofyModePage() {
               : idx === 0
               ? 'Right'
               : 'Left';
+
+          const worldLms = handResult.worldLandmarks && handResult.worldLandmarks[idx]
+            ? handResult.worldLandmarks[idx]!.map((pt) => ({ x: pt.x, y: pt.y, z: pt.z }))
+            : undefined;
+
+          const gestureHint = handResult.gestures && handResult.gestures[idx] && handResult.gestures[idx]![0]
+            ? {
+                category: handResult.gestures[idx]![0]!.categoryName,
+                score: handResult.gestures[idx]![0]!.score,
+              }
+            : undefined;
+
+          let minX = 1, maxX = 0, minY = 1, maxY = 0;
+          for (const pt of lms) {
+            if (pt.x < minX) minX = pt.x;
+            if (pt.x > maxX) maxX = pt.x;
+            if (pt.y < minY) minY = pt.y;
+            if (pt.y > maxY) maxY = pt.y;
+          }
+
           return {
             handedness: rawHandedness,
             landmarks: lms.map((pt) => ({ x: pt.x, y: pt.y, z: pt.z })),
+            worldLandmarks: worldLms,
+            modelGestureHint: gestureHint,
+            bbox: { minX, maxX, minY, maxY },
           };
         });
 
@@ -608,6 +668,68 @@ export default function GoofyModePage() {
       const ctx = canvas.getContext('2d');
       if (ctx) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Render Hand Bounding Box with Sleek Corner Brackets & Status Pill
+        for (const hand of detectedHands) {
+          if (hand.bbox) {
+            const padX = (hand.bbox.maxX - hand.bbox.minX) * 0.18;
+            const padY = (hand.bbox.maxY - hand.bbox.minY) * 0.18;
+            const leftX = Math.max(0, hand.bbox.minX - padX);
+            const rightX = Math.min(1, hand.bbox.maxX + padX);
+            const topY = Math.max(0, hand.bbox.minY - padY);
+            const botY = Math.min(1, hand.bbox.maxY + padY);
+
+            const bx = isMirrored ? (1 - rightX) * canvas.width : leftX * canvas.width;
+            const bw = (rightX - leftX) * canvas.width;
+            const by = topY * canvas.height;
+            const bh = (botY - topY) * canvas.height;
+
+            const color = hand.handedness === 'Left' ? '#A855F7' : '#06B6D4';
+            ctx.save();
+            ctx.strokeStyle = color;
+            ctx.lineWidth = 1.8;
+            ctx.setLineDash([6, 4]);
+            ctx.strokeRect(bx, by, bw, bh);
+            ctx.setLineDash([]);
+
+            // Handedness pill at top corner of bounding box
+            ctx.fillStyle = hand.handedness === 'Left' ? 'rgba(168, 85, 247, 0.90)' : 'rgba(6, 182, 212, 0.90)';
+            ctx.font = 'bold 9px monospace';
+            const badgeText = `${hand.handedness.toUpperCase()} [DETECTED]`;
+            const badgeW = ctx.measureText(badgeText).width + 8;
+            ctx.fillRect(bx, Math.max(0, by - 14), badgeW, 13);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillText(badgeText, bx + 4, Math.max(9, by - 4));
+            ctx.restore();
+          }
+        }
+
+        // Render On-Screen Guidance when camera active but no hands in view
+        if (detectedHands.length === 0 && isStreaming) {
+          ctx.save();
+          const cardW = 340;
+          const cardH = 46;
+          const cardX = (canvas.width - cardW) / 2;
+          const cardY = canvas.height - cardH - 24;
+
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';
+          ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.roundRect(cardX, cardY, cardW, cardH, 8);
+          ctx.fill();
+          ctx.stroke();
+
+          ctx.fillStyle = '#F8FAFC';
+          ctx.font = 'bold 11px monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText('NO HANDS DETECTED — SHOW HAND TO CAMERA', canvas.width / 2, cardY + 18);
+
+          ctx.fillStyle = '#94A3B8';
+          ctx.font = '9px monospace';
+          ctx.fillText('• Keep inside frame  • Ensure adequate light  • Avoid rapid blur', canvas.width / 2, cardY + 34);
+          ctx.restore();
+        }
 
         // Render Hand Skeletons & 21 Landmarks
         for (const hand of detectedHands) {
@@ -655,7 +777,9 @@ export default function GoofyModePage() {
             hand.landmarks,
             hand.handedness,
             now,
-            isMirrored
+            isMirrored,
+            hand.worldLandmarks,
+            hand.modelGestureHint
           );
           if (hand.handedness === 'Left') {
             curLeftGesture = res.gesture;
@@ -850,6 +974,7 @@ export default function GoofyModePage() {
   }, [
     config.actionCustomCaptions,
     isMirrored,
+    isStreaming,
     syntheticMode,
     videoRef,
     showDiagnostics,
@@ -3193,6 +3318,195 @@ export default function GoofyModePage() {
                                 {r.status}
                               </span>
                             </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Multi-Variation Dataset Benchmark & Confusion Matrix (Phase 6) */}
+                <div className="p-3 border-2 border-charcoal-soft rounded-tactile bg-paper-dark/15 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h5 className="text-xs font-black uppercase text-charcoal-dark flex items-center gap-1.5">
+                        <Terminal className="w-3.5 h-3.5 text-purple-600" />
+                        MULTI-VARIATION DATASET EVALUATION (60+ SAMPLES)
+                      </h5>
+                      <span className="text-[10px] text-ink-muted">
+                        Evaluates rotated (±15°), scaled (0.85x-1.18x), dual-handed & ambiguous gestures
+                      </span>
+                    </div>
+
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setIsEvaluatingDataset(true);
+                        setTimeout(() => {
+                          const rep = runFullDatasetEvaluation(handClassifierRef.current);
+                          setEvaluationReport(rep);
+                          setIsEvaluatingDataset(false);
+                        }, 50);
+                      }}
+                      disabled={isEvaluatingDataset}
+                      className="bg-purple-600 hover:bg-purple-700 text-white font-black text-xs gap-1.5 h-8"
+                    >
+                      <Activity className="w-3.5 h-3.5" />
+                      <span>{isEvaluatingDataset ? 'COMPUTING...' : 'RUN FULL EVALUATION'}</span>
+                    </Button>
+                  </div>
+
+                  {evaluationReport && (
+                    <div className="space-y-3 border-t border-charcoal-soft/20 pt-2 text-xs">
+                      <div className="grid grid-cols-2 gap-2 text-[11px]">
+                        <div className="p-2 rounded bg-paper-cream border border-charcoal-soft/30">
+                          <span className="text-ink-muted block text-[10px]">OVERALL ACCURACY:</span>
+                          <span className="text-sm font-black text-emerald-600">
+                            {evaluationReport.overallAccuracy}% ({evaluationReport.correctPredictions}/{evaluationReport.totalSamples})
+                          </span>
+                        </div>
+                        <div className="p-2 rounded bg-paper-cream border border-charcoal-soft/30">
+                          <span className="text-ink-muted block text-[10px]">UNKNOWN REJECTION:</span>
+                          <span className="text-sm font-black text-purple-700">
+                            {evaluationReport.unknownRejectionRate}% REJECTED
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Subsets Breakdown */}
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-bold text-ink-muted uppercase block">
+                          Dataset Breakdown by Conditions:
+                        </span>
+                        <div className="grid grid-cols-2 gap-1.5 text-[10px]">
+                          {evaluationReport.breakdown.map((b) => (
+                            <div key={b.datasetSubset} className="p-1 rounded bg-paper-dark/20 flex justify-between">
+                              <span className="truncate pr-1">{b.datasetSubset}</span>
+                              <span className="font-bold text-emerald-700">{b.accuracy}%</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Per Class Precision / Recall Summary */}
+                      <div className="space-y-1">
+                        <span className="text-[10px] font-bold text-ink-muted uppercase block">
+                          Per-Class Precision & Recall:
+                        </span>
+                        <div className="max-h-40 overflow-y-auto space-y-1 pr-1 font-mono text-[10px]">
+                          {Object.entries(evaluationReport.perClassMetrics).map(([cls, m]) => (
+                            <div key={cls} className="flex items-center justify-between p-1 rounded bg-paper-dark/10">
+                              <span className="font-bold uppercase">{cls}</span>
+                              <div className="flex gap-2 text-ink-muted">
+                                <span>P: <strong className="text-charcoal-dark">{m.precision}</strong></span>
+                                <span>R: <strong className="text-charcoal-dark">{m.recall}</strong></span>
+                                <span>F1: <strong className="text-emerald-700">{m.f1Score}</strong></span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* User Sample Capture Workflow (Phase 6.A) */}
+                <div className="p-3 border-2 border-charcoal-soft rounded-tactile bg-paper-dark/15 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h5 className="text-xs font-black uppercase text-charcoal-dark flex items-center gap-1.5">
+                        <Camera className="w-3.5 h-3.5 text-amber-600" />
+                        USER-CONTROLLED SAMPLE CAPTURE (LOCAL ONLY)
+                      </h5>
+                      <span className="text-[10px] text-ink-muted">
+                        Explicit consent: samples held in memory only, downloadable as JSON
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={sampleCaptureLabel}
+                        onChange={(e) => setSampleCaptureLabel(e.target.value)}
+                        className="bg-paper-cream border border-charcoal-soft rounded px-2 py-1 text-[11px] font-bold"
+                      >
+                        <option value="THUMBS_UP">THUMBS_UP</option>
+                        <option value="THUMBS_DOWN">THUMBS_DOWN</option>
+                        <option value="CLOSED_FIST">CLOSED_FIST</option>
+                        <option value="OPEN_PALM">OPEN_PALM</option>
+                        <option value="PEACE_SIGN">PEACE_SIGN</option>
+                        <option value="POINTING">POINTING</option>
+                        <option value="PINCH">PINCH</option>
+                        <option value="THREE_FINGERS">THREE_FINGERS</option>
+                        <option value="FOUR_FINGERS">FOUR_FINGERS</option>
+                        <option value="FIVE_FINGERS">FIVE_FINGERS</option>
+                        <option value="UNKNOWN">UNKNOWN</option>
+                      </select>
+
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          const activeLm = rightHandLandmarksRef.current || leftHandLandmarksRef.current;
+                          if (!activeLm) {
+                            alert('No hand landmarks visible in camera to capture! Please show your hand.');
+                            return;
+                          }
+                          const handedness: 'Left' | 'Right' = rightHandLandmarksRef.current ? 'Right' : 'Left';
+                          const newSample: { id: string; label: string; timestamp: number; landmarks: Landmark3D[]; handedness: 'Left' | 'Right' } = {
+                            id: `sample_${Date.now()}`,
+                            label: sampleCaptureLabel,
+                            timestamp: Date.now(),
+                            landmarks: activeLm.map((p) => ({ ...p })),
+                            handedness,
+                          };
+                          setCapturedSamples((prev) => [newSample, ...prev]);
+                        }}
+                        className="bg-amber-600 hover:bg-amber-700 text-white font-black text-xs gap-1.5 h-8"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>CAPTURE FRAME</span>
+                      </Button>
+                    </div>
+                  </div>
+
+                  {capturedSamples.length > 0 && (
+                    <div className="space-y-2 border-t border-charcoal-soft/20 pt-2">
+                      <div className="flex items-center justify-between text-[11px] font-bold">
+                        <span>CAPTURED: {capturedSamples.length} SAMPLES</span>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(capturedSamples, null, 2));
+                              const downloadAnchor = document.createElement('a');
+                              downloadAnchor.setAttribute('href', dataStr);
+                              downloadAnchor.setAttribute('download', `omni_hand_samples_${Date.now()}.json`);
+                              document.body.appendChild(downloadAnchor);
+                              downloadAnchor.click();
+                              downloadAnchor.remove();
+                            }}
+                            className="text-[10px] h-7 gap-1"
+                          >
+                            <Download className="w-3 h-3" />
+                            EXPORT JSON
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setCapturedSamples([])}
+                            className="text-[10px] h-7 gap-1 text-rose-700 hover:bg-rose-100"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            CLEAR
+                          </Button>
+                        </div>
+                      </div>
+
+                      <div className="space-y-1 max-h-36 overflow-y-auto pr-1">
+                        {capturedSamples.map((s) => (
+                          <div key={s.id} className="p-1 rounded bg-paper-cream border text-[10px] flex items-center justify-between">
+                            <span className="font-bold">{s.label} ({s.handedness})</span>
+                            <span className="text-ink-muted">{new Date(s.timestamp).toLocaleTimeString()}</span>
                           </div>
                         ))}
                       </div>
