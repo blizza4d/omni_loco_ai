@@ -46,7 +46,10 @@ import {
   SEMANTIC_MEME_CATEGORIES,
   MemeCategory,
   MemePresetId,
+  BUILTIN_GESTURE_SEQUENCES,
+  GestureSequenceDefinition,
 } from '../modules/pose/goofy-types';
+import { GoofySequenceEngine } from '../modules/pose/goofy-sequence-engine';
 
 /**
  * Helper to build a canonical base skeleton with 33 landmarks
@@ -991,8 +994,8 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
       expect(imgCount).toBe(55);
     });
 
-    it('contains 68 original vector SVG memes with valid data URLs and stable IDs', () => {
-      expect(ORIGINAL_VECTOR_MEMES.length).toBe(68);
+    it('contains 73 original vector SVG memes with valid data URLs and stable IDs', () => {
+      expect(ORIGINAL_VECTOR_MEMES.length).toBe(73);
 
       const idSet = new Set<string>();
       for (const meme of ORIGINAL_VECTOR_MEMES) {
@@ -1010,8 +1013,8 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
       }
     });
 
-    it('DEFAULT_MEME_LIBRARY combines real media (82) and vector memes (68) for 150 total presets', () => {
-      expect(DEFAULT_MEME_LIBRARY.length).toBe(150);
+    it('DEFAULT_MEME_LIBRARY combines real media (82) and vector memes (73) for 155 total presets', () => {
+      expect(DEFAULT_MEME_LIBRARY.length).toBe(155);
       expect(DEFAULT_MEME_LIBRARY.slice(0, 82)).toEqual(REAL_MEDIA_MEMES);
     });
 
@@ -1032,8 +1035,8 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
       expect(fistMeme.id).toBe('REAL_MEME_ARTHURS_FIST');
     });
 
-    it('validates all 10 semantic reaction categories in SEMANTIC_MEME_CATEGORIES', () => {
-      expect(SEMANTIC_MEME_CATEGORIES.length).toBe(10);
+    it('validates all 13 semantic reaction categories in SEMANTIC_MEME_CATEGORIES', () => {
+      expect(SEMANTIC_MEME_CATEGORIES.length).toBe(13);
       const categoryIds = SEMANTIC_MEME_CATEGORIES.map((c) => c.id);
 
       expect(categoryIds).toContain('APPROVAL_CONFIDENCE');
@@ -1640,8 +1643,8 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
 
     it('passes 100% of canonical geometric fixtures in comprehensive benchmark', () => {
       const report = runComprehensiveGestureBenchmark(classifier);
-      expect(report.total).toBe(12);
-      expect(report.passed).toBe(12);
+      expect(report.total).toBe(17);
+      expect(report.passed).toBe(17);
       expect(report.accuracy).toBe(100);
       for (const res of report.results) {
         expect(res.status).toBe('PASS');
@@ -2176,6 +2179,149 @@ describe('Goofy Mode // Human Sound Effect Generator', () => {
           expect(metric.recall).toBeGreaterThanOrEqual(0.85);
         }
       }
+    });
+
+    // =========================================================================
+    // V6 TEST SUITE: ULTIMATE HAND INTELLIGENCE, SEQUENCES & PRESENTATION
+    // =========================================================================
+    describe('Goofy Model V6 — Ultimate Intelligence, Sequence Combos & Aura Reactions', () => {
+      let classifier: GoofyHandClassifier;
+      let sequenceEngine: GoofySequenceEngine;
+      let eventEngine: GoofyEventEngine;
+      let semanticMatcher: SemanticMemeMatcher;
+
+      beforeEach(() => {
+        classifier = new GoofyHandClassifier();
+        sequenceEngine = new GoofySequenceEngine(BUILTIN_GESTURE_SEQUENCES, 800);
+        eventEngine = new GoofyEventEngine(
+          DEFAULT_GOOFY_CONFIG,
+          new GoofyAudioEngine(),
+          new GoofyVisualFXEngine()
+        );
+        semanticMatcher = new SemanticMemeMatcher();
+      });
+
+      it('classifies all 5 new gestures with high confidence (>0.90)', () => {
+        const gestures: GoofyHandGestureType[] = [
+          'ROCK_SIGN',
+          'OK_GESTURE',
+          'CALL_ME',
+          'FINGER_HEART',
+          'THREE_FINGER_SALUTE',
+        ];
+        for (const g of gestures) {
+          classifier.reset();
+          const fixture = generateGestureFixture(g, 'Right');
+          const res = classifier.classify(fixture, 'Right', 1000);
+          expect(res.gesture).toBe(g);
+          expect(res.confidence).toBeGreaterThanOrEqual(0.90);
+        }
+      });
+
+      it('detects all 4 new dual hand combos with high confidence', () => {
+        expect(detectDualHandCombo('ROCK_SIGN', 'ROCK_SIGN').combo).toBe('DOUBLE_ROCK');
+        expect(detectDualHandCombo('CALL_ME', 'CALL_ME').combo).toBe('DOUBLE_CALL_ME');
+        expect(detectDualHandCombo('OK_GESTURE', 'OK_GESTURE').combo).toBe('DOUBLE_OK');
+        expect(detectDualHandCombo('FINGER_HEART', 'PEACE_SIGN').combo).toBe('HEART_AND_PEACE');
+        expect(detectDualHandCombo('PEACE_SIGN', 'FINGER_HEART').combo).toBe('HEART_AND_PEACE');
+      });
+
+      it('triggers temporal sequences when gestures transition within window', () => {
+        // Step 1: PEACE_SIGN
+        const res1 = sequenceEngine.processGesture('PEACE_SIGN', 1000);
+        expect(res1.triggered).toBe(false);
+        expect(res1.progressPercent).toBe(50);
+
+        // Step 2: THUMBS_UP within 1200ms
+        const res2 = sequenceEngine.processGesture('THUMBS_UP', 1800);
+        expect(res2.triggered).toBe(true);
+        expect(res2.sequence?.id).toBe('SEQ_PEACE_TO_THUMBS');
+      });
+
+      it('resets sequence progress if window duration is exceeded', () => {
+        // Step 1: PEACE_SIGN at t=1000
+        sequenceEngine.processGesture('PEACE_SIGN', 1000);
+
+        // Step 2: THUMBS_UP at t=4000 (after maxWindowMs of 1800ms)
+        const res = sequenceEngine.processGesture('THUMBS_UP', 4000);
+        expect(res.triggered).toBe(false);
+      });
+
+      it('supports custom multi-step sequences created by user', () => {
+        const customSeq: GestureSequenceDefinition = {
+          id: 'SEQ_CUSTOM_TEST',
+          label: 'CUSTOM TRIPLE COMBO',
+          description: 'Three -> Four -> Five',
+          steps: ['THREE_FINGERS', 'FOUR_FINGERS', 'FIVE_FINGERS'],
+          maxWindowMs: 2500,
+          defaultMemeId: 'MEME_ROCK_STAR',
+          defaultSoundId: 'ANIME_POWER_UP',
+          defaultCaption: 'CUSTOM COMBO UNLEASHED!',
+          icon: '3️⃣4️⃣5️⃣',
+          isCustom: true,
+        };
+
+        const engine = new GoofySequenceEngine([customSeq], 800);
+
+        const r1 = engine.processGesture('THREE_FINGERS', 1000);
+        expect(r1.triggered).toBe(false);
+
+        const r2 = engine.processGesture('FOUR_FINGERS', 1500);
+        expect(r2.triggered).toBe(false);
+
+        const r3 = engine.processGesture('FIVE_FINGERS', 2000);
+        expect(r3.triggered).toBe(true);
+        expect(r3.sequence?.id).toBe('SEQ_CUSTOM_TEST');
+      });
+
+      it('dispatches sequence triggers via GoofyEventEngine with SEQUENCE source', () => {
+        const seq = BUILTIN_GESTURE_SEQUENCES[0]!;
+        const evt = eventEngine.dispatchSequenceTrigger(seq);
+
+        expect(evt).not.toBeNull();
+        expect(evt?.source).toBe('SEQUENCE');
+        expect(evt?.actionId).toBe(seq.id);
+        expect(eventEngine.getActivePopups().length).toBeGreaterThan(0);
+        expect(eventEngine.getActivePopups()[0]!.actionSource).toBe('SEQUENCE');
+      });
+
+      it('suppresses immediate repetition of the same meme when multiple candidates are eligible', () => {
+        const config = {
+          ...DEFAULT_GOOFY_CONFIG,
+          preventImmediateRepetition: true,
+        };
+
+        const match1 = semanticMatcher.match(
+          { actionId: 'ROCK_SIGN', source: 'HAND' },
+          DEFAULT_MEME_LIBRARY,
+          config
+        );
+        expect(match1).not.toBeNull();
+
+        const match2 = semanticMatcher.match(
+          { actionId: 'ROCK_SIGN', source: 'HAND' },
+          DEFAULT_MEME_LIBRARY,
+          config
+        );
+        expect(match2).not.toBeNull();
+        expect(match2?.meme.id).not.toBe(match1?.meme.id);
+      });
+
+      it('Surprise Mode (Aura Twist) triggers high-aura unexpected semantic variants', () => {
+        const config = {
+          ...DEFAULT_GOOFY_CONFIG,
+          surpriseMode: true,
+          auraTwistProbability: 1.0, // Force trigger
+        };
+
+        const match = semanticMatcher.match(
+          { actionId: 'ROCK_SIGN', source: 'HAND' },
+          DEFAULT_MEME_LIBRARY,
+          config
+        );
+        expect(match).not.toBeNull();
+        expect(match?.reason).toContain('Aura Twist');
+      });
     });
   });
 });

@@ -190,6 +190,79 @@ export function generateGestureFixture(
       break;
     }
 
+    case 'ROCK_SIGN': {
+      // Index and pinky extended straight, middle and ring curled tightly into palm
+      curlFinger(lm, 9, 10, 11, 12);
+      curlFinger(lm, 13, 14, 15, 16);
+      lm[4] = { x: wx - 0.01, y: wy - 0.08, z: 0.03 }; // thumb tucked across curled fingers
+      break;
+    }
+
+    case 'OK_GESTURE': {
+      // Middle, ring, pinky extended straight up
+      // Index and thumb tips touching in an arch loop (index tip curled down towards thumb)
+      lm[5] = { x: wx - 0.03, y: wy - 0.12, z: 0 };
+      lm[6] = { x: wx - 0.04, y: wy - 0.16, z: 0.01 };
+      lm[7] = { x: wx - 0.05, y: wy - 0.14, z: 0.02 };
+      lm[8] = { x: wx - 0.05, y: wy - 0.12, z: 0.02 };
+      lm[1] = { x: wx - 0.04, y: wy - 0.05, z: 0 };
+      lm[2] = { x: wx - 0.06, y: wy - 0.08, z: 0.01 };
+      lm[3] = { x: wx - 0.06, y: wy - 0.10, z: 0.01 };
+      lm[4] = { x: wx - 0.052, y: wy - 0.118, z: 0.02 };
+      break;
+    }
+
+    case 'CALL_ME': {
+      // Thumb extended wide, pinky extended straight, index, middle, ring curled tightly
+      curlFinger(lm, 5, 6, 7, 8);
+      curlFinger(lm, 9, 10, 11, 12);
+      curlFinger(lm, 13, 14, 15, 16);
+      lm[1] = { x: wx - 0.04, y: wy - 0.05, z: 0 };
+      lm[2] = { x: wx - 0.08, y: wy - 0.08, z: 0 };
+      lm[3] = { x: wx - 0.12, y: wy - 0.11, z: 0 };
+      lm[4] = { x: wx - 0.17, y: wy - 0.14, z: 0 };
+      break;
+    }
+
+    case 'FINGER_HEART': {
+      // Middle, ring, pinky curled into palm
+      curlFinger(lm, 9, 10, 11, 12);
+      curlFinger(lm, 13, 14, 15, 16);
+      curlFinger(lm, 17, 18, 19, 20);
+      // Index bent at DIP/PIP, thumb crossed over index tip in micro-pinch
+      lm[5] = { x: wx - 0.03, y: wy - 0.10, z: 0 };
+      lm[6] = { x: wx - 0.04, y: wy - 0.13, z: 0.01 };
+      lm[7] = { x: wx - 0.04, y: wy - 0.14, z: 0.02 };
+      lm[8] = { x: wx - 0.04, y: wy - 0.14, z: 0.02 };
+      lm[1] = { x: wx - 0.03, y: wy - 0.05, z: 0 };
+      lm[2] = { x: wx - 0.04, y: wy - 0.08, z: 0.01 };
+      lm[3] = { x: wx - 0.04, y: wy - 0.11, z: 0.01 };
+      lm[4] = { x: wx - 0.04, y: wy - 0.135, z: 0.02 };
+      break;
+    }
+
+    case 'THREE_FINGER_SALUTE': {
+      // Pinky curled, thumb tucked across palm
+      curlFinger(lm, 17, 18, 19, 20);
+      lm[2] = { x: wx - 0.02, y: wy - 0.06, z: 0 };
+      lm[3] = { x: wx, y: wy - 0.07, z: 0.02 };
+      lm[4] = { x: wx + 0.02, y: wy - 0.07, z: 0.03 };
+      // Index, middle, ring straight and held parallel together
+      lm[5] = { x: wx - 0.02, y: wy - 0.12, z: 0 };
+      lm[6] = { x: wx - 0.02, y: wy - 0.18, z: 0 };
+      lm[7] = { x: wx - 0.02, y: wy - 0.23, z: 0 };
+      lm[8] = { x: wx - 0.02, y: wy - 0.29, z: 0 };
+      lm[9] = { x: wx, y: wy - 0.13, z: 0 };
+      lm[10] = { x: wx, y: wy - 0.19, z: 0 };
+      lm[11] = { x: wx, y: wy - 0.25, z: 0 };
+      lm[12] = { x: wx, y: wy - 0.31, z: 0 };
+      lm[13] = { x: wx + 0.02, y: wy - 0.12, z: 0 };
+      lm[14] = { x: wx + 0.02, y: wy - 0.18, z: 0 };
+      lm[15] = { x: wx + 0.02, y: wy - 0.23, z: 0 };
+      lm[16] = { x: wx + 0.02, y: wy - 0.29, z: 0 };
+      break;
+    }
+
     case 'SWIPE_LEFT':
     case 'SWIPE_RIGHT': {
       // Return base hand, temporal sequence tested via benchmark function
@@ -373,6 +446,11 @@ export function runFullDatasetEvaluation(
     'THREE_FINGERS',
     'FOUR_FINGERS',
     'FIVE_FINGERS',
+    'ROCK_SIGN',
+    'OK_GESTURE',
+    'CALL_ME',
+    'FINGER_HEART',
+    'THREE_FINGER_SALUTE',
   ];
 
   const allClasses = [...staticGestures, 'SWIPE_LEFT', 'SWIPE_RIGHT', 'UNKNOWN'];
@@ -584,6 +662,11 @@ export function runComprehensiveGestureBenchmark(
     'THREE_FINGERS',
     'FOUR_FINGERS',
     'FIVE_FINGERS',
+    'ROCK_SIGN',
+    'OK_GESTURE',
+    'CALL_ME',
+    'FINGER_HEART',
+    'THREE_FINGER_SALUTE',
   ];
 
   const results: BenchmarkReport['results'] = [];
@@ -680,9 +763,9 @@ export function runComprehensiveGestureBenchmark(
   }
 
   return {
-    total: 12,
+    total: 17,
     passed: passedCount,
-    accuracy: Math.round((passedCount / 12) * 100),
+    accuracy: Math.round((passedCount / 17) * 100),
     results,
   };
 }

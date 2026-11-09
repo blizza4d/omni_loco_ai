@@ -6,6 +6,8 @@ import {
   GOOFY_POSE_METADATA,
   GOOFY_HAND_METADATA,
   GOOFY_DUAL_COMBO_DEFINITIONS,
+  BUILTIN_GESTURE_SEQUENCES,
+  GestureSequenceDefinition,
   GoofyPoseType,
   GoofyHandGestureType,
   GoofyDualHandComboId,
@@ -105,7 +107,7 @@ export class GoofyEventEngine {
    */
   dispatchActionTrigger(
     actionId: string,
-    source: 'BODY' | 'HAND' | 'DUAL_HAND',
+    source: 'BODY' | 'HAND' | 'DUAL_HAND' | 'SEQUENCE',
     hand?: 'Left' | 'Right' | 'Both',
     confidence = 0.95,
     context?: {
@@ -116,13 +118,20 @@ export class GoofyEventEngine {
   ): UnifiedMemeEvent | null {
     // 1. Check if action is enabled in config
     const comboDef = GOOFY_DUAL_COMBO_DEFINITIONS[actionId as GoofyDualHandComboId];
+    const seqDef =
+      source === 'SEQUENCE' || actionId.startsWith('SEQ_')
+        ? [...BUILTIN_GESTURE_SEQUENCES, ...(this.config.customSequences || [])].find(
+            (s) => s.id === actionId
+          )
+        : undefined;
+
     let mapping = comboDef
       ? this.config.dualHandMappings?.[actionId as GoofyDualHandComboId]
       : source === 'BODY'
       ? this.config.mappings[actionId as GoofyPoseType]
       : this.config.handMappings[actionId as GoofyHandGestureType];
 
-    if (!mapping && !comboDef) {
+    if (!mapping && !comboDef && !seqDef) {
       mapping = this.config.mappings[actionId as GoofyPoseType];
     }
     if (mapping && !mapping.enabled) {
@@ -132,7 +141,10 @@ export class GoofyEventEngine {
     // 2. Resolve label & caption
     let actionLabel = actionId;
     let defaultCaption = 'MEME ACTION DETECTED!';
-    if (comboDef) {
+    if (seqDef) {
+      actionLabel = `SEQUENCE: ${seqDef.label}`;
+      defaultCaption = seqDef.defaultCaption;
+    } else if (comboDef) {
       actionLabel = comboDef.label;
       defaultCaption = comboDef.defaultCaption;
     } else if (source === 'BODY') {
@@ -152,6 +164,7 @@ export class GoofyEventEngine {
     // 3. Resolve sound & meme visual via Semantic Matcher (or fallback)
     let soundId: GoofySoundId =
       (mapping && mapping.soundId) ||
+      (seqDef && seqDef.defaultSoundId) ||
       (comboDef && comboDef.defaultSoundId) ||
       'CHAD_GONG';
     let memeDef: MemeVisualDefinition | null = null;
@@ -379,11 +392,23 @@ export class GoofyEventEngine {
   }
 
   /**
+   * Dispatches a multi-step temporal gesture sequence combo
+   */
+  dispatchSequenceTrigger(
+    sequence: GestureSequenceDefinition,
+    confidence = 0.98
+  ): UnifiedMemeEvent | null {
+    return this.dispatchActionTrigger(sequence.id, 'SEQUENCE', 'Both', confidence, {
+      isDynamic: true,
+    });
+  }
+
+  /**
    * Manual Preview: triggers sound and meme popup without treating it as an AI detection
    */
   previewAction(
     actionId: string,
-    source: 'BODY' | 'HAND' | 'DUAL_HAND',
+    source: 'BODY' | 'HAND' | 'DUAL_HAND' | 'SEQUENCE',
     soundOverride?: GoofySoundId,
     memeOverride?: string
   ): ActiveMemePopup {

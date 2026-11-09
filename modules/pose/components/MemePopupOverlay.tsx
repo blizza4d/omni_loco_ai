@@ -75,6 +75,8 @@ export function MemePopupOverlay({
           const isChaos = animStyle === 'CHAOS';
           const isRetro = animStyle === 'RETRO_ARCADE';
           const isMinimal = animStyle === 'MINIMAL';
+          const isCinematic = animStyle === 'CINEMATIC';
+          const isClean = animStyle === 'CLEAN';
           const isNoAnim = animStyle === 'NO_ANIMATION';
 
           let animClass = 'animate-meme-classic';
@@ -82,9 +84,11 @@ export function MemePopupOverlay({
           else if (isChaos) animClass = 'animate-meme-chaos';
           else if (isRetro) animClass = 'animate-meme-retro';
           else if (isMinimal) animClass = 'animate-meme-minimal';
+          else if (isCinematic) animClass = 'animate-meme-cinematic';
+          else if (isClean) animClass = 'animate-meme-clean';
           else if (isNoAnim) animClass = 'animate-none';
 
-          const rot = isMinimal || isNoAnim ? 0 : popup.rotationDeg;
+          const rot = isMinimal || isNoAnim || isCinematic || isClean ? 0 : popup.rotationDeg;
 
           return (
             <div
@@ -195,6 +199,14 @@ export function MemePopupOverlay({
                           'repeating-linear-gradient(0deg, rgba(0,0,0,0.8) 0px, rgba(0,0,0,0.8) 1px, transparent 1px, transparent 3px)',
                       }}
                     />
+                  )}
+
+                  {/* Cinematic Letterbox Bars */}
+                  {isCinematic && (
+                    <>
+                      <div className="absolute top-0 inset-x-0 h-4 bg-black pointer-events-none z-10 shadow-[0_4px_10px_rgba(0,0,0,0.8)]" />
+                      <div className="absolute bottom-0 inset-x-0 h-4 bg-black pointer-events-none z-10 shadow-[0_-4px_10px_rgba(0,0,0,0.8)]" />
+                    </>
                   )}
 
                   {/* Comic Gradient Vignette */}
@@ -325,6 +337,30 @@ export function MemePopupOverlay({
           }
         }
 
+        @keyframes memeCinematic {
+          0% {
+            opacity: 0;
+            transform: scale(1.12);
+            filter: blur(6px);
+          }
+          100% {
+            opacity: 1;
+            transform: scale(1);
+            filter: blur(0);
+          }
+        }
+
+        @keyframes memeClean {
+          0% {
+            opacity: 0;
+            transform: translateY(8px);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+
         .animate-meme-classic {
           animation: memeClassic 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
         }
@@ -345,12 +381,22 @@ export function MemePopupOverlay({
           animation: memeRetro 0.25s steps(4) forwards;
         }
 
+        .animate-meme-cinematic {
+          animation: memeCinematic 0.45s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        .animate-meme-clean {
+          animation: memeClean 0.20s ease-out forwards;
+        }
+
         @media (prefers-reduced-motion: reduce) {
           .animate-meme-classic,
           .animate-meme-explosive,
           .animate-meme-chaos,
           .animate-meme-minimal,
-          .animate-meme-retro {
+          .animate-meme-retro,
+          .animate-meme-cinematic,
+          .animate-meme-clean {
             animation: none !important;
             opacity: 1 !important;
           }

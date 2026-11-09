@@ -319,9 +319,66 @@ export class GoofyHandClassifier {
     // STATIC GESTURES EVALUATION (Strict Mutual Exclusivity)
     // ─────────────────────────────────────────────────────────────
 
-    // 1. PINCH
+    // 1. OK GESTURE (Thumb & Index touch forming circular loop with index tip curled down, middle, ring & pinky extended straight)
+    if (
+      normalizedPinchDist < 0.32 &&
+      middleState.isExtended &&
+      ringState.isExtended &&
+      pinkyState.isExtended &&
+      indexTip.y > indexPIP.y + 0.01
+    ) {
+      candidates.push({
+        gesture: 'OK_GESTURE',
+        score: Math.min(0.99, 0.95 + (0.32 - normalizedPinchDist)),
+      });
+    }
+
+    // 2. FINGER HEART (Thumb crossed over index in heart pinch, other 3 fingers curled)
+    else if (
+      (normalizedPinchDist < 0.28 || this.dist3D(thumbTip, indexDIP) / palmScale < 0.28) &&
+      middleState.isCurled &&
+      ringState.isCurled &&
+      pinkyState.isCurled &&
+      !indexState.isExtended
+    ) {
+      candidates.push({
+        gesture: 'FINGER_HEART',
+        score: 0.95,
+      });
+    }
+
+    // 3. ROCK SIGN / CORNA (Index & Pinky extended, middle & ring curled tightly)
+    else if (
+      indexState.isExtended &&
+      pinkyState.isExtended &&
+      middleState.isCurled &&
+      ringState.isCurled &&
+      !isPinching
+    ) {
+      candidates.push({
+        gesture: 'ROCK_SIGN',
+        score: 0.96,
+      });
+    }
+
+    // 4. CALL ME / SHAKA (Thumb & Pinky extended wide, index, middle, ring curled)
+    else if (
+      thumbExtended &&
+      pinkyState.isExtended &&
+      indexState.isCurled &&
+      middleState.isCurled &&
+      ringState.isCurled &&
+      !thumbPointingDown
+    ) {
+      candidates.push({
+        gesture: 'CALL_ME',
+        score: 0.96,
+      });
+    }
+
+    // 5. PINCH
     // Index and thumb form pinch loop, index not curled into palm, and other fingers not all in fist
-    if (isPinching && curledFourCount < 4 && indexTipToMCP > 0.35) {
+    else if (isPinching && curledFourCount < 4 && indexTipToMCP > 0.35) {
       candidates.push({
         gesture: 'PINCH',
         score: Math.min(0.98, Math.max(0.80, 1.0 - (normalizedPinchDist - 0.1) * 2)),
@@ -403,7 +460,7 @@ export class GoofyHandClassifier {
       }
     }
 
-    // 7. THREE FINGERS
+    // 7. THREE FINGERS vs THREE FINGER SALUTE
     // Index, middle, and ring extended, pinky curled, not pinching
     else if (
       indexState.isExtended &&
@@ -412,10 +469,20 @@ export class GoofyHandClassifier {
       pinkyState.isCurled &&
       !isPinching
     ) {
-      candidates.push({
-        gesture: 'THREE_FINGERS',
-        score: 0.93,
-      });
+      const imDist = this.dist2D(indexTip, middleTip) / palmScale;
+      const mrDist = this.dist2D(middleTip, ringTip) / palmScale;
+      // Parallel alignment check: tips are close together (tight salute < 0.26 palm scale)
+      if (imDist < 0.26 && mrDist < 0.26) {
+        candidates.push({
+          gesture: 'THREE_FINGER_SALUTE',
+          score: 0.95,
+        });
+      } else {
+        candidates.push({
+          gesture: 'THREE_FINGERS',
+          score: 0.93,
+        });
+      }
     }
 
     // 8. FOUR FINGERS
@@ -866,6 +933,29 @@ export function detectDualHandCombo(
   const isOpen = (g: GoofyHandGestureType) => g === 'OPEN_PALM' || g === 'FIVE_FINGERS';
   if (isOpen(leftGesture) && isOpen(rightGesture)) {
     return { combo: 'BOTH_HANDS_OPEN', confidence: 0.95 };
+  }
+
+  // 12. DOUBLE_ROCK (Both hands showing Rock horns)
+  if (leftGesture === 'ROCK_SIGN' && rightGesture === 'ROCK_SIGN') {
+    return { combo: 'DOUBLE_ROCK', confidence: 0.98 };
+  }
+
+  // 13. DOUBLE_CALL_ME (Both hands showing Call Me Shaka)
+  if (leftGesture === 'CALL_ME' && rightGesture === 'CALL_ME') {
+    return { combo: 'DOUBLE_CALL_ME', confidence: 0.98 };
+  }
+
+  // 14. DOUBLE_OK (Both hands showing OK gesture)
+  if (leftGesture === 'OK_GESTURE' && rightGesture === 'OK_GESTURE') {
+    return { combo: 'DOUBLE_OK', confidence: 0.98 };
+  }
+
+  // 15. HEART_AND_PEACE (One hand Finger Heart, other hand Peace Sign)
+  if (
+    (leftGesture === 'FINGER_HEART' && rightGesture === 'PEACE_SIGN') ||
+    (leftGesture === 'PEACE_SIGN' && rightGesture === 'FINGER_HEART')
+  ) {
+    return { combo: 'HEART_AND_PEACE', confidence: 0.97 };
   }
 
   return { combo: null, confidence: 0 };

@@ -30,6 +30,9 @@ import {
   SEMANTIC_MEME_CATEGORIES,
   BUILTIN_MEME_PRESETS,
   GOOFY_ACTION_RECOMMENDED_MEMES,
+  GestureSequenceDefinition,
+  BUILTIN_GESTURE_SEQUENCES,
+  GoofyGestureSequenceId,
 } from '@/modules/pose/goofy-types';
 import {
   GoofyHandClassifier,
@@ -37,6 +40,7 @@ import {
   GoofyDualHandStateMachine,
   detectDualHandCombo,
 } from '@/modules/pose/goofy-hand-classifier';
+import { GoofySequenceEngine } from '@/modules/pose/goofy-sequence-engine';
 import {
   runComprehensiveGestureBenchmark,
   runFullDatasetEvaluation,
@@ -129,7 +133,9 @@ export default function GoofyModePage() {
     return DEFAULT_GOOFY_CONFIG;
   });
 
-  const [activeTab, setActiveTab] = useState<'HANDS' | 'COMBOS' | 'MEMES' | 'TESTBENCH'>('HANDS');
+  const [activeTab, setActiveTab] = useState<'HANDS' | 'COMBOS' | 'SEQUENCES' | 'CREATOR' | 'MEMES' | 'TESTBENCH'>('HANDS');
+  const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
+  const [sequenceProgress, setSequenceProgress] = useState<{ id: string; pct: number } | null>(null);
   const [syntheticMode, setSyntheticMode] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [showFingertipMarkers, setShowFingertipMarkers] = useState(true);
@@ -205,6 +211,17 @@ export default function GoofyModePage() {
   const [creatorTargetAction, setCreatorTargetAction] = useState<string | null>(null);
   const [assignModalMeme, setAssignModalMeme] = useState<MemeVisualDefinition | null>(null);
 
+  // Custom Reaction & Sequence Creator Studio State (V6)
+  const [creatorStep1, setCreatorStep1] = useState<GoofyHandGestureType>('PEACE_SIGN');
+  const [creatorStep2, setCreatorStep2] = useState<GoofyHandGestureType>('THUMBS_UP');
+  const [creatorLabel, setCreatorLabel] = useState<string>('PEACE TO MAXIMUM AURA');
+  const [creatorCaption, setCreatorCaption] = useState<string>('LEVEL UP // PEAK FICTION');
+  const [creatorMemeId, setCreatorMemeId] = useState<string>('REAL_MEME_GIGACHAD');
+  const [creatorSoundId, setCreatorSoundId] = useState<GoofySoundId>('CHAD_GONG');
+  const [creatorAnimStyle, setCreatorAnimStyle] = useState<PopupAnimationStyle>('CINEMATIC');
+  const [creatorDuration, setCreatorDuration] = useState<number>(2000);
+  const [creatorSavedSuccess, setCreatorSavedSuccess] = useState<boolean>(false);
+
   // System states
   const [audioUnlocked, setAudioUnlocked] = useState(false);
   const [shakeActive, setShakeActive] = useState(false);
@@ -252,6 +269,14 @@ export default function GoofyModePage() {
   const eventEngineRef = useRef<GoofyEventEngine>(
     new GoofyEventEngine(config, audioEngineRef.current, visualFxRef.current)
   );
+  const sequenceEngineRef = useRef<GoofySequenceEngine>(
+    new GoofySequenceEngine(config.customSequences || [], config.sequenceCooldownMs || 1200)
+  );
+
+  useEffect(() => {
+    sequenceEngineRef.current.updateSequences(config.customSequences || []);
+    sequenceEngineRef.current.setCooldown(config.sequenceCooldownMs || 1200);
+  }, [config.customSequences, config.sequenceCooldownMs]);
 
   const leftHandLandmarksRef = useRef<Landmark3D[] | null>(null);
   const rightHandLandmarksRef = useRef<Landmark3D[] | null>(null);
@@ -878,6 +903,29 @@ export default function GoofyModePage() {
 
         // If a dual-hand combo is triggered, suppress individual single-hand triggers for this tick
         if (!dualComboTriggered) {
+          const candidateSeqGesture =
+            leftSM.triggered && leftSM.gesture
+              ? leftSM.gesture
+              : rightSM.triggered && rightSM.gesture
+              ? rightSM.gesture
+              : null;
+
+          if (candidateSeqGesture) {
+            const seqRes = sequenceEngineRef.current.processGesture(candidateSeqGesture, now);
+            if (seqRes.triggered && seqRes.sequence) {
+              eventEngineRef.current.dispatchSequenceTrigger(seqRes.sequence);
+              unlockAchievement('GOOFY_DUAL_COMBO');
+              setSequenceProgress(null);
+            } else if (seqRes.progressPercent > 0) {
+              setSequenceProgress({
+                id: seqRes.sequence?.id || 'ACTIVE_SEQUENCE',
+                pct: seqRes.progressPercent,
+              });
+            } else {
+              setSequenceProgress(null);
+            }
+          }
+
           if (leftSM.triggered && leftSM.gesture) {
             eventEngineRef.current.dispatchActionTrigger(
               leftSM.gesture,
@@ -997,6 +1045,30 @@ export default function GoofyModePage() {
     return [...customMemes, ...DEFAULT_MEME_LIBRARY];
   }, [customMemes]);
 
+  // Demo Mode Showcase Loop (V6)
+  useEffect(() => {
+    if (!isDemoMode) return;
+    const demoActions: { id: string; source: 'HAND' | 'DUAL_HAND' | 'SEQUENCE' }[] = [
+      { id: 'PEACE_SIGN', source: 'HAND' },
+      { id: 'ROCK_SIGN', source: 'HAND' },
+      { id: 'OK_GESTURE', source: 'HAND' },
+      { id: 'DOUBLE_PEACE', source: 'DUAL_HAND' },
+      { id: 'DOUBLE_ROCK', source: 'DUAL_HAND' },
+      { id: 'FINGER_HEART', source: 'HAND' },
+      { id: 'SEQ_PEACE_TO_THUMBS', source: 'SEQUENCE' },
+      { id: 'CALL_ME', source: 'HAND' },
+      { id: 'THREE_FINGER_SALUTE', source: 'HAND' },
+      { id: 'PERFECT_TEN', source: 'DUAL_HAND' },
+    ];
+    let idx = 0;
+    const interval = setInterval(() => {
+      const item = demoActions[idx % demoActions.length];
+      eventEngineRef.current.previewAction(item.id, item.source);
+      idx++;
+    }, 3200);
+    return () => clearInterval(interval);
+  }, [isDemoMode]);
+
   // Star / Favorite toggle
   const toggleFavoriteMeme = (memeId: string) => {
     setConfig((prev) => {
@@ -1016,10 +1088,68 @@ export default function GoofyModePage() {
       activePresetId: presetId,
       actionMemeMappings: {
         ...prev.actionMemeMappings,
-        ...preset.actionMemeMappings,
+        ...(preset.actionMemeMappings as Record<string, string>),
       },
       popupAnimationStyle: preset.animationStyle || prev.popupAnimationStyle,
     }));
+  };
+
+  // Export custom memes, sequence definitions & mappings to JSON
+  const handleExportLibrary = () => {
+    const exportData = {
+      version: '6.0',
+      timestamp: Date.now(),
+      customMemes,
+      customSequences: config.customSequences || [],
+      actionMemeMappings: config.actionMemeMappings || {},
+      actionCustomCaptions: config.actionCustomCaptions || {},
+    };
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `omni-goofy-library-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Import custom library from JSON
+  const handleImportLibrary = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      if (parsed.customMemes && Array.isArray(parsed.customMemes)) {
+        for (const m of parsed.customMemes) {
+          await saveCustomMemeDefinitionToDB(m);
+        }
+        setCustomMemes((prev) => {
+          const prevMap = new Map(prev.map((m) => [m.id, m]));
+          for (const m of parsed.customMemes) {
+            prevMap.set(m.id, m);
+          }
+          return Array.from(prevMap.values());
+        });
+      }
+      setConfig((prev) => ({
+        ...prev,
+        customSequences: [
+          ...(prev.customSequences || []),
+          ...(parsed.customSequences || []),
+        ],
+        actionMemeMappings: {
+          ...prev.actionMemeMappings,
+          ...(parsed.actionMemeMappings || {}),
+        },
+        actionCustomCaptions: {
+          ...prev.actionCustomCaptions,
+          ...(parsed.actionCustomCaptions || {}),
+        },
+      }));
+    } catch (err) {
+      console.error('Failed to import JSON library:', err);
+    }
   };
 
   // Random Dice Roll Preview
@@ -1051,6 +1181,62 @@ export default function GoofyModePage() {
         [actionId]: memeId,
       },
     }));
+  };
+
+  // Handle Save Custom Sequence (V6 Creator)
+  const handleSaveCustomSequence = () => {
+    if (!creatorLabel.trim()) return;
+    const seqId = `SEQ_CUSTOM_${Date.now()}` as GoofyGestureSequenceId;
+    const newSeq: GestureSequenceDefinition = {
+      id: seqId,
+      label: creatorLabel.trim().toUpperCase(),
+      description: creatorCaption.trim() || 'Custom Temporal Gesture Sequence',
+      steps: [creatorStep1, creatorStep2],
+      maxWindowMs: creatorDuration,
+      defaultMemeId: creatorMemeId,
+      defaultSoundId: creatorSoundId,
+      defaultCaption: creatorCaption.trim() || creatorLabel.trim().toUpperCase(),
+      icon: '⚡',
+      isCustom: true,
+      animationStyle: creatorAnimStyle,
+    };
+
+    setConfig((prev) => {
+      const existing = prev.customSequences || [];
+      return {
+        ...prev,
+        customSequences: [...existing, newSeq],
+        actionMemeMappings: {
+          ...prev.actionMemeMappings,
+          [seqId]: creatorMemeId,
+        },
+        actionCustomCaptions: {
+          ...prev.actionCustomCaptions,
+          [seqId]: creatorCaption.trim(),
+        },
+      };
+    });
+
+    setCreatorSavedSuccess(true);
+    setTimeout(() => setCreatorSavedSuccess(false), 2500);
+  };
+
+  // Delete a custom sequence
+  const handleDeleteCustomSequence = (seqId: string) => {
+    setConfig((prev) => ({
+      ...prev,
+      customSequences: (prev.customSequences || []).filter((s) => s.id !== seqId),
+    }));
+  };
+
+  // Preview custom sequence
+  const handlePreviewCustomSequence = () => {
+    eventEngineRef.current.previewAction(
+      'SEQ_PEACE_TO_THUMBS',
+      'SEQUENCE',
+      creatorSoundId,
+      creatorMemeId
+    );
   };
 
   // Callback when user creates a new meme in Canvas Creator
@@ -1279,15 +1465,29 @@ export default function GoofyModePage() {
               </Link>
               <StampBadge label="HAND-ONLY" variant="sage" />
               <h1 className="text-xl md:text-2xl font-black uppercase tracking-wider text-charcoal-dark">
-                GOOFY MODEL V3
+                GOOFY MODEL V6
               </h1>
             </div>
             <p className="text-xs text-ink-muted">
-              HAND-ONLY GESTURE RECOGNITION // AUTOMATIC MEME REACTION ENGINE // DUAL COMBOS
+              HAND-ONLY GESTURE INTELLIGENCE // MEME REACTION ENGINE // TEMPORAL SEQUENCES // AURA TWIST
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsDemoMode(!isDemoMode)}
+              className={`gap-1.5 text-xs transition-all duration-150 active:scale-95 cursor-pointer ${
+                isDemoMode
+                  ? 'bg-gradient-to-r from-cyan-400 to-amber-400 text-charcoal-dark font-black shadow-lg shadow-cyan-400/30 ring-2 ring-cyan-500'
+                  : ''
+              }`}
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+              <span>{isDemoMode ? 'EXIT DEMO MODE' : 'DEMO MODE'}</span>
+            </Button>
+
             <Button
               variant="outline"
               size="sm"
@@ -1444,6 +1644,14 @@ export default function GoofyModePage() {
                   </div>
                 </div>
 
+                {/* Demo Mode Active Banner */}
+                {isDemoMode && (
+                  <div className="absolute top-14 left-1/2 -translate-x-1/2 z-20 px-3.5 py-1.5 bg-gradient-to-r from-amber-500/90 to-cyan-500/90 border border-amber-300 rounded-full backdrop-blur-md flex items-center gap-2 text-charcoal-dark text-xs font-black tracking-wider animate-pulse shadow-lg pointer-events-none">
+                    <Sparkles className="w-4 h-4 text-charcoal-dark" />
+                    <span>DEMO SHOWCASE ACTIVE // AUTO-CYCLING MEME REACTIONS</span>
+                  </div>
+                )}
+
                 {/* Tracking Loss Warning Banner when Streaming with No Hands in View */}
                 {isStreaming && handCount === 0 && (
                   <div className="absolute top-14 left-1/2 -translate-x-1/2 z-20 px-3.5 py-1.5 bg-amber-500/20 border border-amber-400/70 rounded-full backdrop-blur-md flex items-center gap-2 text-amber-300 text-xs font-black tracking-wider animate-pulse shadow-lg pointer-events-none">
@@ -1477,6 +1685,25 @@ export default function GoofyModePage() {
                   <p className="text-[11px] font-bold text-paper-cream tracking-wide uppercase truncate">
                     {comicCaption}
                   </p>
+
+                  {/* Sequence Progress Bar */}
+                  {sequenceProgress && (
+                    <div className="pt-1.5 border-t border-charcoal-soft/40 space-y-1">
+                      <div className="flex items-center justify-between text-[10px] font-black uppercase text-amber-400">
+                        <span className="flex items-center gap-1">
+                          <Zap className="w-3 h-3 text-amber-400 animate-bounce" />
+                          SEQUENCE COMBO IN PROGRESS: {sequenceProgress.id}
+                        </span>
+                        <span>{Math.round(sequenceProgress.pct)}%</span>
+                      </div>
+                      <div className="w-full bg-black/60 h-2 rounded-full overflow-hidden border border-amber-400/50">
+                        <div
+                          className="bg-gradient-to-r from-amber-400 via-rose-500 to-purple-500 h-full transition-all duration-150"
+                          style={{ width: `${sequenceProgress.pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -1882,6 +2109,8 @@ export default function GoofyModePage() {
                     <option value="EXPLOSIVE">EXPLOSIVE (ZOOM)</option>
                     <option value="RETRO_ARCADE">RETRO ARCADE (CRT)</option>
                     <option value="CHAOS">CHAOS (COSMIC ROTATION)</option>
+                    <option value="CINEMATIC">CINEMATIC (LETTERBOX)</option>
+                    <option value="CLEAN">CLEAN (STUDIO MINIMAL)</option>
                     <option value="MINIMAL">MINIMAL (FADE)</option>
                     <option value="NO_ANIMATION">INSTANT POP</option>
                   </select>
@@ -2028,60 +2257,82 @@ export default function GoofyModePage() {
               </div>
             </div>
 
-            {/* TAB SELECTOR: HAND GESTURES vs DUAL COMBOS vs MEME LIBRARY vs TEST BENCH */}
-            <div className="flex items-center border-b-2 border-charcoal-soft gap-2 flex-wrap">
+            {/* TAB SELECTOR: HAND GESTURES vs DUAL COMBOS vs SEQUENCES vs CREATOR vs MEME LIBRARY vs TEST BENCH */}
+            <div className="flex items-center border-b-2 border-charcoal-soft gap-1.5 flex-wrap">
               <button
                 onClick={() => setActiveTab('HANDS')}
-                className={`px-3 py-2 text-xs font-extrabold uppercase border-b-2 transition-colors ${
+                className={`px-2.5 py-1.5 text-[11px] font-extrabold uppercase border-b-2 transition-colors ${
                   activeTab === 'HANDS'
-                    ? 'border-cyan-500 text-charcoal-dark'
+                    ? 'border-cyan-500 text-charcoal-dark font-black'
                     : 'border-transparent text-ink-muted hover:text-charcoal-dark'
                 }`}
               >
-                HAND GESTURES (12)
+                HANDS (17)
               </button>
 
               <button
                 onClick={() => setActiveTab('COMBOS')}
-                className={`px-3 py-2 text-xs font-extrabold uppercase border-b-2 transition-colors ${
+                className={`px-2.5 py-1.5 text-[11px] font-extrabold uppercase border-b-2 transition-colors ${
                   activeTab === 'COMBOS'
-                    ? 'border-purple-600 text-charcoal-dark'
+                    ? 'border-purple-600 text-charcoal-dark font-black'
                     : 'border-transparent text-ink-muted hover:text-charcoal-dark'
                 }`}
               >
-                DUAL COMBOS (11)
+                COMBOS (15)
               </button>
 
               <button
-                onClick={() => setActiveTab('MEMES')}
-                className={`px-3 py-2 text-xs font-extrabold uppercase border-b-2 transition-colors ${
-                  activeTab === 'MEMES'
-                    ? 'border-emerald-500 text-charcoal-dark'
-                    : 'border-transparent text-ink-muted hover:text-charcoal-dark'
-                }`}
-              >
-                MEME LIBRARY ({DEFAULT_MEME_LIBRARY.length + customMemes.length})
-              </button>
-
-              <button
-                onClick={() => setActiveTab('TESTBENCH')}
-                className={`px-3 py-2 text-xs font-extrabold uppercase border-b-2 transition-colors ${
-                  activeTab === 'TESTBENCH'
+                onClick={() => setActiveTab('SEQUENCES')}
+                className={`px-2.5 py-1.5 text-[11px] font-extrabold uppercase border-b-2 transition-colors ${
+                  activeTab === 'SEQUENCES'
                     ? 'border-amber-500 text-charcoal-dark font-black'
                     : 'border-transparent text-ink-muted hover:text-charcoal-dark'
                 }`}
               >
-                TEST BENCH (12)
+                SEQUENCES ({BUILTIN_GESTURE_SEQUENCES.length + (config.customSequences?.length || 0)})
+              </button>
+
+              <button
+                onClick={() => setActiveTab('CREATOR')}
+                className={`px-2.5 py-1.5 text-[11px] font-extrabold uppercase border-b-2 transition-colors ${
+                  activeTab === 'CREATOR'
+                    ? 'border-rose-500 text-charcoal-dark font-black'
+                    : 'border-transparent text-ink-muted hover:text-charcoal-dark'
+                }`}
+              >
+                CREATOR
+              </button>
+
+              <button
+                onClick={() => setActiveTab('MEMES')}
+                className={`px-2.5 py-1.5 text-[11px] font-extrabold uppercase border-b-2 transition-colors ${
+                  activeTab === 'MEMES'
+                    ? 'border-emerald-500 text-charcoal-dark font-black'
+                    : 'border-transparent text-ink-muted hover:text-charcoal-dark'
+                }`}
+              >
+                MEMES ({DEFAULT_MEME_LIBRARY.length + customMemes.length})
+              </button>
+
+              <button
+                onClick={() => setActiveTab('TESTBENCH')}
+                className={`px-2.5 py-1.5 text-[11px] font-extrabold uppercase border-b-2 transition-colors ${
+                  activeTab === 'TESTBENCH'
+                    ? 'border-indigo-600 text-charcoal-dark font-black'
+                    : 'border-transparent text-ink-muted hover:text-charcoal-dark'
+                }`}
+              >
+                TEST BENCH (17)
               </button>
             </div>
 
-            {/* TAB 1: 12 HAND GESTURES */}
+            {/* TAB 1: 17 HAND GESTURES */}
             {activeTab === 'HANDS' && (
               <div className="space-y-2.5 max-h-[620px] overflow-y-auto pr-1">
                 {/* Accordion Controls Bar */}
                 <div className="flex items-center justify-between px-3 py-1.5 bg-paper-dark/20 border border-charcoal-soft/20 rounded text-[11px] font-mono">
                   <span className="font-bold text-ink-muted uppercase">
-                    12 GESTURES ({expandedGestures.size} EXPANDED)
+                    17 GESTURES ({expandedGestures.size} EXPANDED)
                   </span>
                   <div className="flex items-center gap-2">
                     <button
@@ -2114,6 +2365,11 @@ export default function GoofyModePage() {
                     'FIVE_FINGERS',
                     'SWIPE_LEFT',
                     'SWIPE_RIGHT',
+                    'ROCK_SIGN',
+                    'OK_GESTURE',
+                    'CALL_ME',
+                    'FINGER_HEART',
+                    'THREE_FINGER_SALUTE',
                   ] as GoofyHandGestureType[]
                 ).map((gestureKey) => {
                   const meta = GOOFY_HAND_METADATA[gestureKey];
@@ -2387,13 +2643,13 @@ export default function GoofyModePage() {
               </div>
             )}
 
-            {/* TAB 2: 11 DUAL-HAND COMBOS */}
+            {/* TAB 2: 15 DUAL-HAND COMBOS */}
             {activeTab === 'COMBOS' && (
               <div className="space-y-2.5 max-h-[620px] overflow-y-auto pr-1">
                 {/* Accordion Controls Bar */}
                 <div className="flex items-center justify-between px-3 py-1.5 bg-paper-dark/20 border border-charcoal-soft/20 rounded text-[11px] font-mono">
                   <span className="font-bold text-ink-muted uppercase">
-                    11 DUAL COMBOS ({expandedCombos.size} EXPANDED)
+                    15 DUAL COMBOS ({expandedCombos.size} EXPANDED)
                   </span>
                   <div className="flex items-center gap-2">
                     <button
@@ -2425,6 +2681,10 @@ export default function GoofyModePage() {
                     'SECRET_HEART_HANDS',
                     'SECRET_MATRIX_DODGE',
                     'SECRET_YOU_ARE_BREATHTAKING',
+                    'DOUBLE_ROCK',
+                    'DOUBLE_CALL_ME',
+                    'DOUBLE_OK',
+                    'HEART_AND_PEACE',
                   ] as GoofyDualHandComboId[]
                 ).map((comboKey) => {
                   const meta = GOOFY_DUAL_COMBO_DEFINITIONS[comboKey];
@@ -2714,7 +2974,443 @@ export default function GoofyModePage() {
               </div>
             )}
 
-            {/* TAB 3: MEME DISCOVERY LIBRARY */}
+            {/* TAB 3: TEMPORAL GESTURE SEQUENCES (V6) */}
+            {activeTab === 'SEQUENCES' && (
+              <div className="space-y-3 max-h-[620px] overflow-y-auto pr-1">
+                {/* Sequences Explainer Header */}
+                <div className="p-3 bg-gradient-to-r from-amber-500/15 via-rose-500/10 to-purple-500/15 border-2 border-amber-400 rounded-tactile space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Zap className="w-4 h-4 text-amber-600 animate-pulse" />
+                      <h4 className="text-xs font-black uppercase text-charcoal-dark tracking-wider">
+                        TEMPORAL GESTURE SEQUENCE COMBOS
+                      </h4>
+                    </div>
+                    <span className="text-[10px] bg-amber-400 text-charcoal-dark px-2 py-0.5 rounded font-black">
+                      V6 TEMPORAL ENGINE
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-charcoal-dark font-mono">
+                    Perform gestures in sequence within the time window to trigger epic high-tier meme reactions!
+                    The engine tracks transitions, timing thresholds, and cooldowns.
+                  </p>
+                  <div className="flex items-center gap-2 pt-1">
+                    <Button
+                      size="sm"
+                      onClick={() => setActiveTab('CREATOR')}
+                      className="bg-amber-500 hover:bg-amber-600 text-charcoal-dark font-black text-xs gap-1 h-7 cursor-pointer"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>CREATE CUSTOM SEQUENCE COMBO</span>
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Built-in & Custom Sequences List */}
+                <div className="space-y-2.5">
+                  {[...BUILTIN_GESTURE_SEQUENCES, ...(config.customSequences || [])].map((seq) => {
+                    const assignedMemeId =
+                      config.actionMemeMappings[seq.id] || seq.defaultMemeId;
+                    const memeDef =
+                      getMemeById(assignedMemeId, customMemes) ||
+                      getDefaultMemeForAction('OPEN_PALM');
+                    const isCustom = seq.id.startsWith('SEQ_CUSTOM_');
+
+                    return (
+                      <div
+                        key={seq.id}
+                        className="border-2 border-charcoal-soft hover:border-charcoal-dark rounded-tactile p-3 bg-paper-cream shadow-tactile-sm space-y-2.5 transition-all"
+                      >
+                        {/* Header Row */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-base">⚡</span>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-extrabold text-xs uppercase text-charcoal-dark">
+                                  {seq.label}
+                                </span>
+                                {isCustom ? (
+                                  <span className="px-1.5 py-0.2 bg-emerald-100 text-emerald-800 border border-emerald-300 rounded text-[8px] font-black uppercase">
+                                    CUSTOM
+                                  </span>
+                                ) : (
+                                  <span className="px-1.5 py-0.2 bg-amber-200 text-amber-900 rounded text-[8px] font-black uppercase">
+                                    BUILT-IN
+                                  </span>
+                                )}
+                                {seq.animationStyle && (
+                                  <span className="px-1.5 py-0.2 bg-purple-100 text-purple-900 rounded text-[8px] font-black uppercase">
+                                    {seq.animationStyle}
+                                  </span>
+                                )}
+                              </div>
+                              <span className="text-[10px] text-ink-muted truncate block">
+                                {seq.description}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {isCustom && (
+                              <button
+                                onClick={() => handleDeleteCustomSequence(seq.id)}
+                                className="text-rose-500 hover:text-rose-700 p-1 transition-colors"
+                                title="Delete custom sequence"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Sequence Steps Progression Visualizer */}
+                        <div className="flex items-center gap-1.5 p-2 bg-paper-dark/20 rounded text-[11px] font-mono flex-wrap">
+                          <span className="font-bold text-ink-muted text-[10px] uppercase">STEPS:</span>
+                          {seq.steps.map((st, idx) => (
+                            <React.Fragment key={idx}>
+                              {idx > 0 && <span className="text-amber-600 font-black">&rarr;</span>}
+                              <span className="px-2 py-0.5 bg-paper-cream border border-charcoal-soft/30 rounded font-black text-charcoal-dark flex items-center gap-1">
+                                <span>{GOOFY_HAND_METADATA[st]?.icon || '✋'}</span>
+                                <span>{GOOFY_HAND_METADATA[st]?.label || st}</span>
+                              </span>
+                            </React.Fragment>
+                          ))}
+                          <span className="ml-auto text-[9px] text-ink-muted font-bold">
+                            WINDOW: {seq.maxWindowMs}ms
+                          </span>
+                        </div>
+
+                        {/* Sound & Meme Details & Quick Test */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-charcoal-soft/15 text-xs">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="px-2 py-0.5 rounded bg-paper-dark/30 text-charcoal-dark text-[10px] font-mono font-bold flex items-center gap-1">
+                              <Music className="w-3 h-3 text-cyan-600" />
+                              <span>{seq.defaultSoundId}</span>
+                            </span>
+                            <span className="px-2 py-0.5 rounded bg-paper-dark/30 text-charcoal-dark text-[10px] font-mono font-bold flex items-center gap-1">
+                              <span>🖼️</span>
+                              <span className="truncate max-w-[140px]">{memeDef.title}</span>
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                audioEngineRef.current.playSound(seq.defaultSoundId, config.volume)
+                              }
+                              className="text-[10px] gap-1 p-1 h-6 cursor-pointer"
+                            >
+                              <Music className="w-3 h-3" />
+                              <span>AUDIO</span>
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                eventEngineRef.current.previewAction(
+                                  seq.id,
+                                  'SEQUENCE',
+                                  seq.defaultSoundId,
+                                  seq.defaultMemeId
+                                )
+                              }
+                              className="text-[10px] gap-1 p-1 h-6 text-amber-700 font-bold hover:bg-amber-100 cursor-pointer"
+                            >
+                              <Sparkles className="w-3 h-3 text-amber-600" />
+                              <span>TEST SEQUENCE LIVE</span>
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 4: GOOFY CREATOR STUDIO (V6) */}
+            {activeTab === 'CREATOR' && (
+              <div className="space-y-3.5 max-h-[620px] overflow-y-auto pr-1">
+                {/* Header Banner */}
+                <div className="p-3 bg-gradient-to-r from-rose-500/15 via-purple-500/10 to-cyan-500/15 border-2 border-rose-400 rounded-tactile space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-rose-600" />
+                      <h4 className="text-xs font-black uppercase text-charcoal-dark tracking-wider">
+                        GOOFY CREATOR STUDIO
+                      </h4>
+                    </div>
+                    <span className="text-[10px] bg-rose-500 text-white px-2 py-0.5 rounded font-black">
+                      V6 WORKSPACE
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-charcoal-dark font-mono">
+                    Forge your own temporal multi-step gesture combos, meme reaction bindings, audio stings, and visual presentation styles.
+                  </p>
+                </div>
+
+                {/* Creator Studio Form Card */}
+                <div className="border-2 border-charcoal-soft rounded-tactile p-3.5 bg-paper-cream shadow-tactile-sm space-y-3">
+                  <h5 className="text-xs font-black uppercase text-charcoal-dark flex items-center gap-1.5 border-b border-charcoal-soft/20 pb-1.5">
+                    <Wand2 className="w-3.5 h-3.5 text-rose-600" />
+                    <span>SEQUENCE COMBO DESIGNER</span>
+                  </h5>
+
+                  {/* Combo Name & Comic Caption */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase text-ink-muted block">
+                        COMBO NAME
+                      </label>
+                      <input
+                        type="text"
+                        value={creatorLabel}
+                        onChange={(e) => setCreatorLabel(e.target.value)}
+                        placeholder="e.g. ULTIMATE DRIP"
+                        className="w-full p-1.5 border border-charcoal-soft rounded bg-paper-cream text-xs font-mono font-bold"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase text-ink-muted block">
+                        COMIC CAPTION
+                      </label>
+                      <input
+                        type="text"
+                        value={creatorCaption}
+                        onChange={(e) => setCreatorCaption(e.target.value)}
+                        placeholder="e.g. LEVEL 999 REACHED"
+                        className="w-full p-1.5 border border-charcoal-soft rounded bg-paper-cream text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Step 1 & Step 2 Gestures */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase text-ink-muted block">
+                        STEP 1 GESTURE (TRIGGER)
+                      </label>
+                      <select
+                        value={creatorStep1}
+                        onChange={(e) => setCreatorStep1(e.target.value as GoofyHandGestureType)}
+                        className="w-full p-1.5 border border-charcoal-soft rounded bg-paper-cream text-xs font-mono font-bold"
+                      >
+                        {(
+                          [
+                            'OPEN_PALM',
+                            'CLOSED_FIST',
+                            'THUMBS_UP',
+                            'THUMBS_DOWN',
+                            'PEACE_SIGN',
+                            'POINTING',
+                            'PINCH',
+                            'THREE_FINGERS',
+                            'FOUR_FINGERS',
+                            'FIVE_FINGERS',
+                            'SWIPE_LEFT',
+                            'SWIPE_RIGHT',
+                            'ROCK_SIGN',
+                            'OK_GESTURE',
+                            'CALL_ME',
+                            'FINGER_HEART',
+                            'THREE_FINGER_SALUTE',
+                          ] as GoofyHandGestureType[]
+                        ).map((g) => (
+                          <option key={g} value={g}>
+                            {GOOFY_HAND_METADATA[g]?.icon} {GOOFY_HAND_METADATA[g]?.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase text-ink-muted block">
+                        STEP 2 GESTURE (FOLLOW-UP)
+                      </label>
+                      <select
+                        value={creatorStep2}
+                        onChange={(e) => setCreatorStep2(e.target.value as GoofyHandGestureType)}
+                        className="w-full p-1.5 border border-charcoal-soft rounded bg-paper-cream text-xs font-mono font-bold"
+                      >
+                        {(
+                          [
+                            'OPEN_PALM',
+                            'CLOSED_FIST',
+                            'THUMBS_UP',
+                            'THUMBS_DOWN',
+                            'PEACE_SIGN',
+                            'POINTING',
+                            'PINCH',
+                            'THREE_FINGERS',
+                            'FOUR_FINGERS',
+                            'FIVE_FINGERS',
+                            'SWIPE_LEFT',
+                            'SWIPE_RIGHT',
+                            'ROCK_SIGN',
+                            'OK_GESTURE',
+                            'CALL_ME',
+                            'FINGER_HEART',
+                            'THREE_FINGER_SALUTE',
+                          ] as GoofyHandGestureType[]
+                        ).map((g) => (
+                          <option key={g} value={g}>
+                            {GOOFY_HAND_METADATA[g]?.icon} {GOOFY_HAND_METADATA[g]?.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Meme Selector & Sound Selector */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase text-ink-muted block">
+                        ASSIGNED MEME POP-UP
+                      </label>
+                      <select
+                        value={creatorMemeId}
+                        onChange={(e) => setCreatorMemeId(e.target.value)}
+                        className="w-full p-1.5 border border-charcoal-soft rounded bg-paper-cream text-xs font-mono font-bold"
+                      >
+                        {allMemes.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            🖼️ {m.title} ({m.category})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase text-ink-muted block">
+                        ASSIGNED SOUND EFFECT
+                      </label>
+                      <select
+                        value={creatorSoundId}
+                        onChange={(e) => setCreatorSoundId(e.target.value as GoofySoundId)}
+                        className="w-full p-1.5 border border-charcoal-soft rounded bg-paper-cream text-xs font-mono font-bold"
+                      >
+                        {DEFAULT_SOUND_LIBRARY.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            🎵 {s.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Presentation Style & Window Duration */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase text-ink-muted block">
+                        PRESENTATION STYLE
+                      </label>
+                      <select
+                        value={creatorAnimStyle}
+                        onChange={(e) => setCreatorAnimStyle(e.target.value as PopupAnimationStyle)}
+                        className="w-full p-1.5 border border-charcoal-soft rounded bg-paper-cream text-xs font-mono font-bold"
+                      >
+                        <option value="CINEMATIC">CINEMATIC (LETTERBOX)</option>
+                        <option value="EXPLOSIVE">EXPLOSIVE (ZOOM)</option>
+                        <option value="RETRO_ARCADE">RETRO ARCADE (CRT)</option>
+                        <option value="CHAOS">CHAOS (COSMIC ROTATION)</option>
+                        <option value="CLEAN">CLEAN (STUDIO MINIMAL)</option>
+                        <option value="CLASSIC">CLASSIC (BOUNCE)</option>
+                        <option value="MINIMAL">MINIMAL (FADE)</option>
+                      </select>
+                    </div>
+
+                    <div className="space-y-1">
+                      <div className="flex justify-between">
+                        <label className="text-[10px] font-black uppercase text-ink-muted">
+                          MAX WINDOW DURATION
+                        </label>
+                        <span className="tabular-nums font-bold text-amber-600 text-xs">
+                          {creatorDuration}ms
+                        </span>
+                      </div>
+                      <input
+                        type="range"
+                        min="600"
+                        max="3500"
+                        step="100"
+                        value={creatorDuration}
+                        onChange={(e) => setCreatorDuration(parseInt(e.target.value, 10))}
+                        className="w-full accent-charcoal-soft h-1.5"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Feedback Notice */}
+                  {creatorSavedSuccess && (
+                    <div className="p-2 bg-emerald-100 border border-emerald-400 rounded text-emerald-800 text-xs font-bold flex items-center gap-1.5 animate-pulse">
+                      <Check className="w-4 h-4 text-emerald-700" />
+                      <span>CUSTOM SEQUENCE COMBO SAVED SUCCESSFULLY!</span>
+                    </div>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div className="flex items-center justify-end gap-2 pt-2 border-t border-charcoal-soft/20">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handlePreviewCustomSequence}
+                      className="text-xs font-bold gap-1.5 cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                      <span>LIVE PREVIEW</span>
+                    </Button>
+
+                    <Button
+                      size="sm"
+                      onClick={handleSaveCustomSequence}
+                      className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-black gap-1.5 cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>SAVE SEQUENCE COMBO</span>
+                    </Button>
+                  </div>
+                </div>
+
+                {/* Existing Custom Combos List */}
+                {(config.customSequences || []).length > 0 && (
+                  <div className="border border-charcoal-soft/30 rounded-tactile p-3 bg-paper-dark/15 space-y-2">
+                    <span className="text-xs font-black uppercase text-charcoal-dark block">
+                      YOUR CUSTOM SEQUENCE COMBOS ({(config.customSequences || []).length})
+                    </span>
+                    <div className="space-y-1.5">
+                      {(config.customSequences || []).map((cs) => (
+                        <div
+                          key={cs.id}
+                          className="p-2 bg-paper-cream border border-charcoal-soft/30 rounded flex items-center justify-between text-xs"
+                        >
+                          <div>
+                            <span className="font-extrabold uppercase text-charcoal-dark mr-2">
+                              {cs.label}
+                            </span>
+                            <span className="text-[10px] font-mono text-ink-muted">
+                              {cs.steps.join(' → ')} ({cs.maxWindowMs}ms)
+                            </span>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteCustomSequence(cs.id)}
+                            className="text-rose-500 hover:text-rose-700 p-1"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* TAB 5: MEME DISCOVERY LIBRARY */}
             {activeTab === 'MEMES' && (
               <div className="space-y-3 max-h-[620px] overflow-y-auto pr-1">
                 {/* 1. Presets Accordion */}
@@ -3136,8 +3832,8 @@ export default function GoofyModePage() {
                   </p>
                 </div>
 
-                {/* 12-Gesture Selector Pill Grid */}
-                <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
+                {/* 17-Gesture Selector Pill Grid */}
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-1.5">
                   {(
                     [
                       'THUMBS_UP',
@@ -3152,6 +3848,11 @@ export default function GoofyModePage() {
                       'FIVE_FINGERS',
                       'SWIPE_LEFT',
                       'SWIPE_RIGHT',
+                      'ROCK_SIGN',
+                      'OK_GESTURE',
+                      'CALL_ME',
+                      'FINGER_HEART',
+                      'THREE_FINGER_SALUTE',
                     ] as GoofyHandGestureType[]
                   ).map((g) => {
                     const meta = GOOFY_HAND_METADATA[g];
@@ -3234,6 +3935,11 @@ export default function GoofyModePage() {
                         {selectedTestGesture === 'FIVE_FINGERS' && 'All 5 digits extended radially wide (spread factor > 2.15 palm scale).'}
                         {selectedTestGesture === 'SWIPE_LEFT' && 'Deliberate lateral travel Δx < -0.15 over ≥ 80ms with horizontal velocity dominance.'}
                         {selectedTestGesture === 'SWIPE_RIGHT' && 'Deliberate lateral travel Δx > +0.15 over ≥ 80ms with horizontal velocity dominance.'}
+                        {selectedTestGesture === 'ROCK_SIGN' && 'Index and pinky extended upright; middle and ring curled into palm; thumb pinned across knuckles.'}
+                        {selectedTestGesture === 'OK_GESTURE' && 'Index tip curved downward touching thumb tip forming circular loop; middle, ring, pinky extended.'}
+                        {selectedTestGesture === 'CALL_ME' && 'Thumb and pinky extended horizontally/laterally outwards; index, middle, ring curled into palm.'}
+                        {selectedTestGesture === 'FINGER_HEART' && 'Thumb tip and index tip crossed forming miniature heart loop; middle, ring, pinky curled into palm.'}
+                        {selectedTestGesture === 'THREE_FINGER_SALUTE' && 'Index, middle, ring extended parallel upright (inter-finger dist < 0.26); pinky held by thumb.'}
                       </p>
                     </div>
 
@@ -3282,7 +3988,7 @@ export default function GoofyModePage() {
                       className="bg-cyan-600 hover:bg-cyan-700 text-white font-black text-xs gap-1.5 h-8"
                     >
                       <Zap className="w-3.5 h-3.5" />
-                      <span>{isBenchmarking ? 'EVALUATING...' : 'RUN 12-GESTURE BENCHMARK'}</span>
+                      <span>{isBenchmarking ? 'EVALUATING...' : 'RUN 17-GESTURE BENCHMARK'}</span>
                     </Button>
                   </div>
 

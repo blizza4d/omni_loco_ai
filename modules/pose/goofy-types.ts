@@ -29,7 +29,12 @@ export type GoofyHandGestureType =
   | 'FOUR_FINGERS'
   | 'FIVE_FINGERS'
   | 'SWIPE_LEFT'
-  | 'SWIPE_RIGHT';
+  | 'SWIPE_RIGHT'
+  | 'ROCK_SIGN'
+  | 'OK_GESTURE'
+  | 'CALL_ME'
+  | 'FINGER_HEART'
+  | 'THREE_FINGER_SALUTE';
 
 export type GoofyDualHandComboId =
   | 'DOUBLE_THUMBS_UP'
@@ -42,9 +47,25 @@ export type GoofyDualHandComboId =
   | 'ROCK_PAPER_SCISSORS'
   | 'SECRET_HEART_HANDS'
   | 'SECRET_MATRIX_DODGE'
-  | 'SECRET_YOU_ARE_BREATHTAKING';
+  | 'SECRET_YOU_ARE_BREATHTAKING'
+  | 'DOUBLE_ROCK'
+  | 'DOUBLE_CALL_ME'
+  | 'DOUBLE_OK'
+  | 'HEART_AND_PEACE';
 
-export type GoofyActionId = GoofyPoseType | GoofyHandGestureType | GoofyDualHandComboId;
+export type GoofyGestureSequenceId =
+  | 'SEQ_PEACE_TO_THUMBS'
+  | 'SEQ_FIST_TO_PALM'
+  | 'SEQ_POINT_TO_PEACE'
+  | 'SEQ_ROCK_TO_CALL'
+  | 'SEQ_OK_TO_HEART';
+
+export type GoofyActionId =
+  | GoofyPoseType
+  | GoofyHandGestureType
+  | GoofyDualHandComboId
+  | GoofyGestureSequenceId
+  | string;
 
 export type GoofySoundId =
   | 'AIR_HORN'
@@ -167,8 +188,11 @@ export type MemeCategory =
   | 'VICTORY_CELEBRATION'
   | 'SUSPICION_JUDGEMENT'
   | 'FAILURE_DISAPPOINTMENT'
+  | 'MAXIMUM_AURA'
+  | 'ABSOLUTE_CINEMA'
   | 'CHAOS_UNEXPECTED'
   | 'HAND_GESTURE_REACTION'
+  | 'RARE_REACTIONS'
   | 'SHOCK'
   | 'CONFIDENCE'
   | 'FAILURE'
@@ -197,8 +221,11 @@ export const SEMANTIC_MEME_CATEGORIES: SemanticCategoryMeta[] = [
   { id: 'VICTORY_CELEBRATION', label: 'Victory & Celebration', icon: '🏆', description: 'Absolute Cinema, Shaq shimmy, DiCaprio toast, party.' },
   { id: 'SUSPICION_JUDGEMENT', label: 'Suspicion & Judgement', icon: '🤨', description: 'The Rock eyebrow, side eye, Fry squint, Gus Fring.' },
   { id: 'FAILURE_DISAPPOINTMENT', label: 'Failure & Disappointment', icon: '💀', description: 'Emotional damage, mission failed, sad trombone.' },
+  { id: 'MAXIMUM_AURA', label: 'Maximum Aura', icon: '✨', description: 'GigaChad smirk, infinite aura, ultimate swagger.' },
+  { id: 'ABSOLUTE_CINEMA', label: 'Absolute Cinema', icon: '🎬', description: 'Martin Scorsese, standing ovation, peak fiction, masterclass.' },
   { id: 'CHAOS_UNEXPECTED', label: 'Chaos & Unexpected', icon: '🔥', description: 'Elmo fire, This is Fine, Disaster Girl, sudden madness.' },
   { id: 'HAND_GESTURE_REACTION', label: 'Funny Hand Gestures', icon: '🤏', description: 'Spiderman pointing, salt bae, khaby lame, hands.' },
+  { id: 'RARE_REACTIONS', label: 'Rare Secret Reactions', icon: '💎', description: 'Legendary reactions unlocked through secret combos & easter eggs.' },
 ];
 
 export type MemeRarity = 'COMMON' | 'UNCOMMON' | 'RARE' | 'LEGENDARY';
@@ -208,7 +235,9 @@ export type PopupAnimationStyle =
   | 'MINIMAL'
   | 'EXPLOSIVE'
   | 'RETRO_ARCADE'
+  | 'CINEMATIC'
   | 'CHAOS'
+  | 'CLEAN'
   | 'NO_ANIMATION';
 
 export type MemePresetId =
@@ -262,7 +291,7 @@ export interface ActiveMemePopup {
   id: string;
   actionId: string;
   actionLabel: string;
-  actionSource: 'BODY' | 'HAND' | 'DUAL_HAND';
+  actionSource: 'BODY' | 'HAND' | 'DUAL_HAND' | 'SEQUENCE';
   hand?: 'Left' | 'Right' | 'Both';
   memeId: string;
   memeTitle: string;
@@ -287,7 +316,7 @@ export interface ActiveMemePopup {
 export interface UnifiedMemeEvent {
   id: string;
   timestamp: number;
-  source: 'BODY' | 'HAND' | 'DUAL_HAND';
+  source: 'BODY' | 'HAND' | 'DUAL_HAND' | 'SEQUENCE';
   actionId: string;
   actionLabel: string;
   hand?: 'Left' | 'Right' | 'Both';
@@ -301,6 +330,78 @@ export interface UnifiedMemeEvent {
   category?: MemeCategory;
   rarity?: MemeRarity;
 }
+
+export interface GestureSequenceDefinition {
+  id: GoofyGestureSequenceId | string;
+  label: string;
+  description: string;
+  steps: GoofyHandGestureType[];
+  maxWindowMs: number;
+  defaultMemeId: string;
+  defaultSoundId: GoofySoundId;
+  defaultCaption: string;
+  icon: string;
+  isCustom?: boolean;
+  animationStyle?: PopupAnimationStyle;
+}
+
+export const BUILTIN_GESTURE_SEQUENCES: GestureSequenceDefinition[] = [
+  {
+    id: 'SEQ_PEACE_TO_THUMBS',
+    label: 'PEACE TO MAXIMUM AURA',
+    description: 'Transition from Peace Sign to Thumbs Up within 1.8 seconds.',
+    steps: ['PEACE_SIGN', 'THUMBS_UP'],
+    maxWindowMs: 1800,
+    defaultMemeId: 'MEME_MAXIMUM_AURA',
+    defaultSoundId: 'CHAD_GONG',
+    defaultCaption: 'PEACE TO MAXIMUM AURA // LEVEL UP',
+    icon: '✌️👍',
+  },
+  {
+    id: 'SEQ_FIST_TO_PALM',
+    label: 'FIST TO OPEN PALM',
+    description: 'Transition from Closed Fist to Open Palm within 1.8 seconds.',
+    steps: ['CLOSED_FIST', 'OPEN_PALM'],
+    maxWindowMs: 1800,
+    defaultMemeId: 'MEME_FINAL_BOSS_ENERGY',
+    defaultSoundId: 'ANIME_POWER_UP',
+    defaultCaption: 'COMBO FINISHER // UNLEASH THE FORCE',
+    icon: '✊✋',
+  },
+  {
+    id: 'SEQ_POINT_TO_PEACE',
+    label: 'POINT TO PEACE',
+    description: 'Transition from Pointing to Peace Sign within 1.8 seconds.',
+    steps: ['POINTING', 'PEACE_SIGN'],
+    maxWindowMs: 1800,
+    defaultMemeId: 'MEME_SECRET_YOU_ARE_BREATHTAKING',
+    defaultSoundId: 'BRASS_FANFARE',
+    defaultCaption: 'TARGET LOCKED TO CHILL // ZERO DRAMA',
+    icon: '👉✌️',
+  },
+  {
+    id: 'SEQ_ROCK_TO_CALL',
+    label: 'ROCK TO CALL ME',
+    description: 'Transition from Rock Sign to Call Me Shaka within 1.8 seconds.',
+    steps: ['ROCK_SIGN', 'CALL_ME'],
+    maxWindowMs: 1800,
+    defaultMemeId: 'MEME_ROCK_STAR',
+    defaultSoundId: 'RECORD_SCRATCH',
+    defaultCaption: 'ROCKSTAR HOTLINE // BACKSTAGE PASS GRANTED',
+    icon: '🤘🤙',
+  },
+  {
+    id: 'SEQ_OK_TO_HEART',
+    label: 'OK TO FINGER HEART',
+    description: 'Transition from OK gesture to Finger Heart within 1.8 seconds.',
+    steps: ['OK_GESTURE', 'FINGER_HEART'],
+    maxWindowMs: 1800,
+    defaultMemeId: 'MEME_KPOP_HEART',
+    defaultSoundId: 'SUCTION_POP',
+    defaultCaption: 'FROM PERFECTION TO LOVE // 1000% WHOLESOME',
+    icon: '👌🫰',
+  },
+];
 
 export interface GoofyModeConfig {
   volume: number; // 0.0 to 1.0
@@ -324,7 +425,7 @@ export interface GoofyModeConfig {
   randomMemeMode?: boolean; // When true, genuine action selects a random eligible meme
   enableRareReactions?: boolean; // When true, rare/legendary reactions can occasionally trigger
   rareReactionProbability?: number; // 0.01 to 0.30 (default 0.10)
-  popupAnimationStyle?: PopupAnimationStyle; // 'CLASSIC' | 'MINIMAL' | 'EXPLOSIVE' | 'RETRO_ARCADE' | 'NO_ANIMATION'
+  popupAnimationStyle?: PopupAnimationStyle; // 'CLASSIC' | 'MINIMAL' | 'EXPLOSIVE' | 'RETRO_ARCADE' | 'CINEMATIC' | 'CHAOS' | 'CLEAN' | 'NO_ANIMATION'
   activePresetId?: string; // Current preset ID
   favoriteMemes?: string[]; // Array of favorite meme IDs
   recentMemes?: string[]; // Array of last-triggered meme IDs
@@ -338,6 +439,13 @@ export interface GoofyModeConfig {
   maxSimultaneousPopups?: number; // Max concurrent on screen (default 2)
   recentlyUsedMemeIds?: string[]; // History of last 20 triggered memes for workspace review
   gestureSensitivity?: 'HIGH' | 'MEDIUM' | 'RELAXED'; // Classification threshold sensitivity
+  // V6 Intelligence & Customization Additions
+  customSequences?: GestureSequenceDefinition[];
+  sequenceCooldownMs?: number;
+  surpriseMode?: boolean;
+  auraTwistProbability?: number;
+  demoMode?: boolean;
+  gestureHoldTimeMs?: number;
 }
 
 export interface GoofyTriggerEvent {
@@ -752,6 +860,46 @@ export const GOOFY_HAND_METADATA: Record<GoofyHandGestureType, GoofyHandMetadata
     isDynamic: true,
     cues: ['Rapid rightward velocity > 1.2 screens/sec'],
   },
+  ROCK_SIGN: {
+    id: 'ROCK_SIGN',
+    label: 'ROCK SIGN / CORNA',
+    defaultCaption: 'PARTY ROCKER DETECTED // HEAVY METAL ENERGY',
+    icon: '🤘',
+    description: 'Index and pinky extended, middle and ring curled into palm.',
+    cues: ['Index & pinky extended', 'Middle & ring curled', 'Thumb folded across curled fingers'],
+  },
+  OK_GESTURE: {
+    id: 'OK_GESTURE',
+    label: 'OK GESTURE',
+    defaultCaption: 'ABSOLUTE PERFECTION // CHEF\'S KISS',
+    icon: '👌',
+    description: 'Thumb and index tips touch in a ring, other three fingers extended straight.',
+    cues: ['Thumb & index tips touching', 'Middle, ring, pinky extended upright'],
+  },
+  CALL_ME: {
+    id: 'CALL_ME',
+    label: 'CALL ME / SHAKA',
+    defaultCaption: 'HOTLINE BLING // RING ME UP',
+    icon: '🤙',
+    description: 'Thumb and pinky extended wide, middle three fingers curled.',
+    cues: ['Thumb & pinky extended', 'Index, middle, ring curled tightly'],
+  },
+  FINGER_HEART: {
+    id: 'FINGER_HEART',
+    label: 'FINGER HEART',
+    defaultCaption: 'K-POP LOVE // INFINITE WHOLESOMENESS',
+    icon: '🫰',
+    description: 'Thumb crossed over index tip in a micro pinch forming a heart.',
+    cues: ['Thumb & index crossed in heart pinch', 'Other 3 fingers curled'],
+  },
+  THREE_FINGER_SALUTE: {
+    id: 'THREE_FINGER_SALUTE',
+    label: 'THREE FINGER SALUTE',
+    defaultCaption: 'DISTRICT 12 SALUTE // HONOR & RESISTANCE',
+    icon: '🫡',
+    description: 'Index, middle, ring extended parallel and tightly aligned, pinky curled.',
+    cues: ['Index, middle, ring straight & parallel', 'Pinky curled, thumb folded'],
+  },
 };
 
 export interface DualHandComboDefinition {
@@ -894,6 +1042,50 @@ export const GOOFY_DUAL_COMBO_DEFINITIONS: Record<GoofyDualHandComboId, DualHand
     icon: '✨👉',
     description: 'Secret combo: Thumbs up with one hand while pointing at camera.',
     isSecret: true,
+  },
+  DOUBLE_ROCK: {
+    id: 'DOUBLE_ROCK',
+    label: 'DOUBLE ROCK HORNS',
+    leftGesture: 'ROCK_SIGN',
+    rightGesture: 'ROCK_SIGN',
+    defaultMemeId: 'MEME_ROCK_STAR',
+    defaultSoundId: 'ANIME_POWER_UP',
+    defaultCaption: 'MAXIMUM METAL // ROCK ON!',
+    icon: '🤘🤘',
+    description: 'Both hands displaying simultaneous rock horn gestures.',
+  },
+  DOUBLE_CALL_ME: {
+    id: 'DOUBLE_CALL_ME',
+    label: 'DOUBLE CALL ME',
+    leftGesture: 'CALL_ME',
+    rightGesture: 'CALL_ME',
+    defaultMemeId: 'MEME_CALL_ME_MAYBE',
+    defaultSoundId: 'RECORD_SCRATCH',
+    defaultCaption: 'HOTLINE OVERLOAD // DOUBLE SHAKA VIBES',
+    icon: '🤙🤙',
+    description: 'Both hands displaying simultaneous call me shaka gestures.',
+  },
+  DOUBLE_OK: {
+    id: 'DOUBLE_OK',
+    label: 'DOUBLE OK',
+    leftGesture: 'OK_GESTURE',
+    rightGesture: 'OK_GESTURE',
+    defaultMemeId: 'MEME_OK_CHEFS_KISS',
+    defaultSoundId: 'VICTORY_BELL',
+    defaultCaption: 'DOUBLE PERFECTION // 200% SATISFACTION',
+    icon: '👌👌',
+    description: 'Both hands displaying simultaneous OK gestures.',
+  },
+  HEART_AND_PEACE: {
+    id: 'HEART_AND_PEACE',
+    label: 'HEART & PEACE',
+    leftGesture: ['FINGER_HEART', 'PEACE_SIGN'],
+    rightGesture: ['FINGER_HEART', 'PEACE_SIGN'],
+    defaultMemeId: 'MEME_KPOP_HEART',
+    defaultSoundId: 'LEVEL_UP_NOTIFICATION',
+    defaultCaption: 'PEACE & LOVE // MAXIMUM WHOLESOME AURA',
+    icon: '🫰✌️',
+    description: 'One hand showing finger heart and the other peace sign.',
   },
 };
 
@@ -1101,6 +1293,41 @@ export const DEFAULT_GOOFY_CONFIG: GoofyModeConfig = {
       visualEnabled: true,
       memeId: 'MEME_SWIPE_RIGHT',
     },
+    ROCK_SIGN: {
+      pose: 'ROCK_SIGN',
+      soundId: 'ANIME_POWER_UP',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'MEME_ROCK_STAR',
+    },
+    OK_GESTURE: {
+      pose: 'OK_GESTURE',
+      soundId: 'VICTORY_BELL',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'MEME_OK_CHEFS_KISS',
+    },
+    CALL_ME: {
+      pose: 'CALL_ME',
+      soundId: 'RECORD_SCRATCH',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'MEME_CALL_ME_MAYBE',
+    },
+    FINGER_HEART: {
+      pose: 'FINGER_HEART',
+      soundId: 'SUCTION_POP',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'MEME_KPOP_HEART',
+    },
+    THREE_FINGER_SALUTE: {
+      pose: 'THREE_FINGER_SALUTE',
+      soundId: 'BRASS_FANFARE',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'MEME_THREE_FINGER_DISTRICT',
+    },
   },
   dualHandMappings: {
     DOUBLE_THUMBS_UP: {
@@ -1180,6 +1407,34 @@ export const DEFAULT_GOOFY_CONFIG: GoofyModeConfig = {
       visualEnabled: true,
       memeId: 'MEME_SECRET_YOU_ARE_BREATHTAKING',
     },
+    DOUBLE_ROCK: {
+      pose: 'DOUBLE_ROCK' as any,
+      soundId: 'ANIME_POWER_UP',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'MEME_ROCK_STAR',
+    },
+    DOUBLE_CALL_ME: {
+      pose: 'DOUBLE_CALL_ME' as any,
+      soundId: 'RECORD_SCRATCH',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'MEME_CALL_ME_MAYBE',
+    },
+    DOUBLE_OK: {
+      pose: 'DOUBLE_OK' as any,
+      soundId: 'VICTORY_BELL',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'MEME_OK_CHEFS_KISS',
+    },
+    HEART_AND_PEACE: {
+      pose: 'HEART_AND_PEACE' as any,
+      soundId: 'LEVEL_UP_NOTIFICATION',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'MEME_KPOP_HEART',
+    },
   },
   actionMemeMappings: {
     T_POSE: 'MEME_SURPRISED_PIKACHU',
@@ -1216,10 +1471,20 @@ export const DEFAULT_GOOFY_CONFIG: GoofyModeConfig = {
     THUMBS_UP_AND_DOWN: 'MEME_CONFUSED_BRAIN',
     PERFECT_TEN: 'MEME_PERFECT_TEN',
     DOUBLE_THREE: 'MEME_SIX_PACK_ENERGY',
-    ROCK_PAPER_SCISSORS: 'MEME_ROCK_PAPER_SCISSORS',
-    SECRET_HEART_HANDS: 'MEME_SECRET_HEART_AURA',
-    SECRET_MATRIX_DODGE: 'MEME_SECRET_MATRIX_GLITCH',
-    SECRET_YOU_ARE_BREATHTAKING: 'MEME_SECRET_YOU_ARE_BREATHTAKING',
+    ROCK_SIGN: 'MEME_ROCK_STAR',
+    OK_GESTURE: 'MEME_OK_CHEFS_KISS',
+    CALL_ME: 'MEME_CALL_ME_MAYBE',
+    FINGER_HEART: 'MEME_KPOP_HEART',
+    THREE_FINGER_SALUTE: 'MEME_THREE_FINGER_DISTRICT',
+    DOUBLE_ROCK: 'MEME_ROCK_STAR',
+    DOUBLE_CALL_ME: 'MEME_CALL_ME_MAYBE',
+    DOUBLE_OK: 'MEME_OK_CHEFS_KISS',
+    HEART_AND_PEACE: 'MEME_KPOP_HEART',
+    SEQ_PEACE_TO_THUMBS: 'MEME_MAXIMUM_AURA',
+    SEQ_FIST_TO_PALM: 'MEME_FINAL_BOSS_ENERGY',
+    SEQ_POINT_TO_PEACE: 'MEME_SECRET_YOU_ARE_BREATHTAKING',
+    SEQ_ROCK_TO_CALL: 'MEME_ROCK_STAR',
+    SEQ_OK_TO_HEART: 'MEME_KPOP_HEART',
   },
   actionCustomCaptions: {},
   randomMemeMode: false,
@@ -1238,6 +1503,12 @@ export const DEFAULT_GOOFY_CONFIG: GoofyModeConfig = {
   maxSimultaneousPopups: 2,
   recentlyUsedMemeIds: [],
   gestureSensitivity: 'HIGH',
+  customSequences: [],
+  sequenceCooldownMs: 1200,
+  surpriseMode: true,
+  auraTwistProbability: 0.15,
+  demoMode: false,
+  gestureHoldTimeMs: 180,
 };
 
 export interface MemePresetDefinition {
@@ -1400,4 +1671,18 @@ export const GOOFY_ACTION_RECOMMENDED_MEMES: Record<GoofyActionId, string[]> = {
   SECRET_HEART_HANDS: ['MEME_SECRET_HEART_AURA', 'MEME_VICTORY_ACHIEVED', 'MEME_MAIN_CHARACTER'],
   SECRET_MATRIX_DODGE: ['MEME_SECRET_MATRIX_GLITCH', 'MEME_TARGET_LOCKED', 'MEME_FINAL_BOSS_ENERGY'],
   SECRET_YOU_ARE_BREATHTAKING: ['MEME_SECRET_YOU_ARE_BREATHTAKING', 'MEME_MAXIMUM_AURA', 'MEME_CHAD_THUMBS_UP'],
+  ROCK_SIGN: ['MEME_ROCK_STAR', 'MEME_ANIME_POWER_UP', 'MEME_PARTY_MODE', 'MEME_FINAL_BOSS_ENERGY'],
+  OK_GESTURE: ['MEME_OK_CHEFS_KISS', 'MEME_PERFECT_EXECUTION', 'MEME_ABSOLUTE_CINEMA'],
+  CALL_ME: ['MEME_CALL_ME_MAYBE', 'MEME_PEACE_OUT', 'MEME_VICTORY_DANCE'],
+  FINGER_HEART: ['MEME_KPOP_HEART', 'MEME_SECRET_HEART_AURA', 'MEME_SUCCESS_KID'],
+  THREE_FINGER_SALUTE: ['MEME_THREE_FINGER_DISTRICT', 'MEME_THREE_FINGER_SALUTE', 'MEME_PERFECT_EXECUTION'],
+  DOUBLE_ROCK: ['MEME_ROCK_STAR', 'MEME_FINAL_BOSS_ENERGY', 'MEME_MAXIMUM_AURA'],
+  DOUBLE_CALL_ME: ['MEME_CALL_ME_MAYBE', 'MEME_PEACE_OUT', 'MEME_PARTY_MODE'],
+  DOUBLE_OK: ['MEME_OK_CHEFS_KISS', 'MEME_PERFECT_EXECUTION', 'MEME_ABSOLUTE_CINEMA'],
+  HEART_AND_PEACE: ['MEME_KPOP_HEART', 'MEME_SECRET_HEART_AURA', 'MEME_PEACE_OUT'],
+  SEQ_PEACE_TO_THUMBS: ['MEME_MAXIMUM_AURA', 'MEME_CHAD_THUMBS_UP', 'MEME_PERFECT_EXECUTION'],
+  SEQ_FIST_TO_PALM: ['MEME_FINAL_BOSS_ENERGY', 'MEME_STOP_SIGN', 'MEME_UNSTOPPABLE'],
+  SEQ_POINT_TO_PEACE: ['MEME_SECRET_YOU_ARE_BREATHTAKING', 'MEME_PEACE_OUT', 'MEME_MAIN_CHARACTER'],
+  SEQ_ROCK_TO_CALL: ['MEME_ROCK_STAR', 'MEME_CALL_ME_MAYBE', 'MEME_PARTY_MODE'],
+  SEQ_OK_TO_HEART: ['MEME_KPOP_HEART', 'MEME_OK_CHEFS_KISS', 'MEME_SECRET_HEART_AURA'],
 };
