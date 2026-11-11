@@ -127,6 +127,10 @@ export function MemePopupOverlay({
                           ? 'bg-purple-400 animate-ping'
                           : popup.actionSource === 'HAND'
                           ? 'bg-cyan-400 animate-pulse'
+                          : popup.actionSource === 'CUSTOM_GESTURE'
+                          ? 'bg-emerald-400 animate-pulse ring-2 ring-emerald-300'
+                          : popup.actionSource === 'REACTION_COMBO'
+                          ? 'bg-amber-400 animate-bounce ring-2 ring-rose-400'
                           : 'bg-yellow-400 animate-pulse'
                       }`}
                     />

@@ -5,11 +5,13 @@ import {
   GoofyModeConfig,
   MemeCategory,
   GoofySoundId,
+  BUILTIN_INTELLIGENT_COMBOS,
+  IntelligentReactionCombo,
 } from './goofy-types';
 
 export interface GestureMatchingContext {
   actionId: string;
-  source: 'HAND' | 'DUAL_HAND' | 'BODY' | 'SEQUENCE';
+  source: 'HAND' | 'DUAL_HAND' | 'BODY' | 'SEQUENCE' | 'CUSTOM_GESTURE' | 'REACTION_COMBO';
   hand?: 'Left' | 'Right' | 'Both';
   fingerCount?: number;
   confidence?: number;
@@ -631,6 +633,19 @@ export class SemanticMemeMatcher {
     if (config?.actionMemeMappings?.[actionId] === meme.id) return true;
     if (config?.handMappings?.[actionId as GoofyHandGestureType]?.memeId === meme.id) return true;
     if (config?.dualHandMappings?.[actionId as GoofyDualHandComboId]?.memeId === meme.id) return true;
+
+    // V7 Custom Gestures & Intelligent Reaction Combos
+    const customDef = config?.customGestures?.find((cg) => cg.id === actionId);
+    if (customDef) {
+      if (customDef.defaultMemeId === meme.id) return true;
+      if (customDef.rotationMemeIds?.includes(meme.id)) return true;
+    }
+    const reactionComboDef = (config?.reactionCombos || BUILTIN_INTELLIGENT_COMBOS)?.find(
+      (rc: IntelligentReactionCombo) => rc.id === actionId
+    );
+    if (reactionComboDef) {
+      if (reactionComboDef.memeId === meme.id) return true;
+    }
 
     return false;
   }

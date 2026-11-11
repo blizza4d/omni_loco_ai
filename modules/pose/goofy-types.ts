@@ -90,6 +90,7 @@ export type GoofySoundId =
   | 'CHAD_GONG'
   | 'SUCTION_POP'
   | 'LEVEL_UP_NOTIFICATION'
+  | 'ELECTRIC_SPARK'
   | 'CUSTOM_USER_AUDIO';
 
 export type PoseTrackingStatus =
@@ -291,7 +292,7 @@ export interface ActiveMemePopup {
   id: string;
   actionId: string;
   actionLabel: string;
-  actionSource: 'BODY' | 'HAND' | 'DUAL_HAND' | 'SEQUENCE';
+  actionSource: 'BODY' | 'HAND' | 'DUAL_HAND' | 'SEQUENCE' | 'CUSTOM_GESTURE' | 'REACTION_COMBO';
   hand?: 'Left' | 'Right' | 'Both';
   memeId: string;
   memeTitle: string;
@@ -316,7 +317,7 @@ export interface ActiveMemePopup {
 export interface UnifiedMemeEvent {
   id: string;
   timestamp: number;
-  source: 'BODY' | 'HAND' | 'DUAL_HAND' | 'SEQUENCE';
+  source: 'BODY' | 'HAND' | 'DUAL_HAND' | 'SEQUENCE' | 'CUSTOM_GESTURE' | 'REACTION_COMBO';
   actionId: string;
   actionLabel: string;
   hand?: 'Left' | 'Right' | 'Both';
@@ -335,7 +336,8 @@ export interface GestureSequenceDefinition {
   id: GoofyGestureSequenceId | string;
   label: string;
   description: string;
-  steps: GoofyHandGestureType[];
+  steps: (GoofyHandGestureType | string)[];
+  stepHands?: ('Left' | 'Right' | 'Any')[];
   maxWindowMs: number;
   defaultMemeId: string;
   defaultSoundId: GoofySoundId;
@@ -343,6 +345,174 @@ export interface GestureSequenceDefinition {
   icon: string;
   isCustom?: boolean;
   animationStyle?: PopupAnimationStyle;
+  enabled?: boolean;
+}
+
+// ----------------------------------------------------------------------------
+// V7 CUSTOM GESTURE STUDIO & INTELLIGENT REACTION COMBOS TYPES
+// ----------------------------------------------------------------------------
+
+export interface CustomGestureSample {
+  id: string;
+  gestureId: string;
+  gestureLabel: string;
+  landmarks: { x: number; y: number; z: number }[]; // 21 3D points
+  normalizedFeatures?: number[]; // Invariant geometric feature vector
+  handedness: 'Left' | 'Right' | 'Any';
+  timestamp: number;
+}
+
+export interface CustomGestureDefinition {
+  id: string;
+  name: string;
+  label?: string; // Friendly alias for name
+  description: string;
+  icon: string;
+  handedness: 'Left' | 'Right' | 'Any';
+  minConfidence: number; // 0.60 to 0.95 (default 0.82)
+  minHoldMs: number; // 120ms to 400ms (default 180ms)
+  sampleCount: number;
+  assignedMemeId: string;
+  defaultMemeId?: string; // Friendly alias for assignedMemeId
+  rotationMemeIds?: string[];
+  assignedSoundId: GoofySoundId;
+  defaultSoundId?: GoofySoundId; // Friendly alias for assignedSoundId
+  customCaption: string;
+  defaultCaption?: string; // Friendly alias for customCaption
+  animationStyle?: PopupAnimationStyle;
+  cooldownMs?: number;
+  durationMs?: number;
+  enabled: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface CustomClassificationResult {
+  gestureId: string | null;
+  label: string | null;
+  confidence: number;
+  distance: number;
+  isMatch: boolean;
+  rawDistance: number;
+  threshold: number;
+}
+
+export interface CrossValidationReport {
+  totalSamples: number;
+  correctPredictions: number;
+  accuracyPercent: number;
+  classesCount: number;
+  confusionMatrix: Record<string, Record<string, number>>;
+  evaluatedAt: number;
+}
+
+export interface ActiveSequenceStepStatus {
+  stepIndex: number;
+  gesture: string;
+  label: string;
+  icon: string;
+  handedness?: 'Left' | 'Right' | 'Any';
+  isCompleted: boolean;
+  completed?: boolean; // Friendly alias for isCompleted
+  completedAt?: number;
+}
+
+export interface ActiveSequenceState {
+  sequenceId: string;
+  sequenceLabel: string;
+  currentStepIndex: number;
+  totalSteps: number;
+  steps: ActiveSequenceStepStatus[];
+  progressPercent: number;
+  timeRemainingMs: number;
+  maxWindowMs: number;
+  startTime: number;
+  lastStepTime: number;
+}
+
+export interface IntelligentReactionCombo {
+  id: string;
+  name: string;
+  label?: string; // Friendly alias for name
+  firstAction: string;
+  triggerGestureA?: string; // Friendly alias for firstAction
+  secondAction: string;
+  triggerGestureB?: string; // Friendly alias for secondAction
+  windowMs: number; // default 2500ms
+  assignedMemeId: string;
+  memeId?: string; // Friendly alias for assignedMemeId
+  assignedSoundId: GoofySoundId;
+  soundId?: GoofySoundId; // Friendly alias for assignedSoundId
+  caption: string;
+  animationStyle?: PopupAnimationStyle;
+  durationMs?: number;
+  isRare?: boolean;
+  enabled?: boolean;
+}
+
+export const BUILTIN_INTELLIGENT_COMBOS: IntelligentReactionCombo[] = [
+  {
+    id: 'COMBO_OPEN_TO_PINCH',
+    name: 'COSMIC SQUEEZE',
+    firstAction: 'OPEN_PALM',
+    secondAction: 'PINCH',
+    windowMs: 2500,
+    assignedMemeId: 'REAL_MEME_MIND_BLOWN_EXPLOSION',
+    assignedSoundId: 'RECORD_SCRATCH',
+    caption: 'FROM EXPANSION TO CRUSH // MIND BLOWN',
+    animationStyle: 'EXPLOSIVE',
+    enabled: true,
+  },
+  {
+    id: 'COMBO_PEACE_TO_ROCK',
+    name: 'ROCK N ROLL REBEL',
+    firstAction: 'PEACE_SIGN',
+    secondAction: 'ROCK_SIGN',
+    windowMs: 2500,
+    assignedMemeId: 'MEME_ROCK_STAR',
+    assignedSoundId: 'ELECTRIC_SPARK',
+    caption: 'PEACE WAS NEVER AN OPTION // HEAVY METAL',
+    animationStyle: 'CHAOS',
+    enabled: true,
+  },
+  {
+    id: 'COMBO_POINT_TO_THUMBS',
+    name: 'CERTIFIED LEGEND',
+    firstAction: 'POINTING',
+    secondAction: 'THUMBS_UP',
+    windowMs: 2500,
+    assignedMemeId: 'REAL_MEME_GIGACHAD',
+    assignedSoundId: 'CHAD_GONG',
+    caption: 'TARGET LOCKED // CERTIFIED GIGACHAD',
+    animationStyle: 'CINEMATIC',
+    enabled: true,
+  },
+  {
+    id: 'COMBO_FIST_TO_HEART',
+    name: 'PASSION EXPLOSION',
+    firstAction: 'CLOSED_FIST',
+    secondAction: 'FINGER_HEART',
+    windowMs: 2500,
+    assignedMemeId: 'MEME_KPOP_HEART',
+    assignedSoundId: 'SUCTION_POP',
+    caption: 'FROM RAGE TO AFFECTION // WHOLESOME OVERLOAD',
+    animationStyle: 'CLEAN',
+    enabled: true,
+  },
+];
+
+export interface V7LibraryExport {
+  version: '7.0.0';
+  exportedAt: string;
+  system: 'OmniLocoGoofyModel';
+  customGestures: CustomGestureDefinition[];
+  samples: CustomGestureSample[];
+  customSequences: GestureSequenceDefinition[];
+  customMemes: MemeVisualDefinition[];
+  actionMemeMappings: Record<string, string>;
+  actionCustomCaptions: Record<string, string>;
+  multiMemeAssignments?: Record<string, string[]>;
+  reactionCombos?: IntelligentReactionCombo[];
 }
 
 export const BUILTIN_GESTURE_SEQUENCES: GestureSequenceDefinition[] = [
@@ -446,6 +616,13 @@ export interface GoofyModeConfig {
   auraTwistProbability?: number;
   demoMode?: boolean;
   gestureHoldTimeMs?: number;
+  // V7 Custom Gesture Studio & Intelligent Combos Additions
+  customGestures?: CustomGestureDefinition[];
+  enableCustomGestures?: boolean;
+  customGestureSensitivity?: number; // 0.60 to 0.95 (default 0.82)
+  enableReactionCombos?: boolean;
+  comboWindowMs?: number; // Time window for intelligent reaction combos (default 2500ms)
+  reactionCombos?: IntelligentReactionCombo[];
 }
 
 export interface GoofyTriggerEvent {
@@ -1509,6 +1686,12 @@ export const DEFAULT_GOOFY_CONFIG: GoofyModeConfig = {
   auraTwistProbability: 0.15,
   demoMode: false,
   gestureHoldTimeMs: 180,
+  customGestures: [],
+  enableCustomGestures: true,
+  customGestureSensitivity: 0.82,
+  enableReactionCombos: true,
+  comboWindowMs: 2500,
+  reactionCombos: [],
 };
 
 export interface MemePresetDefinition {

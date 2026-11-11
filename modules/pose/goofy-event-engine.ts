@@ -8,6 +8,9 @@ import {
   GOOFY_DUAL_COMBO_DEFINITIONS,
   BUILTIN_GESTURE_SEQUENCES,
   GestureSequenceDefinition,
+  CustomGestureDefinition,
+  IntelligentReactionCombo,
+  BUILTIN_INTELLIGENT_COMBOS,
   GoofyPoseType,
   GoofyHandGestureType,
   GoofyDualHandComboId,
@@ -107,7 +110,7 @@ export class GoofyEventEngine {
    */
   dispatchActionTrigger(
     actionId: string,
-    source: 'BODY' | 'HAND' | 'DUAL_HAND' | 'SEQUENCE',
+    source: 'BODY' | 'HAND' | 'DUAL_HAND' | 'SEQUENCE' | 'CUSTOM_GESTURE' | 'REACTION_COMBO',
     hand?: 'Left' | 'Right' | 'Both',
     confidence = 0.95,
     context?: {
@@ -124,6 +127,10 @@ export class GoofyEventEngine {
             (s) => s.id === actionId
           )
         : undefined;
+    const customDef = this.config.customGestures?.find((cg) => cg.id === actionId);
+    const reactionComboDef = (this.config.reactionCombos || BUILTIN_INTELLIGENT_COMBOS)?.find(
+      (rc) => rc.id === actionId
+    );
 
     let mapping = comboDef
       ? this.config.dualHandMappings?.[actionId as GoofyDualHandComboId]
@@ -141,7 +148,13 @@ export class GoofyEventEngine {
     // 2. Resolve label & caption
     let actionLabel = actionId;
     let defaultCaption = 'MEME ACTION DETECTED!';
-    if (seqDef) {
+    if (customDef) {
+      actionLabel = `CUSTOM: ${customDef.label}`;
+      defaultCaption = customDef.defaultCaption || 'CUSTOM GESTURE RECOGNISED!';
+    } else if (reactionComboDef) {
+      actionLabel = `COMBO: ${reactionComboDef.label}`;
+      defaultCaption = reactionComboDef.caption || 'INTELLIGENT COMBO RECOGNISED!';
+    } else if (seqDef) {
       actionLabel = `SEQUENCE: ${seqDef.label}`;
       defaultCaption = seqDef.defaultCaption;
     } else if (comboDef) {
@@ -164,6 +177,8 @@ export class GoofyEventEngine {
     // 3. Resolve sound & meme visual via Semantic Matcher (or fallback)
     let soundId: GoofySoundId =
       (mapping && mapping.soundId) ||
+      (customDef && customDef.defaultSoundId) ||
+      (reactionComboDef && reactionComboDef.soundId) ||
       (seqDef && seqDef.defaultSoundId) ||
       (comboDef && comboDef.defaultSoundId) ||
       'CHAD_GONG';
@@ -404,13 +419,48 @@ export class GoofyEventEngine {
   }
 
   /**
+   * Dispatches a custom user-created hand gesture trigger (V7)
+   */
+  dispatchCustomGestureTrigger(
+    customGesture: CustomGestureDefinition,
+    hand: 'Left' | 'Right' = 'Right',
+    confidence = 0.95
+  ): UnifiedMemeEvent | null {
+    return this.dispatchActionTrigger(
+      customGesture.id,
+      'CUSTOM_GESTURE',
+      hand,
+      confidence,
+      { isDynamic: false }
+    );
+  }
+
+  /**
+   * Dispatches an intelligent reaction combo (V7)
+   */
+  dispatchReactionComboTrigger(
+    combo: IntelligentReactionCombo,
+    confidence = 0.98
+  ): UnifiedMemeEvent | null {
+    return this.dispatchActionTrigger(
+      combo.id,
+      'REACTION_COMBO',
+      'Both',
+      confidence,
+      { isDynamic: true }
+    );
+  }
+
+  /**
    * Manual Preview: triggers sound and meme popup without treating it as an AI detection
    */
   previewAction(
     actionId: string,
-    source: 'BODY' | 'HAND' | 'DUAL_HAND' | 'SEQUENCE',
+    source: 'BODY' | 'HAND' | 'DUAL_HAND' | 'SEQUENCE' | 'CUSTOM_GESTURE' | 'REACTION_COMBO',
     soundOverride?: GoofySoundId,
-    memeOverride?: string
+    memeOverride?: string,
+    labelOverride?: string,
+    captionOverride?: string
   ): ActiveMemePopup {
     const comboDef = GOOFY_DUAL_COMBO_DEFINITIONS[actionId as GoofyDualHandComboId];
     let mapping = comboDef
@@ -437,26 +487,39 @@ export class GoofyEventEngine {
 
     const memeDef = getMemeById(memeId, this.customMemes) || getDefaultMemeForAction(actionId);
 
-    let actionLabel = actionId;
-    let defaultCaption = 'TEST PREVIEW';
-    if (comboDef) {
-      actionLabel = comboDef.label;
-      defaultCaption = comboDef.defaultCaption;
-    } else if (source === 'BODY') {
-      const meta = GOOFY_POSE_METADATA[actionId as GoofyPoseType];
-      if (meta) {
-        actionLabel = meta.label;
-        defaultCaption = meta.defaultCaption;
-      }
-    } else {
-      const meta = GOOFY_HAND_METADATA[actionId as GoofyHandGestureType];
-      if (meta) {
-        actionLabel = meta.label;
-        defaultCaption = meta.defaultCaption;
+    let actionLabel = labelOverride || actionId;
+    let defaultCaption = captionOverride || 'TEST PREVIEW';
+    if (!labelOverride) {
+      const customDef = this.config.customGestures?.find((cg) => cg.id === actionId);
+      const reactionComboDef = (this.config.reactionCombos || BUILTIN_INTELLIGENT_COMBOS)?.find(
+        (rc) => rc.id === actionId
+      );
+      if (customDef) {
+        actionLabel = `CUSTOM: ${customDef.label}`;
+        defaultCaption = customDef.defaultCaption || 'CUSTOM GESTURE';
+      } else if (reactionComboDef) {
+        actionLabel = `COMBO: ${reactionComboDef.label}`;
+        defaultCaption = reactionComboDef.caption || 'INTELLIGENT COMBO';
+      } else if (comboDef) {
+        actionLabel = comboDef.label;
+        defaultCaption = comboDef.defaultCaption;
+      } else if (source === 'BODY') {
+        const meta = GOOFY_POSE_METADATA[actionId as GoofyPoseType];
+        if (meta) {
+          actionLabel = meta.label;
+          defaultCaption = meta.defaultCaption;
+        }
+      } else {
+        const meta = GOOFY_HAND_METADATA[actionId as GoofyHandGestureType];
+        if (meta) {
+          actionLabel = meta.label;
+          defaultCaption = meta.defaultCaption;
+        }
       }
     }
 
     const caption =
+      captionOverride ||
       (mapping && mapping.customCaption) ||
       this.config.actionCustomCaptions[actionId] ||
       defaultCaption;

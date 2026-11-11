@@ -33,6 +33,12 @@ import {
   GestureSequenceDefinition,
   BUILTIN_GESTURE_SEQUENCES,
   GoofyGestureSequenceId,
+  CustomGestureDefinition,
+  CustomGestureSample,
+  CustomClassificationResult,
+  ActiveSequenceState,
+  IntelligentReactionCombo,
+  BUILTIN_INTELLIGENT_COMBOS,
 } from '@/modules/pose/goofy-types';
 import {
   GoofyHandClassifier,
@@ -40,6 +46,21 @@ import {
   GoofyDualHandStateMachine,
   detectDualHandCombo,
 } from '@/modules/pose/goofy-hand-classifier';
+import {
+  CustomHandFeatureExtractor,
+  GoofyCustomGestureClassifier,
+} from '@/modules/pose/goofy-custom-classifier';
+import {
+  saveCustomGestureDefinition,
+  loadAllCustomGestures,
+  deleteCustomGestureDefinition,
+  saveGestureSamples,
+  loadAllGestureSamples,
+  saveCustomSequencesToDB,
+  loadCustomSequencesFromDB,
+  exportV7FullLibrary,
+  importV7FullLibrary,
+} from '@/modules/pose/goofy-custom-store';
 import { GoofySequenceEngine } from '@/modules/pose/goofy-sequence-engine';
 import {
   runComprehensiveGestureBenchmark,
@@ -64,6 +85,10 @@ import {
 import { MemePopupOverlay } from '@/modules/pose/components/MemePopupOverlay';
 import { CustomMemeCreatorModal } from '@/modules/pose/components/CustomMemeCreatorModal';
 import { AssignMemeModal } from '@/modules/pose/components/AssignMemeModal';
+import { CustomGestureStudioModal } from '@/modules/pose/components/CustomGestureStudioModal';
+import { PersonalMemeReactionEditorModal } from '@/modules/pose/components/PersonalMemeReactionEditorModal';
+import { GestureSequenceCreatorModal } from '@/modules/pose/components/GestureSequenceCreatorModal';
+import { HandTrackingDiagnosticsDrawer } from '@/modules/pose/components/HandTrackingDiagnosticsDrawer';
 import { useSystemStore } from '@/core/store';
 import { ProtocolEventBus } from '@/modules/forge/event-bus';
 import { unlockAchievement } from '@/modules/easter-eggs/achievements';
@@ -100,6 +125,7 @@ import {
   AlertCircle,
   Terminal,
   Cpu,
+  Layers,
 } from 'lucide-react';
 
 const STORAGE_KEY = 'omni-goofy-config-v3-hand-only';
@@ -133,7 +159,7 @@ export default function GoofyModePage() {
     return DEFAULT_GOOFY_CONFIG;
   });
 
-  const [activeTab, setActiveTab] = useState<'HANDS' | 'COMBOS' | 'SEQUENCES' | 'CREATOR' | 'MEMES' | 'TESTBENCH'>('HANDS');
+  const [activeTab, setActiveTab] = useState<'HANDS' | 'COMBOS' | 'CUSTOM' | 'SEQUENCES' | 'CREATOR' | 'MEMES' | 'TESTBENCH'>('HANDS');
   const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
   const [sequenceProgress, setSequenceProgress] = useState<{ id: string; pct: number } | null>(null);
   const [syntheticMode, setSyntheticMode] = useState(false);
@@ -149,6 +175,25 @@ export default function GoofyModePage() {
   const [sampleCaptureLabel, setSampleCaptureLabel] = useState<string>('THUMBS_UP');
   const [fps, setFps] = useState(0);
 
+  // V7 Custom Gesture Studio & Intelligent Reaction Combos States
+  const [customStudioOpen, setCustomStudioOpen] = useState(false);
+  const [sequenceCreatorOpen, setSequenceCreatorOpen] = useState(false);
+  const [reactionEditorAction, setReactionEditorAction] = useState<{ actionId: string; label: string } | null>(null);
+  const [diagnosticsDrawerOpen, setDiagnosticsDrawerOpen] = useState(false);
+  const [customGestures, setCustomGestures] = useState<CustomGestureDefinition[]>([]);
+  const [customSamples, setCustomSamples] = useState<CustomGestureSample[]>([]);
+  const [activeSequenceState, setActiveSequenceState] = useState<ActiveSequenceState | null>(null);
+  const [activeHandForStudio, setActiveHandForStudio] = useState<{
+    landmarks: Landmark3D[] | null;
+    handedness: 'Left' | 'Right' | null;
+  }>({ landmarks: null, handedness: null });
+
+  const customClassifierRef = useRef<GoofyCustomGestureClassifier>(
+    new GoofyCustomGestureClassifier()
+  );
+  const lastActionRef = useRef<{ actionId: string; time: number } | null>(null);
+  const customHoldTrackerRef = useRef<Map<string, number>>(new Map());
+
   // Diagnostics Telemetry State (Phase 6)
   const [diagnosticsData, setDiagnosticsData] = useState<{
     latencyMs: number;
@@ -161,6 +206,7 @@ export default function GoofyModePage() {
       confidence: number;
       rejectionReason: string | null;
       landmarksValid: boolean;
+      customResult?: CustomClassificationResult | null;
       fingerStates?: { thumb: boolean; index: boolean; middle: boolean; ring: boolean; pinky: boolean };
     };
     right: {
@@ -171,13 +217,14 @@ export default function GoofyModePage() {
       confidence: number;
       rejectionReason: string | null;
       landmarksValid: boolean;
+      customResult?: CustomClassificationResult | null;
       fingerStates?: { thumb: boolean; index: boolean; middle: boolean; ring: boolean; pinky: boolean };
     };
   }>({
     latencyMs: 0,
     handCount: 0,
-    left: { raw: null, stabilized: null, state: 'NO_HANDS', holdDurationMs: 0, confidence: 0, rejectionReason: 'No hand detected', landmarksValid: false },
-    right: { raw: null, stabilized: null, state: 'NO_HANDS', holdDurationMs: 0, confidence: 0, rejectionReason: 'No hand detected', landmarksValid: false },
+    left: { raw: null, stabilized: null, state: 'NO_HANDS', holdDurationMs: 0, confidence: 0, rejectionReason: 'No hand detected', landmarksValid: false, customResult: null },
+    right: { raw: null, stabilized: null, state: 'NO_HANDS', holdDurationMs: 0, confidence: 0, rejectionReason: 'No hand detected', landmarksValid: false, customResult: null },
   });
   const lastDiagUpdateRef = useRef(0);
 
@@ -277,6 +324,42 @@ export default function GoofyModePage() {
     sequenceEngineRef.current.updateSequences(config.customSequences || []);
     sequenceEngineRef.current.setCooldown(config.sequenceCooldownMs || 1200);
   }, [config.customSequences, config.sequenceCooldownMs]);
+
+  // V7: Load custom gestures, samples, and sequences from IndexedDB on startup
+  useEffect(() => {
+    let isMounted = true;
+    (async () => {
+      try {
+        const [loadedGestures, loadedSamples, loadedSequences] = await Promise.all([
+          loadAllCustomGestures(),
+          loadAllGestureSamples(),
+          loadCustomSequencesFromDB(),
+        ]);
+
+        if (isMounted) {
+          if (loadedGestures.length > 0) {
+            setCustomGestures(loadedGestures);
+            customClassifierRef.current.train(loadedGestures, loadedSamples);
+          }
+          if (loadedSamples.length > 0) {
+            setCustomSamples(loadedSamples);
+          }
+          if (loadedSequences.length > 0) {
+            setConfig((prev) => ({
+              ...prev,
+              customSequences: loadedSequences,
+            }));
+            sequenceEngineRef.current.updateSequences(loadedSequences);
+          }
+        }
+      } catch (err) {
+        console.warn('[GoofyMode] V7 storage initialization error:', err);
+      }
+    })();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const leftHandLandmarksRef = useRef<Landmark3D[] | null>(null);
   const rightHandLandmarksRef = useRef<Landmark3D[] | null>(null);
@@ -838,9 +921,43 @@ export default function GoofyModePage() {
         };
         const rightSM = rightHandSMRef.current.process(rightInput, now);
 
+        // Feed live hand to custom studio wizard
+        if (customStudioOpen) {
+          if (detectedHands.length > 0) {
+            setActiveHandForStudio({
+              landmarks: detectedHands[0]!.landmarks,
+              handedness: detectedHands[0]!.handedness,
+            });
+          } else {
+            setActiveHandForStudio({ landmarks: null, handedness: null });
+          }
+        }
+
+        // V7 Custom Gesture Classification (Strictly 21-point hand features)
+        let customLeftResult: CustomClassificationResult | null = null;
+        let customRightResult: CustomClassificationResult | null = null;
+        if (config.enableCustomGestures !== false && customGestures.length > 0) {
+          const lHand = detectedHands.find((h) => h.handedness === 'Left');
+          const rHand = detectedHands.find((h) => h.handedness === 'Right');
+          if (lHand) {
+            customLeftResult = customClassifierRef.current.classify(
+              lHand.landmarks,
+              'Left',
+              config.customGestureSensitivity || 0.78
+            );
+          }
+          if (rHand) {
+            customRightResult = customClassifierRef.current.classify(
+              rHand.landmarks,
+              'Right',
+              config.customGestureSensitivity || 0.78
+            );
+          }
+        }
+
         // Update Diagnostics Telemetry Throttled (Phase 6)
         const inferDuration = performance.now() - inferStart;
-        if (showDiagnostics && now - lastDiagUpdateRef.current >= 80) {
+        if ((showDiagnostics || diagnosticsDrawerOpen) && now - lastDiagUpdateRef.current >= 80) {
           lastDiagUpdateRef.current = now;
           setDiagnosticsData({
             latencyMs: inferDuration,
@@ -854,6 +971,7 @@ export default function GoofyModePage() {
               rejectionReason: leftSM.rejectionReason,
               landmarksValid: !!leftResult,
               fingerStates: leftResult?.fingerStates,
+              customResult: customLeftResult,
             },
             right: {
               raw: curRightGesture,
@@ -864,9 +982,33 @@ export default function GoofyModePage() {
               rejectionReason: rightSM.rejectionReason,
               landmarksValid: !!rightResult,
               fingerStates: rightResult?.fingerStates,
+              customResult: customRightResult,
             },
           });
         }
+
+        // Intelligent Reaction Combo Helper (Phase 4)
+        const checkReactionCombo = (actionId: string, _hand: 'Left' | 'Right' | 'Both'): boolean => {
+          if (config.enableReactionCombos !== false) {
+            const combos = config.reactionCombos || BUILTIN_INTELLIGENT_COMBOS;
+            const last = lastActionRef.current;
+            if (last && now - last.time <= (config.comboWindowMs || 2500)) {
+              const matchedCombo = combos.find(
+                (c) =>
+                  c.enabled !== false &&
+                  ((c.triggerGestureA && c.triggerGestureA === last.actionId) || c.firstAction === last.actionId) &&
+                  ((c.triggerGestureB && c.triggerGestureB === actionId) || c.secondAction === actionId)
+              );
+              if (matchedCombo) {
+                eventEngineRef.current.dispatchReactionComboTrigger(matchedCombo, 0.99);
+                lastActionRef.current = null;
+                return true;
+              }
+            }
+          }
+          lastActionRef.current = { actionId, time: now };
+          return false;
+        };
 
         // Dual-Hand Combination Evaluation & Arbitration
         let dualComboTriggered = false;
@@ -887,6 +1029,7 @@ export default function GoofyModePage() {
                 isDynamic: false,
               }
             );
+            checkReactionCombo(dualSM.combo, 'Both');
 
             // Dual Combo Achievements
             unlockAchievement('GOOFY_DUAL_COMBO');
@@ -916,6 +1059,7 @@ export default function GoofyModePage() {
               eventEngineRef.current.dispatchSequenceTrigger(seqRes.sequence);
               unlockAchievement('GOOFY_DUAL_COMBO');
               setSequenceProgress(null);
+              checkReactionCombo(seqRes.sequence.id, 'Both');
             } else if (seqRes.progressPercent > 0) {
               setSequenceProgress({
                 id: seqRes.sequence?.id || 'ACTIVE_SEQUENCE',
@@ -937,6 +1081,7 @@ export default function GoofyModePage() {
                 isDynamic: leftResult?.isDynamic,
               }
             );
+            checkReactionCombo(leftSM.gesture, 'Left');
           }
 
           if (rightSM.triggered && rightSM.gesture) {
@@ -950,8 +1095,59 @@ export default function GoofyModePage() {
                 isDynamic: rightResult?.isDynamic,
               }
             );
+            checkReactionCombo(rightSM.gesture, 'Right');
+          }
+
+          // Custom user-defined gesture trigger evaluation
+          if (config.enableCustomGestures !== false && customGestures.length > 0) {
+            if (customLeftResult && customLeftResult.isMatch && customLeftResult.gestureId) {
+              const gDef = customGestures.find((g) => g.id === customLeftResult!.gestureId);
+              if (gDef) {
+                const key = `Left:${gDef.id}`;
+                const firstSeen = customHoldTrackerRef.current.get(key) || now;
+                if (!customHoldTrackerRef.current.has(key)) customHoldTrackerRef.current.set(key, now);
+                const holdMs = now - firstSeen;
+                const minHold = gDef.minHoldMs || 180;
+                if (holdMs >= minHold && holdMs < minHold + 90) {
+                  eventEngineRef.current.dispatchCustomGestureTrigger(gDef, 'Left', customLeftResult.confidence);
+                  sequenceEngineRef.current.processGesture(gDef.id, now, 'Left');
+                  checkReactionCombo(gDef.id, 'Left');
+                }
+              }
+            } else {
+              for (const k of Array.from(customHoldTrackerRef.current.keys())) {
+                if (k.startsWith('Left:')) customHoldTrackerRef.current.delete(k);
+              }
+            }
+
+            if (customRightResult && customRightResult.isMatch && customRightResult.gestureId) {
+              const gDef = customGestures.find((g) => g.id === customRightResult!.gestureId);
+              if (gDef) {
+                const key = `Right:${gDef.id}`;
+                const firstSeen = customHoldTrackerRef.current.get(key) || now;
+                if (!customHoldTrackerRef.current.has(key)) customHoldTrackerRef.current.set(key, now);
+                const holdMs = now - firstSeen;
+                const minHold = gDef.minHoldMs || 180;
+                if (holdMs >= minHold && holdMs < minHold + 90) {
+                  eventEngineRef.current.dispatchCustomGestureTrigger(gDef, 'Right', customRightResult.confidence);
+                  sequenceEngineRef.current.processGesture(gDef.id, now, 'Right');
+                  checkReactionCombo(gDef.id, 'Right');
+                }
+              }
+            } else {
+              for (const k of Array.from(customHoldTrackerRef.current.keys())) {
+                if (k.startsWith('Right:')) customHoldTrackerRef.current.delete(k);
+              }
+            }
           }
         }
+
+        // Active Sequence Telemetry & Tracking Loss Grace
+        if (detectedHands.length === 0) {
+          sequenceEngineRef.current.notifyTrackingLoss(now);
+        }
+        const curActiveSeqState = sequenceEngineRef.current.getActiveState(now);
+        setActiveSequenceState(curActiveSeqState);
 
         // Active Detection & Caption Resolution
         let newLabel = 'SHOW YOUR HANDS';
@@ -974,6 +1170,12 @@ export default function GoofyModePage() {
           const meta = GOOFY_HAND_METADATA[curLeftGesture];
           newLabel = `${meta?.icon} LEFT: ${meta?.label}`;
           newCaption = config.actionCustomCaptions[curLeftGesture] || meta?.defaultCaption;
+        } else if (customRightResult?.isMatch && customRightResult.label) {
+          newLabel = `⚡ CUSTOM: ${customRightResult.label}`;
+          newCaption = `CONFIDENCE: ${Math.round((customRightResult.confidence || 0.9) * 100)}% // CUSTOM GESTURE`;
+        } else if (customLeftResult?.isMatch && customLeftResult.label) {
+          newLabel = `⚡ CUSTOM: ${customLeftResult.label}`;
+          newCaption = `CONFIDENCE: ${Math.round((customLeftResult.confidence || 0.9) * 100)}% // CUSTOM GESTURE`;
         } else if (detectedHands.length > 0) {
           newLabel = 'HANDS DETECTED (NO GESTURE)';
           newCaption = `DIGITS DETECTED: ${leftFingers + rightFingers} // FORM A GESTURE!`;
@@ -1021,6 +1223,14 @@ export default function GoofyModePage() {
     }
   }, [
     config.actionCustomCaptions,
+    config.comboWindowMs,
+    config.customGestureSensitivity,
+    config.enableCustomGestures,
+    config.enableReactionCombos,
+    config.reactionCombos,
+    customGestures,
+    customStudioOpen,
+    diagnosticsDrawerOpen,
     isMirrored,
     isStreaming,
     syntheticMode,
@@ -1432,6 +1642,120 @@ export default function GoofyModePage() {
     eventEngineRef.current.setCustomMemes(updated);
   };
 
+  // V7: Save / Delete Custom Gesture
+  const handleSaveCustomGesture = async (
+    gesture: CustomGestureDefinition,
+    samples: CustomGestureSample[]
+  ) => {
+    await saveCustomGestureDefinition(gesture);
+    if (samples.length > 0) {
+      await saveGestureSamples(samples);
+    }
+    const updatedGestures = [...customGestures.filter((g) => g.id !== gesture.id), gesture];
+    const updatedSamples = [...customSamples.filter((s) => s.gestureId !== gesture.id), ...samples];
+    setCustomGestures(updatedGestures);
+    setCustomSamples(updatedSamples);
+    customClassifierRef.current.train(updatedGestures, updatedSamples);
+    setConfig((prev) => ({
+      ...prev,
+      customGestures: updatedGestures,
+    }));
+  };
+
+  const handleDeleteCustomGesture = async (gestureId: string) => {
+    await deleteCustomGestureDefinition(gestureId);
+    const updatedGestures = customGestures.filter((g) => g.id !== gestureId);
+    const updatedSamples = customSamples.filter((s) => s.gestureId !== gestureId);
+    setCustomGestures(updatedGestures);
+    setCustomSamples(updatedSamples);
+    customClassifierRef.current.train(updatedGestures, updatedSamples);
+    setConfig((prev) => ({
+      ...prev,
+      customGestures: updatedGestures,
+    }));
+  };
+
+  // V7: Save / Delete Custom Sequence from Modal
+  const handleSaveCustomSequenceFromModal = async (sequence: GestureSequenceDefinition) => {
+    const existing = config.customSequences || [];
+    const updated = [...existing.filter((s) => s.id !== sequence.id), sequence];
+    await saveCustomSequencesToDB(updated);
+    setConfig((prev) => ({
+      ...prev,
+      customSequences: updated,
+    }));
+    sequenceEngineRef.current.updateSequences(updated);
+  };
+
+  const handleDeleteCustomSequenceFromModal = async (sequenceId: string) => {
+    const existing = config.customSequences || [];
+    const updated = existing.filter((s) => s.id !== sequenceId);
+    await saveCustomSequencesToDB(updated);
+    setConfig((prev) => ({
+      ...prev,
+      customSequences: updated,
+    }));
+    sequenceEngineRef.current.updateSequences(updated);
+  };
+
+  // V7: Save Reaction Configuration from Personal Reaction Modal
+  const handleSaveReaction = (updatedConfig: Partial<GoofyModeConfig>) => {
+    setConfig((prev) => ({
+      ...prev,
+      ...updatedConfig,
+    }));
+  };
+
+  // V7: Export & Import Full V7 Library
+  const handleExportV7 = async () => {
+    try {
+      const json = await exportV7FullLibrary(config);
+      const blob = new Blob([json], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `omni_goofy_v7_library_${Date.now()}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('[Goofy] Export V7 failed:', err);
+    }
+  };
+
+  const handleImportV7 = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const result = await importV7FullLibrary(text);
+      if (result.success) {
+        const [loadedG, loadedS, loadedSeq] = await Promise.all([
+          loadAllCustomGestures(),
+          loadAllGestureSamples(),
+          loadCustomSequencesFromDB(),
+        ]);
+        setCustomGestures(loadedG);
+        setCustomSamples(loadedS);
+        customClassifierRef.current.train(loadedG, loadedS);
+        setConfig((prev) => ({
+          ...prev,
+          customGestures: loadedG,
+          customSequences: loadedSeq,
+        }));
+        sequenceEngineRef.current.updateSequences(loadedSeq);
+        alert(`Successfully imported ${result.gesturesImported} custom gestures and ${result.sequencesImported} sequences!`);
+      } else {
+        alert(`Import failed: ${result.error}`);
+      }
+    } catch (err) {
+      alert(`Import error: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      e.target.value = '';
+    }
+  };
+
   return (
     <div className="min-h-screen bg-paper-cream text-charcoal-dark font-mono flex flex-col">
       <GlobalNav />
@@ -1465,15 +1789,43 @@ export default function GoofyModePage() {
               </Link>
               <StampBadge label="HAND-ONLY" variant="sage" />
               <h1 className="text-xl md:text-2xl font-black uppercase tracking-wider text-charcoal-dark">
-                GOOFY MODEL V6
+                GOOFY MODEL V7
               </h1>
             </div>
             <p className="text-xs text-ink-muted">
-              HAND-ONLY GESTURE INTELLIGENCE // MEME REACTION ENGINE // TEMPORAL SEQUENCES // AURA TWIST
+              CUSTOM GESTURE STUDIO // INTELLIGENT REACTION COMBOS // TEMPORAL SEQUENCES // ADVANCED INTERACTION
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              onClick={() => setCustomStudioOpen(true)}
+              className="gap-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold transition-all duration-150 active:scale-95 cursor-pointer shadow-sm"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+              <span>CREATE GESTURE</span>
+            </Button>
+
+            <Button
+              size="sm"
+              onClick={() => setSequenceCreatorOpen(true)}
+              className="gap-1.5 text-xs bg-amber-500 hover:bg-amber-600 text-charcoal-dark font-bold transition-all duration-150 active:scale-95 cursor-pointer shadow-sm"
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>CREATE SEQUENCE</span>
+            </Button>
+
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setDiagnosticsDrawerOpen(true)}
+              className="gap-1.5 text-xs border-indigo-400 text-indigo-700 hover:bg-indigo-50 font-bold transition-all duration-150 active:scale-95 cursor-pointer"
+            >
+              <Activity className="w-3.5 h-3.5 text-indigo-600" />
+              <span>DIAGNOSTICS</span>
+            </Button>
+
             <Button
               variant="outline"
               size="sm"
@@ -1643,6 +1995,30 @@ export default function GoofyModePage() {
                     </button>
                   </div>
                 </div>
+
+                {/* Active Sequence Step Progress HUD */}
+                {activeSequenceState && activeSequenceState.currentStepIndex > 0 && (
+                  <div className="absolute top-14 left-1/2 -translate-x-1/2 z-20 px-3.5 py-1.5 bg-black/90 border-2 border-amber-400 rounded-full backdrop-blur-md flex items-center gap-2 text-white text-[10px] font-black tracking-wider shadow-lg pointer-events-none">
+                    <span className="text-amber-400">SEQUENCE:</span>
+                    <span className="text-white font-bold">{activeSequenceState.sequenceLabel}</span>
+                    <div className="flex items-center gap-1 ml-1">
+                      {activeSequenceState.steps.map((st, i) => (
+                        <span
+                          key={i}
+                          className={`px-1.5 py-0.5 rounded text-[9px] ${
+                            st.isCompleted
+                              ? 'bg-emerald-500 text-black font-extrabold'
+                              : i === activeSequenceState.currentStepIndex
+                              ? 'bg-amber-400 text-black animate-pulse font-bold'
+                              : 'bg-white/10 text-white/50'
+                          }`}
+                        >
+                          {i + 1}: {st.label} {st.isCompleted ? '✓' : ''}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Demo Mode Active Banner */}
                 {isDemoMode && (
@@ -2279,6 +2655,17 @@ export default function GoofyModePage() {
                 }`}
               >
                 COMBOS (15)
+              </button>
+
+              <button
+                onClick={() => setActiveTab('CUSTOM')}
+                className={`px-2.5 py-1.5 text-[11px] font-extrabold uppercase border-b-2 transition-colors ${
+                  activeTab === 'CUSTOM'
+                    ? 'border-emerald-500 text-charcoal-dark font-black'
+                    : 'border-transparent text-ink-muted hover:text-charcoal-dark'
+                }`}
+              >
+                CUSTOM ({customGestures.length})
               </button>
 
               <button
@@ -2974,6 +3361,155 @@ export default function GoofyModePage() {
               </div>
             )}
 
+            {/* TAB: CUSTOM GESTURES (V7) */}
+            {activeTab === 'CUSTOM' && (
+              <div className="space-y-3 max-h-[620px] overflow-y-auto pr-1">
+                {/* Custom Gestures Header Banner */}
+                <div className="p-3 bg-gradient-to-r from-emerald-500/15 via-teal-500/10 to-cyan-500/15 border-2 border-emerald-500 rounded-tactile space-y-2">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-5 h-5 text-emerald-600" />
+                      <div>
+                        <div className="font-extrabold text-sm text-charcoal-dark">
+                          CUSTOM GESTURE STUDIO &amp; LIBRARY (V7)
+                        </div>
+                        <div className="text-[11px] text-ink-muted">
+                          Record real 21-point hand landmark observations, train KNN classifier, and assign custom reactions.
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => setCustomStudioOpen(true)}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs gap-1.5 cursor-pointer shadow-sm"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                        <span>CREATE GESTURE</span>
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleExportV7}
+                        className="text-xs font-bold gap-1 cursor-pointer"
+                        title="Export V7 Gestures, Sequences and Combos as JSON"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>EXPORT JSON</span>
+                      </Button>
+                      <label className="text-xs font-bold gap-1 border border-charcoal-soft px-2 py-1 rounded bg-paper-cream hover:bg-paper-dark/30 cursor-pointer flex items-center">
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>IMPORT JSON</span>
+                        <input
+                          type="file"
+                          accept=".json"
+                          onChange={handleImportV7}
+                          className="hidden"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {customGestures.length === 0 ? (
+                  <div className="p-8 border-2 border-dashed border-charcoal-soft/40 rounded-tactile text-center space-y-3 bg-paper-dark/10">
+                    <Hand className="w-10 h-10 text-emerald-600 mx-auto opacity-70 animate-pulse" />
+                    <div className="space-y-1">
+                      <div className="font-bold text-sm text-charcoal-dark">
+                        NO CUSTOM GESTURES RECORDED YET
+                      </div>
+                      <p className="text-xs text-ink-muted max-w-md mx-auto">
+                        Teach Goofy Model your own custom hand gestures using 21-point invariant geometric features!
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      onClick={() => setCustomStudioOpen(true)}
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs gap-1 cursor-pointer"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                      <span>OPEN CUSTOM GESTURE STUDIO</span>
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {customGestures.map((g) => {
+                      const sampleCount = customSamples.filter((s) => s.gestureId === g.id).length;
+                      const assignedMeme = getMemeById(g.assignedMemeId || g.defaultMemeId || '', customMemes) || getDefaultMemeForAction('THUMBS_UP');
+                      const gLabel = g.label || g.name;
+                      return (
+                        <div
+                          key={g.id}
+                          className="p-3 border-2 border-emerald-600/40 hover:border-emerald-600 rounded bg-paper-cream shadow-sm space-y-2.5 transition-all"
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <div className="font-extrabold text-xs text-charcoal-dark flex items-center gap-1.5">
+                                <span className="text-base">{g.icon || '✋'}</span>
+                                <span>{gLabel}</span>
+                                <span className="text-[9px] px-1.5 py-0.2 bg-emerald-100 text-emerald-800 rounded font-bold uppercase">
+                                  {g.handedness}
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-ink-muted font-mono">
+                                ID: {g.id} &bull; Samples: {sampleCount}
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-paper-dark/30 text-charcoal-dark block">
+                                {g.minHoldMs || 180}ms HOLD
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Assigned Reaction Info */}
+                          <div className="flex items-center gap-2 p-1.5 rounded bg-paper-dark/20 text-[10px] font-mono">
+                            <span className="font-bold text-ink-muted">REACTION:</span>
+                            <span className="truncate font-bold">🖼️ {assignedMeme.title}</span>
+                            <span className="text-ink-muted">|</span>
+                            <span className="truncate font-bold">🔊 {g.assignedSoundId || g.defaultSoundId || 'CHAD_GONG'}</span>
+                          </div>
+
+                          {/* Action Buttons */}
+                          <div className="flex items-center justify-between gap-1 pt-1 border-t border-charcoal-soft/10 text-xs">
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => eventEngineRef.current.previewAction(g.id, 'CUSTOM_GESTURE')}
+                                className="text-[10px] gap-1 p-1 h-6 cursor-pointer text-emerald-700 hover:bg-emerald-50"
+                              >
+                                <Sparkles className="w-3 h-3 text-amber-500" />
+                                <span>TEST LIVE</span>
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setReactionEditorAction({ actionId: g.id, label: gLabel })}
+                                className="text-[10px] gap-1 p-1 h-6 cursor-pointer text-purple-700 hover:bg-purple-50"
+                              >
+                                <Wand2 className="w-3 h-3" />
+                                <span>REACTION</span>
+                              </Button>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteCustomGesture(g.id)}
+                              className="text-[10px] font-bold text-rose-600 hover:text-rose-800 px-1.5 py-0.5 rounded hover:bg-rose-50 transition-colors cursor-pointer"
+                              title="Delete custom gesture"
+                            >
+                              DELETE
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* TAB 3: TEMPORAL GESTURE SEQUENCES (V6) */}
             {activeTab === 'SEQUENCES' && (
               <div className="space-y-3 max-h-[620px] overflow-y-auto pr-1">
@@ -3067,15 +3603,21 @@ export default function GoofyModePage() {
                         {/* Sequence Steps Progression Visualizer */}
                         <div className="flex items-center gap-1.5 p-2 bg-paper-dark/20 rounded text-[11px] font-mono flex-wrap">
                           <span className="font-bold text-ink-muted text-[10px] uppercase">STEPS:</span>
-                          {seq.steps.map((st, idx) => (
-                            <React.Fragment key={idx}>
-                              {idx > 0 && <span className="text-amber-600 font-black">&rarr;</span>}
-                              <span className="px-2 py-0.5 bg-paper-cream border border-charcoal-soft/30 rounded font-black text-charcoal-dark flex items-center gap-1">
-                                <span>{GOOFY_HAND_METADATA[st]?.icon || '✋'}</span>
-                                <span>{GOOFY_HAND_METADATA[st]?.label || st}</span>
-                              </span>
-                            </React.Fragment>
-                          ))}
+                          {seq.steps.map((st, idx) => {
+                            const stepMeta = (GOOFY_HAND_METADATA as Record<string, any>)[st];
+                            const customDef = customGestures.find((cg) => cg.id === st);
+                            const stepIcon = stepMeta?.icon || customDef?.icon || '✋';
+                            const stepLabel = stepMeta?.label || customDef?.label || customDef?.name || st;
+                            return (
+                              <React.Fragment key={idx}>
+                                {idx > 0 && <span className="text-amber-600 font-black">&rarr;</span>}
+                                <span className="px-2 py-0.5 bg-paper-cream border border-charcoal-soft/30 rounded font-black text-charcoal-dark flex items-center gap-1">
+                                  <span>{stepIcon}</span>
+                                  <span>{stepLabel}</span>
+                                </span>
+                              </React.Fragment>
+                            );
+                          })}
                           <span className="ml-auto text-[9px] text-ink-muted font-bold">
                             WINDOW: {seq.maxWindowMs}ms
                           </span>
@@ -4456,6 +4998,110 @@ export default function GoofyModePage() {
         currentMappings={config.actionMemeMappings}
         onClose={() => setAssignModalMeme(null)}
         onAssignToAction={handleAssignToAction}
+      />
+
+      {/* MODAL 5: CUSTOM GESTURE STUDIO (V7) */}
+      <CustomGestureStudioModal
+        isOpen={customStudioOpen}
+        onClose={() => setCustomStudioOpen(false)}
+        activeLandmarks={activeHandForStudio.landmarks}
+        activeHandedness={activeHandForStudio.handedness}
+        existingGestures={customGestures}
+        allMemes={allMemes}
+        onGestureSaved={handleSaveCustomGesture}
+        onPreviewReaction={(memeId, soundId, caption) => {
+          eventEngineRef.current.previewAction('PREVIEW', 'HAND', soundId, memeId, undefined, caption);
+        }}
+      />
+
+      {/* MODAL 6: PERSONAL MEME REACTION EDITOR (V7) */}
+      {reactionEditorAction && (
+        <PersonalMemeReactionEditorModal
+          isOpen={!!reactionEditorAction}
+          onClose={() => setReactionEditorAction(null)}
+          targetActionId={reactionEditorAction.actionId}
+          targetActionLabel={reactionEditorAction.label}
+          allMemes={allMemes}
+          currentAssignedMemeId={
+            config.actionMemeMappings[reactionEditorAction.actionId] ||
+            config.handMappings[reactionEditorAction.actionId as GoofyHandGestureType]?.memeId ||
+            getDefaultMemeForAction(reactionEditorAction.actionId).id
+          }
+          currentSoundId={
+            config.handMappings[reactionEditorAction.actionId as GoofyHandGestureType]?.soundId || 'CHAD_GONG'
+          }
+          currentCaption={config.actionCustomCaptions[reactionEditorAction.actionId] || ''}
+          currentAnimationStyle={config.popupAnimationStyle}
+          currentDurationMs={config.memeDurationMs}
+          currentCooldownMs={config.cooldownMs}
+          currentMultiMemes={config.multiMemeAssignments?.[reactionEditorAction.actionId] || []}
+          onSaveReaction={({ actionId, primaryMemeId, caption, multiMemes, animationStyle, durationMs, cooldownMs }) => {
+            setConfig((prev) => ({
+              ...prev,
+              actionMemeMappings: {
+                ...prev.actionMemeMappings,
+                [actionId]: primaryMemeId,
+              },
+              actionCustomCaptions: {
+                ...prev.actionCustomCaptions,
+                [actionId]: caption,
+              },
+              multiMemeAssignments: {
+                ...(prev.multiMemeAssignments || {}),
+                [actionId]: multiMemes,
+              },
+              popupAnimationStyle: animationStyle,
+              memeDurationMs: durationMs,
+              cooldownMs,
+            }));
+          }}
+          onPreviewReaction={(memeId, soundId, caption) => {
+            eventEngineRef.current.previewAction(
+              reactionEditorAction.actionId,
+              reactionEditorAction.actionId.startsWith('SEQ_') ? 'SEQUENCE' : 'HAND',
+              soundId,
+              memeId,
+              reactionEditorAction.label,
+              caption
+            );
+          }}
+        />
+      )}
+
+      {/* MODAL 7: GESTURE SEQUENCE CREATOR (V7) */}
+      <GestureSequenceCreatorModal
+        isOpen={sequenceCreatorOpen}
+        onClose={() => setSequenceCreatorOpen(false)}
+        existingSequences={config.customSequences || []}
+        customGestures={customGestures}
+        allMemes={allMemes}
+        onSaveSequence={handleSaveCustomSequenceFromModal}
+        onPreviewSequence={(seq) => {
+          eventEngineRef.current.previewAction(
+            seq.id,
+            'SEQUENCE',
+            seq.defaultSoundId,
+            seq.defaultMemeId,
+            seq.label,
+            seq.defaultCaption
+          );
+        }}
+      />
+
+      {/* DRAWER: HAND TRACKING DIAGNOSTICS WORKSPACE (V7) */}
+      <HandTrackingDiagnosticsDrawer
+        isOpen={diagnosticsDrawerOpen}
+        onClose={() => setDiagnosticsDrawerOpen(false)}
+        latencyMs={diagnosticsData.latencyMs}
+        fps={fps}
+        handCount={handCount}
+        leftHandLandmarks={leftHandLandmarksRef.current}
+        rightHandLandmarks={rightHandLandmarksRef.current}
+        leftDiagnostics={diagnosticsData.left}
+        rightDiagnostics={diagnosticsData.right}
+        activeSequence={activeSequenceState}
+        showFingertipMarkers={showFingertipMarkers}
+        onToggleFingertipMarkers={(v) => setShowFingertipMarkers(v)}
       />
     </div>
   );
