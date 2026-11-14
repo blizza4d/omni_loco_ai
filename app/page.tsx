@@ -509,13 +509,16 @@ export default function DashboardPage() {
             <div className="md:col-span-2">
               <DeskCard
                 figure="EXP. 04"
-                title="GOOFY MODEL"
+                title="GOOFY MODEL V7"
                 highlight={false}
                 className="h-full flex flex-col justify-between"
                 headerAction={
                   <div className="flex items-center gap-1">
                     <span className="font-mono text-[9px] font-bold px-1.5 py-0.5 border border-charcoal-soft bg-paper-dark text-charcoal-soft">
                       CAM
+                    </span>
+                    <span className="font-mono text-[9px] font-bold px-1.5 py-0.5 border border-emerald-600 bg-emerald-500/10 text-emerald-600">
+                      HANDS ONLY
                     </span>
                     <span className="font-mono text-[9px] font-bold px-1.5 py-0.5 border border-amber-600 bg-amber-500/10 text-amber-600">
                       AUDIO SYNTH
@@ -525,17 +528,17 @@ export default function DashboardPage() {
               >
                 <div className="my-2">
                   <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 block mb-1">
-                    REAL-TIME HUMAN ACTION RECOGNITION & MEME SOUND ENGINE
+                    INTELLIGENT HAND GESTURE RECOGNITION &amp; MEME REACTION ENGINE
                   </span>
                   <p className="text-xs text-ink-muted leading-relaxed">
-                    Semantic full-body kinematic model distinguishing static postures (T-Pose, Hands Raised, Hands on Hips, Arms Crossed, Squat, Flex) from temporal actions (Jump, Clap) with client-side Web Audio synthesis.
+                    Strictly hand-only 21-point dual-hand tracking with 17 recognized hand gestures, 15 dual combos, Custom Gesture Studio (real KNN invariant features), temporal sequence creator &amp; 110+ visual meme popup engine.
                   </p>
                 </div>
 
                 <div className="my-2 p-2.5 border border-charcoal-soft bg-paper-dark/60 rounded-[2px] flex items-center justify-between">
                   <div className="space-y-1">
-                    <StampBadge label="WEBGPU / KINEMATICS" variant="charcoal" />
-                    <span className="block text-[10px] text-ink-muted">MODEL ID: built-in-goofy-model &bull; EST. SIZE: 9.4 MB</span>
+                    <StampBadge label="HAND-ONLY V7 / WEBGPU" variant="charcoal" />
+                    <span className="block text-[10px] text-ink-muted">MODEL ID: hand_landmarker &bull; EST. SIZE: 7.8 MB</span>
                   </div>
                   <div className="flex items-center gap-1.5 text-[11px]">
                     <span className="w-2 h-2 rounded-full bg-sage-green animate-pulse" />
@@ -544,7 +547,16 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="mt-2 flex flex-wrap gap-1">
-                  {['T-Pose', 'Hands Raised', 'Hands on Hips', 'Arms Crossed', 'Squat', 'Jump', 'Flex Pose', 'Clap'].map((action) => (
+                  {[
+                    'Thumbs Up',
+                    'Peace Sign',
+                    'Rock Sign',
+                    'OK Gesture',
+                    'Finger Heart',
+                    'Double Peace',
+                    'Secret Combos',
+                    'Custom Gestures',
+                  ].map((action) => (
                     <span
                       key={action}
                       className="text-[9px] font-mono font-bold px-1.5 py-0.5 bg-paper-dark/80 text-ink-muted border border-charcoal-soft/30 rounded-[2px]"
@@ -556,7 +568,7 @@ export default function DashboardPage() {
 
                 <div className="pt-3 mt-3 border-t border-charcoal-soft/20 flex flex-wrap items-center justify-between gap-2">
                   <span className="text-[10px] font-mono text-ink-muted">
-                    8 SUPPORTED CLASSES &bull; TEMPORAL VALIDATION
+                    17 GESTURES &bull; 15 COMBOS &bull; CUSTOM STUDIO &bull; 110+ MEMES
                   </span>
                   <div className="flex items-center gap-2">
                     <Link href="/laboratory">

@@ -270,8 +270,8 @@ export function GlobalNav({
                     ? 'border-amber-500 bg-amber-500/20 text-amber-700 dark:text-amber-400 shadow-tactile-sm'
                     : 'border-charcoal-soft text-charcoal-soft hover:bg-paper-dark hover:border-amber-500 hover:text-amber-600'
                 }`}
-                title="Launch Goofy Mode Human Sound Effect Generator"
-                aria-label="Launch Goofy Mode"
+                title="Launch Goofy Model V7 Hand Gesture & Meme Reaction Engine"
+                aria-label="Launch Goofy Model V7"
               >
                 <span className="text-xs">🤪</span>
                 <span className="hidden sm:inline">GOOFY</span>

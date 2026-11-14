@@ -101,4 +101,13 @@ describe('Omni Loco AI: Platform Architecture, Registry & UI Validation', () => 
       expect(mod.modelUrl).not.toContain('amazonaws.com');
     }
   });
+
+  it('validates Goofy Model V7 experimental definition is strictly hand-only with local model', async () => {
+    const { GOOFY_MODEL_DEFINITION } = await import('../core/modules/registry');
+    expect(GOOFY_MODEL_DEFINITION.id).toBe('goofy');
+    expect(GOOFY_MODEL_DEFINITION.title).toBe('GOOFY MODEL V7');
+    expect(GOOFY_MODEL_DEFINITION.modelUrl).toBe('/models/hand_landmarker.task');
+    expect(GOOFY_MODEL_DEFINITION.features).toContain('17 Gestures & 15 Combos');
+    expect(GOOFY_MODEL_DEFINITION.features).toContain('Custom Gesture Studio');
+  });
 });
