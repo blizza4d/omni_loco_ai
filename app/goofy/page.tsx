@@ -9,21 +9,32 @@ import { useCamera } from '@/core/camera/useCamera';
 import { MediaPipeTaskRunner } from '@/core/mediapipe/task-runner';
 import { syncCanvasToVideo } from '@/core/camera/coordinates';
 import { renderHandOverlay } from '@/modules/hand/overlay-renderer';
+import { renderFaceOverlay } from '@/modules/face/overlay-renderer';
+import { FaceLandmark, FaceMeshLayers } from '@/modules/face/types';
 import { generateSyntheticHand } from '@/modules/hand/synthetic-hand';
 import { Landmark3D } from '@/modules/hand/types';
 import {
   GoofyHandGestureType,
   GoofyDualHandComboId,
+  GoofyFaceExpressionType,
+  GoofyMultimodalComboId,
+  GoofyOperatingMode,
   GoofySoundId,
   GoofyModeConfig,
   ActiveMemePopup,
   UnifiedMemeEvent,
   MemeVisualDefinition,
   HandRecognitionState,
+  FaceRecognitionState,
+  FaceClassificationResult,
+  FaceStateMachineResult,
+  MultimodalEvent,
   DEFAULT_GOOFY_CONFIG,
   DEFAULT_SOUND_LIBRARY,
   GOOFY_HAND_METADATA,
   GOOFY_DUAL_COMBO_DEFINITIONS,
+  GOOFY_FACE_METADATA,
+  GOOFY_MULTIMODAL_COMBO_DEFINITIONS,
   PopupAnimationStyle,
   MemePresetId,
   MemeCategory,
@@ -46,6 +57,11 @@ import {
   GoofyDualHandStateMachine,
   detectDualHandCombo,
 } from '@/modules/pose/goofy-hand-classifier';
+import {
+  GoofyFaceClassifier,
+  GoofyFaceStateMachine,
+} from '@/modules/pose/goofy-face-classifier';
+import { GoofyMultimodalEngine } from '@/modules/pose/goofy-multimodal-engine';
 import {
   CustomHandFeatureExtractor,
   GoofyCustomGestureClassifier,
@@ -126,9 +142,11 @@ import {
   Terminal,
   Cpu,
   Layers,
+  Smile,
+  Eye,
 } from 'lucide-react';
 
-const STORAGE_KEY = 'omni-goofy-config-v3-hand-only';
+const STORAGE_KEY = 'omni-goofy-config-v8-multimodal';
 
 export default function GoofyModePage() {
   const [config, setConfig] = useState<GoofyModeConfig>(() => {
@@ -159,12 +177,16 @@ export default function GoofyModePage() {
     return DEFAULT_GOOFY_CONFIG;
   });
 
-  const [activeTab, setActiveTab] = useState<'HANDS' | 'COMBOS' | 'CUSTOM' | 'SEQUENCES' | 'CREATOR' | 'MEMES' | 'TESTBENCH'>('HANDS');
+  const [activeTab, setActiveTab] = useState<'FACE' | 'HANDS' | 'COMBOS' | 'MULTIMODAL' | 'CUSTOM' | 'SEQUENCES' | 'CREATOR' | 'MEMES' | 'TESTBENCH'>('MULTIMODAL');
   const [isDemoMode, setIsDemoMode] = useState<boolean>(false);
   const [sequenceProgress, setSequenceProgress] = useState<{ id: string; pct: number } | null>(null);
   const [syntheticMode, setSyntheticMode] = useState(false);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [showFingertipMarkers, setShowFingertipMarkers] = useState(true);
+  const [showFaceOverlay, setShowFaceOverlay] = useState(true);
+  const [showFaceMesh, setShowFaceMesh] = useState(false);
+  const [showHandOverlay, setShowHandOverlay] = useState(true);
+  const [isFaceModelLoaded, setIsFaceModelLoaded] = useState(false);
   const [selectedTestGesture, setSelectedTestGesture] = useState<GoofyHandGestureType>('THUMBS_UP');
   const [benchmarkResults, setBenchmarkResults] = useState<BenchmarkReport | null>(null);
   const [isBenchmarking, setIsBenchmarking] = useState(false);
@@ -174,6 +196,12 @@ export default function GoofyModePage() {
   const [capturedSamples, setCapturedSamples] = useState<{ id: string; label: string; timestamp: number; landmarks: Landmark3D[]; handedness: 'Left' | 'Right' }[]>([]);
   const [sampleCaptureLabel, setSampleCaptureLabel] = useState<string>('THUMBS_UP');
   const [fps, setFps] = useState(0);
+
+  // V8 Multimodal Face & Hand Recognition Engine States
+  const [activeFaceExpression, setActiveFaceExpression] = useState<GoofyFaceExpressionType | null>(null);
+  const [activeMultimodalCombo, setActiveMultimodalCombo] = useState<GoofyMultimodalComboId | null>(null);
+  const [expandedFaces, setExpandedFaces] = useState<Set<string>>(new Set());
+  const [expandedMultimodal, setExpandedMultimodal] = useState<Set<string>>(new Set());
 
   // V7 Custom Gesture Studio & Intelligent Reaction Combos States
   const [customStudioOpen, setCustomStudioOpen] = useState(false);
@@ -194,10 +222,13 @@ export default function GoofyModePage() {
   const lastActionRef = useRef<{ actionId: string; time: number } | null>(null);
   const customHoldTrackerRef = useRef<Map<string, number>>(new Map());
 
-  // Diagnostics Telemetry State (Phase 6)
+  // Diagnostics Telemetry State (V8 Multimodal)
   const [diagnosticsData, setDiagnosticsData] = useState<{
     latencyMs: number;
+    faceLatencyMs: number;
+    handLatencyMs: number;
     handCount: number;
+    faceCount: number;
     left: {
       raw: GoofyHandGestureType | null;
       stabilized: GoofyHandGestureType | null;
@@ -220,11 +251,34 @@ export default function GoofyModePage() {
       customResult?: CustomClassificationResult | null;
       fingerStates?: { thumb: boolean; index: boolean; middle: boolean; ring: boolean; pinky: boolean };
     };
+    face: {
+      raw: string | null;
+      stabilized: string | null;
+      state: string;
+      holdDurationMs: number;
+      confidence: number;
+      rejectionReason: string | null;
+      landmarksValid: boolean;
+      rawScores?: Record<string, number>;
+    };
+    multimodal: {
+      operatingMode: string;
+      fusionWindowMs: number;
+      lastCombo?: string;
+      lastEventId?: string;
+      lastModality?: string;
+      lastRejectionReason?: string | null;
+    };
   }>({
     latencyMs: 0,
+    faceLatencyMs: 0,
+    handLatencyMs: 0,
     handCount: 0,
+    faceCount: 0,
     left: { raw: null, stabilized: null, state: 'NO_HANDS', holdDurationMs: 0, confidence: 0, rejectionReason: 'No hand detected', landmarksValid: false, customResult: null },
     right: { raw: null, stabilized: null, state: 'NO_HANDS', holdDurationMs: 0, confidence: 0, rejectionReason: 'No hand detected', landmarksValid: false, customResult: null },
+    face: { raw: null, stabilized: null, state: 'NO_FACE', holdDurationMs: 0, confidence: 0, rejectionReason: 'No face detected', landmarksValid: false, rawScores: {} },
+    multimodal: { operatingMode: 'MULTIMODAL', fusionWindowMs: 800, lastRejectionReason: null },
   });
   const lastDiagUpdateRef = useRef(0);
 
@@ -291,6 +345,21 @@ export default function GoofyModePage() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const runnerRef = useRef<MediaPipeTaskRunner>(new MediaPipeTaskRunner());
   const handClassifierRef = useRef<GoofyHandClassifier>(new GoofyHandClassifier());
+  const faceLandmarksRef = useRef<FaceLandmark[] | null>(null);
+  const faceClassifierRef = useRef<GoofyFaceClassifier>(new GoofyFaceClassifier());
+  const faceSMRef = useRef<GoofyFaceStateMachine>(
+    new GoofyFaceStateMachine({
+      minHoldMs: 180,
+      cooldownMs: config.cooldownMs,
+    })
+  );
+  const multimodalEngineRef = useRef<GoofyMultimodalEngine>(
+    new GoofyMultimodalEngine(
+      config.operatingMode || 'MULTIMODAL',
+      config.fusionWindowMs || 800,
+      config.cooldownMs || 750
+    )
+  );
 
   const leftHandSMRef = useRef<GoofyHandStateMachine>(
     new GoofyHandStateMachine({
@@ -371,6 +440,9 @@ export default function GoofyModePage() {
     rightFingers: -1,
     totalFingers: -1,
     dualCombo: null as GoofyDualHandComboId | null,
+    faceExpression: null as GoofyFaceExpressionType | null,
+    faceState: 'NO_FACE' as FaceRecognitionState,
+    multimodalCombo: null as GoofyMultimodalComboId | null,
     label: '',
     caption: '',
   });
@@ -402,6 +474,10 @@ export default function GoofyModePage() {
     leftHandSMRef.current.updateConfig({ cooldownMs: config.cooldownMs });
     rightHandSMRef.current.updateConfig({ cooldownMs: config.cooldownMs });
     dualHandSMRef.current.updateConfig({ cooldownMs: config.cooldownMs });
+    faceSMRef.current.updateConfig({ cooldownMs: config.cooldownMs });
+    multimodalEngineRef.current.setOperatingMode(config.operatingMode || 'MULTIMODAL');
+    multimodalEngineRef.current.setFusionWindow(config.fusionWindowMs || 800);
+    multimodalEngineRef.current.setCooldown(config.cooldownMs || 750);
     eventEngineRef.current.updateConfig(config);
   }, [config]);
 
@@ -437,15 +513,15 @@ export default function GoofyModePage() {
             label: event.actionLabel,
             timestamp: event.timestamp,
           },
-          'goofy-model-hand-only',
+          'goofy-model-v8-multimodal',
           event.confidence || 0.95
         );
 
-        // Easter egg achievements for Hand Gestures
+        // Easter egg achievements for Gestures & Face expressions
         sessionGesturesRef.current.add(event.actionId);
         unlockAchievement('GOOFY_FIRST_GESTURE');
 
-        if (event.source === 'DUAL_HAND') {
+        if (event.source === 'DUAL_HAND' || event.source === 'MULTIMODAL') {
           unlockAchievement('GOOFY_DUAL_COMBO');
         }
 
@@ -466,7 +542,7 @@ export default function GoofyModePage() {
     return () => unsubscribe();
   }, []);
 
-  // Initialize MediaPipe Hand Perception Pipeline (Prefers GestureRecognizer, fallbacks to HandLandmarker)
+  // Initialize Dual Concurrent Vision Pipelines (FaceLandmarker + GestureRecognizer/HandLandmarker)
   useEffect(() => {
     let mounted = true;
     const runner = runnerRef.current;
@@ -485,13 +561,18 @@ export default function GoofyModePage() {
           minTrackingConfidence: 0.40,
         },
       })
-      .then(() => {
+      .then(async () => {
         if (mounted) {
           setActiveHandModelName(runner.getActiveHandModel());
+          // Cooperatively initialize MediaPipe Face Landmarker for 478 3D landmarks + 52 ARKit blendshapes
+          const faceSuccess = await runner.initFaceLandmarker('/models/face_landmarker.task');
+          if (mounted && faceSuccess) {
+            setIsFaceModelLoaded(true);
+          }
         }
       })
       .catch((err) => {
-        console.warn('[GoofyModel] MediaPipe hand perception pipeline notice:', err);
+        console.warn('[GoofyModel] MediaPipe perception pipeline notice:', err);
       });
 
     return () => {
@@ -506,11 +587,11 @@ export default function GoofyModePage() {
 
   useEffect(() => {
     setPerfStats({
-      activeModule: 'GOOFY MODEL V3 (HAND-ONLY)',
-      activeModel: 'hand_landmarker (21-point dual)',
+      activeModule: 'GOOFY MODEL V8 (MULTIMODAL)',
+      activeModel: 'face_landmarker (478-pt) + hand_landmarker (21-pt dual)',
       fps,
-      p50Ms: 12,
-      p95Ms: 18,
+      p50Ms: 14,
+      p95Ms: 22,
       trackingStatus: isStreaming ? 'TRACKING_ACTIVE' : 'STANDBY',
       streamStatus: isStreaming ? 'STREAMING' : 'STANDBY',
     });
@@ -662,7 +743,54 @@ export default function GoofyModePage() {
     setExpandedCombos(new Set());
   }, []);
 
-  // Main 60 FPS Render & Evaluation Loop (Dedicated Hand Tracking Every Frame)
+  const toggleFaceAccordion = useCallback((faceKey: string) => {
+    setExpandedFaces((prev) => {
+      const next = new Set(prev);
+      if (next.has(faceKey)) next.delete(faceKey);
+      else next.add(faceKey);
+      return next;
+    });
+  }, []);
+
+  const handleExpandAllFaces = useCallback(() => {
+    const all = [
+      'FACE_SMILE',
+      'FACE_BIG_SMILE',
+      'FACE_JAW_OPEN',
+      'FACE_EYEBROWS_RAISED',
+      'FACE_EYES_WIDE',
+      'FACE_BLINK',
+      'FACE_FROWN_PATTERN',
+      'FACE_LIP_PUCKER',
+      'FACE_CHEEK_RAISE',
+      'FACE_SURPRISE',
+    ];
+    setExpandedFaces(new Set(all));
+  }, []);
+
+  const handleCollapseAllFaces = useCallback(() => {
+    setExpandedFaces(new Set());
+  }, []);
+
+  const toggleMultimodalAccordion = useCallback((comboKey: string) => {
+    setExpandedMultimodal((prev) => {
+      const next = new Set(prev);
+      if (next.has(comboKey)) next.delete(comboKey);
+      else next.add(comboKey);
+      return next;
+    });
+  }, []);
+
+  const handleExpandAllMultimodal = useCallback(() => {
+    const all = Object.keys(GOOFY_MULTIMODAL_COMBO_DEFINITIONS);
+    setExpandedMultimodal(new Set(all));
+  }, []);
+
+  const handleCollapseAllMultimodal = useCallback(() => {
+    setExpandedMultimodal(new Set());
+  }, []);
+
+  // Main 60 FPS Render & Evaluation Loop (Dual Concurrent Face & Hand Perception)
   const tick = useCallback(() => {
     const now = performance.now();
     frameCountRef.current++;
@@ -674,6 +802,27 @@ export default function GoofyModePage() {
     }
 
     const inferStart = performance.now();
+    let faceInferDuration = 0;
+    let handInferDuration = 0;
+
+    // 1. Cooperative Face Perception (478 3D Landmarks + 52 ARKit Blendshapes)
+    let detectedFaceLandmarks: FaceLandmark[] | null = null;
+    let detectedFaceBlendshapes: { categoryName: string; score: number }[] = [];
+
+    if (videoRef.current && videoRef.current.readyState >= 2 && runnerRef.current.isFaceLoaded()) {
+      const faceStart = performance.now();
+      const faceResult = runnerRef.current.detectFace(videoRef.current, now);
+      faceInferDuration = performance.now() - faceStart;
+      if (faceResult && faceResult.faceLandmarks && faceResult.faceLandmarks.length > 0) {
+        detectedFaceLandmarks = faceResult.faceLandmarks[0] as FaceLandmark[];
+        if (faceResult.faceBlendshapes && faceResult.faceBlendshapes[0]?.categories) {
+          detectedFaceBlendshapes = faceResult.faceBlendshapes[0].categories;
+        }
+      }
+    }
+    faceLandmarksRef.current = detectedFaceLandmarks;
+
+    // 2. Cooperative Hand Perception (21 3D Landmarks per hand)
     let detectedHands: {
       handedness: 'Left' | 'Right';
       landmarks: Landmark3D[];
@@ -683,7 +832,6 @@ export default function GoofyModePage() {
     }[] = [];
 
     if (syntheticMode) {
-      // Synthetic Demonstration Mode: Generates synthetic hand landmarks ONLY when explicitly enabled
       const synthLm = generateSyntheticHand(now, 'point');
       let minX = 1, maxX = 0, minY = 1, maxY = 0;
       for (const pt of synthLm) {
@@ -700,8 +848,10 @@ export default function GoofyModePage() {
         },
       ];
     } else if (videoRef.current && videoRef.current.readyState >= 2) {
-      // Live Camera Processing: Dedicated Hand Tracking on Every Frame
+      const handStart = performance.now();
       const handResult = runnerRef.current.detectHands(videoRef.current, now);
+      handInferDuration = performance.now() - handStart;
+
       if (handResult && handResult.landmarks && handResult.landmarks.length > 0) {
         detectedHands = handResult.landmarks.map((lms, idx) => {
           const rawHandedness =
@@ -739,7 +889,6 @@ export default function GoofyModePage() {
           };
         });
 
-        // Consistent visual screen-X handedness sorting to prevent handedness flipping
         if (detectedHands.length === 2 && detectedHands[0]?.landmarks[0] && detectedHands[1]?.landmarks[0]) {
           const h0x = isMirrored ? (1 - detectedHands[0].landmarks[0].x) : detectedHands[0].landmarks[0].x;
           const h1x = isMirrored ? (1 - detectedHands[1].landmarks[0].x) : detectedHands[1].landmarks[0].x;
@@ -752,7 +901,6 @@ export default function GoofyModePage() {
           }
         }
 
-        // Update cached refs
         const leftH = detectedHands.find((h) => h.handedness === 'Left');
         const rightH = detectedHands.find((h) => h.handedness === 'Right');
         leftHandLandmarksRef.current = leftH ? leftH.landmarks : null;
@@ -777,101 +925,128 @@ export default function GoofyModePage() {
       if (ctx) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // Render Hand Bounding Box with Sleek Corner Brackets & Status Pill
-        for (const hand of detectedHands) {
-          if (hand.bbox) {
-            const padX = (hand.bbox.maxX - hand.bbox.minX) * 0.18;
-            const padY = (hand.bbox.maxY - hand.bbox.minY) * 0.18;
-            const leftX = Math.max(0, hand.bbox.minX - padX);
-            const rightX = Math.min(1, hand.bbox.maxX + padX);
-            const topY = Math.max(0, hand.bbox.minY - padY);
-            const botY = Math.min(1, hand.bbox.maxY + padY);
-
-            const bx = isMirrored ? (1 - rightX) * canvas.width : leftX * canvas.width;
-            const bw = (rightX - leftX) * canvas.width;
-            const by = topY * canvas.height;
-            const bh = (botY - topY) * canvas.height;
-
-            const color = hand.handedness === 'Left' ? '#A855F7' : '#06B6D4';
-            ctx.save();
-            ctx.strokeStyle = color;
-            ctx.lineWidth = 1.8;
-            ctx.setLineDash([6, 4]);
-            ctx.strokeRect(bx, by, bw, bh);
-            ctx.setLineDash([]);
-
-            // Handedness pill at top corner of bounding box
-            ctx.fillStyle = hand.handedness === 'Left' ? 'rgba(168, 85, 247, 0.90)' : 'rgba(6, 182, 212, 0.90)';
-            ctx.font = 'bold 9px monospace';
-            const badgeText = `${hand.handedness.toUpperCase()} [DETECTED]`;
-            const badgeW = ctx.measureText(badgeText).width + 8;
-            ctx.fillRect(bx, Math.max(0, by - 14), badgeW, 13);
-            ctx.fillStyle = '#FFFFFF';
-            ctx.fillText(badgeText, bx + 4, Math.max(9, by - 4));
-            ctx.restore();
-          }
-        }
-
-        // Render On-Screen Guidance when camera active but no hands in view
-        if (detectedHands.length === 0 && isStreaming) {
-          ctx.save();
-          const cardW = 340;
-          const cardH = 46;
-          const cardX = (canvas.width - cardW) / 2;
-          const cardY = canvas.height - cardH - 24;
-
-          ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';
-          ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
-          ctx.lineWidth = 1;
-          ctx.beginPath();
-          ctx.roundRect(cardX, cardY, cardW, cardH, 8);
-          ctx.fill();
-          ctx.stroke();
-
-          ctx.fillStyle = '#F8FAFC';
-          ctx.font = 'bold 11px monospace';
-          ctx.textAlign = 'center';
-          ctx.fillText('NO HANDS DETECTED — SHOW HAND TO CAMERA', canvas.width / 2, cardY + 18);
-
-          ctx.fillStyle = '#94A3B8';
-          ctx.font = '9px monospace';
-          ctx.fillText('• Keep inside frame  • Ensure adequate light  • Avoid rapid blur', canvas.width / 2, cardY + 34);
-          ctx.restore();
-        }
-
-        // Render Hand Skeletons & 21 Landmarks
-        for (const hand of detectedHands) {
-          renderHandOverlay(ctx, hand.landmarks, canvas.width, canvas.height, {
-            showJointLabels: showDiagnostics && showFingertipMarkers,
-            showSkeleton: true,
-            showCursor: false,
-            showActiveRegion: false,
+        // Render Face Overlay (Contours, Eyes, Lips, and Mesh Tesselation)
+        if (showFaceOverlay && detectedFaceLandmarks && detectedFaceLandmarks.length >= 468) {
+          renderFaceOverlay(ctx, detectedFaceLandmarks, canvas.width, canvas.height, {
+            layers: {
+              tesselation: showFaceMesh,
+              contours: true,
+              eyes: true,
+              irises: true,
+              lips: true,
+              headPoseGizmo: false,
+            },
             isMirrored,
             clearBeforeRender: false,
           });
+        }
 
-          // Fingertip highlighted markers when diagnostics enabled
-          if (showDiagnostics && showFingertipMarkers) {
-            const tipIndices = [4, 8, 12, 16, 20];
-            for (const idx of tipIndices) {
-              const tip = hand.landmarks[idx];
-              if (tip) {
-                const cx = isMirrored ? (1 - tip.x) * canvas.width : tip.x * canvas.width;
-                const cy = tip.y * canvas.height;
-                ctx.save();
-                ctx.beginPath();
-                ctx.arc(cx, cy, 7, 0, Math.PI * 2);
-                ctx.strokeStyle = hand.handedness === 'Left' ? '#A855F7' : '#06B6D4';
-                ctx.lineWidth = 2.5;
-                ctx.stroke();
-                ctx.restore();
+        // Render Hand Bounding Box & Skeletons
+        if (showHandOverlay) {
+          for (const hand of detectedHands) {
+            if (hand.bbox) {
+              const padX = (hand.bbox.maxX - hand.bbox.minX) * 0.18;
+              const padY = (hand.bbox.maxY - hand.bbox.minY) * 0.18;
+              const leftX = Math.max(0, hand.bbox.minX - padX);
+              const rightX = Math.min(1, hand.bbox.maxX + padX);
+              const topY = Math.max(0, hand.bbox.minY - padY);
+              const botY = Math.min(1, hand.bbox.maxY + padY);
+
+              const bx = isMirrored ? (1 - rightX) * canvas.width : leftX * canvas.width;
+              const bw = (rightX - leftX) * canvas.width;
+              const by = topY * canvas.height;
+              const bh = (botY - topY) * canvas.height;
+
+              const color = hand.handedness === 'Left' ? '#A855F7' : '#06B6D4';
+              ctx.save();
+              ctx.strokeStyle = color;
+              ctx.lineWidth = 1.8;
+              ctx.setLineDash([6, 4]);
+              ctx.strokeRect(bx, by, bw, bh);
+              ctx.setLineDash([]);
+
+              ctx.fillStyle = hand.handedness === 'Left' ? 'rgba(168, 85, 247, 0.90)' : 'rgba(6, 182, 212, 0.90)';
+              ctx.font = 'bold 9px monospace';
+              const badgeText = `${hand.handedness.toUpperCase()} [DETECTED]`;
+              const badgeW = ctx.measureText(badgeText).width + 8;
+              ctx.fillRect(bx, Math.max(0, by - 14), badgeW, 13);
+              ctx.fillStyle = '#FFFFFF';
+              ctx.fillText(badgeText, bx + 4, Math.max(9, by - 4));
+              ctx.restore();
+            }
+          }
+
+          if (detectedHands.length === 0 && !detectedFaceLandmarks && isStreaming) {
+            ctx.save();
+            const cardW = 340;
+            const cardH = 46;
+            const cardX = (canvas.width - cardW) / 2;
+            const cardY = canvas.height - cardH - 24;
+
+            ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';
+            ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.roundRect(cardX, cardY, cardW, cardH, 8);
+            ctx.fill();
+            ctx.stroke();
+
+            ctx.fillStyle = '#F8FAFC';
+            ctx.font = 'bold 11px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('NO TARGET DETECTED — SHOW FACE OR HANDS', canvas.width / 2, cardY + 18);
+
+            ctx.fillStyle = '#94A3B8';
+            ctx.font = '9px monospace';
+            ctx.fillText('• Keep inside frame  • Ensure adequate light  • Multimodal perception active', canvas.width / 2, cardY + 34);
+            ctx.restore();
+          }
+
+          for (const hand of detectedHands) {
+            renderHandOverlay(ctx, hand.landmarks, canvas.width, canvas.height, {
+              showJointLabels: showDiagnostics && showFingertipMarkers,
+              showSkeleton: true,
+              showCursor: false,
+              showActiveRegion: false,
+              isMirrored,
+              clearBeforeRender: false,
+            });
+
+            if (showDiagnostics && showFingertipMarkers) {
+              const tipIndices = [4, 8, 12, 16, 20];
+              for (const idx of tipIndices) {
+                const tip = hand.landmarks[idx];
+                if (tip) {
+                  const cx = isMirrored ? (1 - tip.x) * canvas.width : tip.x * canvas.width;
+                  const cy = tip.y * canvas.height;
+                  ctx.save();
+                  ctx.beginPath();
+                  ctx.arc(cx, cy, 7, 0, Math.PI * 2);
+                  ctx.strokeStyle = hand.handedness === 'Left' ? '#A855F7' : '#06B6D4';
+                  ctx.lineWidth = 2.5;
+                  ctx.stroke();
+                  ctx.restore();
+                }
               }
             }
           }
         }
 
         // ─────────────────────────────────────────────────────────────
-        // HAND INFERENCE, DUAL COMBOS & FINGER TELEMETRY
+        // 3. FACIAL EXPRESSION CLASSIFICATION & STATE MACHINE
+        // ─────────────────────────────────────────────────────────────
+        let faceResult: FaceClassificationResult | null = null;
+        if (detectedFaceLandmarks && detectedFaceLandmarks.length >= 468) {
+          faceResult = faceClassifierRef.current.classify(
+            detectedFaceLandmarks,
+            detectedFaceBlendshapes
+          );
+        }
+
+        const faceSM = faceSMRef.current.update(faceResult, now);
+
+        // ─────────────────────────────────────────────────────────────
+        // 4. HAND INFERENCE, DUAL COMBOS & FINGER TELEMETRY
         // ─────────────────────────────────────────────────────────────
         let curLeftGesture: GoofyHandGestureType | null = null;
         let curRightGesture: GoofyHandGestureType | null = null;
@@ -900,7 +1075,6 @@ export default function GoofyModePage() {
           }
         }
 
-        // Feed State Machine: ALWAYS process both hands (pass gesture: null if absent)
         const leftInput = leftResult || {
           gesture: null,
           handedness: 'Left' as const,
@@ -921,7 +1095,6 @@ export default function GoofyModePage() {
         };
         const rightSM = rightHandSMRef.current.process(rightInput, now);
 
-        // Feed live hand to custom studio wizard
         if (customStudioOpen) {
           if (detectedHands.length > 0) {
             setActiveHandForStudio({
@@ -933,7 +1106,6 @@ export default function GoofyModePage() {
           }
         }
 
-        // V7 Custom Gesture Classification (Strictly 21-point hand features)
         let customLeftResult: CustomClassificationResult | null = null;
         let customRightResult: CustomClassificationResult | null = null;
         if (config.enableCustomGestures !== false && customGestures.length > 0) {
@@ -955,13 +1127,16 @@ export default function GoofyModePage() {
           }
         }
 
-        // Update Diagnostics Telemetry Throttled (Phase 6)
-        const inferDuration = performance.now() - inferStart;
+        // Diagnostics Telemetry Throttled Update
+        const totalInferMs = faceInferDuration + handInferDuration;
         if ((showDiagnostics || diagnosticsDrawerOpen) && now - lastDiagUpdateRef.current >= 80) {
           lastDiagUpdateRef.current = now;
           setDiagnosticsData({
-            latencyMs: inferDuration,
+            latencyMs: totalInferMs,
+            faceLatencyMs: faceInferDuration,
+            handLatencyMs: handInferDuration,
             handCount: detectedHands.length,
+            faceCount: detectedFaceLandmarks ? 1 : 0,
             left: {
               raw: curLeftGesture,
               stabilized: leftSM.stabilizedGesture,
@@ -984,10 +1159,25 @@ export default function GoofyModePage() {
               fingerStates: rightResult?.fingerStates,
               customResult: customRightResult,
             },
+            face: {
+              raw: faceResult?.expression || null,
+              stabilized: faceSM.stabilizedExpression,
+              state: faceSM.state,
+              holdDurationMs: faceSM.holdDurationMs,
+              confidence: faceSM.confidence,
+              rejectionReason: faceSM.rejectionReason,
+              landmarksValid: !!detectedFaceLandmarks,
+              rawScores: faceResult?.blendshapeFeatures || {},
+            },
+            multimodal: {
+              operatingMode: config.operatingMode || 'MULTIMODAL',
+              fusionWindowMs: config.fusionWindowMs || 800,
+              lastCombo: multimodalEngineRef.current.getLastTriggeredCombo() || undefined,
+            },
           });
         }
 
-        // Intelligent Reaction Combo Helper (Phase 4)
+        // Intelligent Reaction Combo Helper
         const checkReactionCombo = (actionId: string, _hand: 'Left' | 'Right' | 'Both'): boolean => {
           if (config.enableReactionCombos !== false) {
             const combos = config.reactionCombos || BUILTIN_INTELLIGENT_COMBOS;
@@ -1010,7 +1200,24 @@ export default function GoofyModePage() {
           return false;
         };
 
-        // Dual-Hand Combination Evaluation & Arbitration
+        // ─────────────────────────────────────────────────────────────
+        // 5. MULTIMODAL FUSION & ACTION ARBITRATION
+        // ─────────────────────────────────────────────────────────────
+        let validatedMultimodalEvent: MultimodalEvent | null = null;
+
+        // A. Route Face Signal
+        if (faceSM.triggered && faceSM.expression) {
+          const mFace = multimodalEngineRef.current.onFaceExpressionValidated(
+            faceSM.expression,
+            faceSM.confidence,
+            now
+          );
+          if (mFace && mFace.validity === 'VALID') {
+            validatedMultimodalEvent = mFace;
+          }
+        }
+
+        // B. Dual-Hand Combination Evaluation
         let dualComboTriggered = false;
         let currentDualComboId: GoofyDualHandComboId | null = null;
 
@@ -1021,17 +1228,16 @@ export default function GoofyModePage() {
 
           if (dualSM.triggered && dualSM.combo) {
             dualComboTriggered = true;
-            eventEngineRef.current.dispatchDualHandTrigger(
+            const mCombo = multimodalEngineRef.current.onHandGestureValidated(
               dualSM.combo,
               comboResult.confidence,
-              {
-                fingerCount: leftFingers + rightFingers,
-                isDynamic: false,
-              }
+              now,
+              'Both'
             );
-            checkReactionCombo(dualSM.combo, 'Both');
+            if (mCombo && mCombo.validity === 'VALID') {
+              validatedMultimodalEvent = mCombo;
+            }
 
-            // Dual Combo Achievements
             unlockAchievement('GOOFY_DUAL_COMBO');
             if (dualSM.combo === 'PERFECT_TEN') {
               unlockAchievement('GOOFY_PERFECT_TEN');
@@ -1044,7 +1250,7 @@ export default function GoofyModePage() {
           dualHandSMRef.current.reset();
         }
 
-        // If a dual-hand combo is triggered, suppress individual single-hand triggers for this tick
+        // C. Single-Hand Gestures & Sequences (if dual combo did not consume)
         if (!dualComboTriggered) {
           const candidateSeqGesture =
             leftSM.triggered && leftSM.gesture
@@ -1071,34 +1277,29 @@ export default function GoofyModePage() {
           }
 
           if (leftSM.triggered && leftSM.gesture) {
-            eventEngineRef.current.dispatchActionTrigger(
+            const mLeft = multimodalEngineRef.current.onHandGestureValidated(
               leftSM.gesture,
-              'HAND',
-              'Left',
               leftSM.confidence,
-              {
-                fingerCount: leftResult?.fingerCount,
-                isDynamic: leftResult?.isDynamic,
-              }
+              now,
+              'Left'
             );
-            checkReactionCombo(leftSM.gesture, 'Left');
+            if (mLeft && mLeft.validity === 'VALID') {
+              validatedMultimodalEvent = mLeft;
+            }
           }
 
           if (rightSM.triggered && rightSM.gesture) {
-            eventEngineRef.current.dispatchActionTrigger(
+            const mRight = multimodalEngineRef.current.onHandGestureValidated(
               rightSM.gesture,
-              'HAND',
-              'Right',
               rightSM.confidence,
-              {
-                fingerCount: rightResult?.fingerCount,
-                isDynamic: rightResult?.isDynamic,
-              }
+              now,
+              'Right'
             );
-            checkReactionCombo(rightSM.gesture, 'Right');
+            if (mRight && mRight.validity === 'VALID') {
+              validatedMultimodalEvent = mRight;
+            }
           }
 
-          // Custom user-defined gesture trigger evaluation
           if (config.enableCustomGestures !== false && customGestures.length > 0) {
             if (customLeftResult && customLeftResult.isMatch && customLeftResult.gestureId) {
               const gDef = customGestures.find((g) => g.id === customLeftResult!.gestureId);
@@ -1142,18 +1343,68 @@ export default function GoofyModePage() {
           }
         }
 
-        // Active Sequence Telemetry & Tracking Loss Grace
+        // D. Dispatch Validated Multimodal Action to Unified Event Engine
+        if (validatedMultimodalEvent) {
+          if (validatedMultimodalEvent.modality === 'MULTIMODAL' && validatedMultimodalEvent.comboId) {
+            eventEngineRef.current.dispatchActionTrigger(
+              validatedMultimodalEvent.comboId,
+              'MULTIMODAL',
+              undefined,
+              validatedMultimodalEvent.confidence
+            );
+            checkReactionCombo(validatedMultimodalEvent.comboId, 'Both');
+            unlockAchievement('GOOFY_DUAL_COMBO');
+          } else if (validatedMultimodalEvent.modality === 'FACE' && validatedMultimodalEvent.faceExpression) {
+            eventEngineRef.current.dispatchActionTrigger(
+              validatedMultimodalEvent.faceExpression,
+              'FACE',
+              undefined,
+              validatedMultimodalEvent.confidence
+            );
+            checkReactionCombo(validatedMultimodalEvent.faceExpression, 'Both');
+          } else if (validatedMultimodalEvent.modality === 'HAND' && validatedMultimodalEvent.handGesture) {
+            if (validatedMultimodalEvent.handIdentity === 'Both') {
+              eventEngineRef.current.dispatchDualHandTrigger(
+                validatedMultimodalEvent.handGesture as GoofyDualHandComboId,
+                validatedMultimodalEvent.confidence,
+                {
+                  fingerCount: leftFingers + rightFingers,
+                  isDynamic: false,
+                }
+              );
+            } else {
+              eventEngineRef.current.dispatchActionTrigger(
+                validatedMultimodalEvent.handGesture as GoofyHandGestureType,
+                'HAND',
+                validatedMultimodalEvent.handIdentity as 'Left' | 'Right',
+                validatedMultimodalEvent.confidence,
+                {
+                  fingerCount: validatedMultimodalEvent.handIdentity === 'Left' ? leftResult?.fingerCount : rightResult?.fingerCount,
+                  isDynamic: validatedMultimodalEvent.handIdentity === 'Left' ? leftResult?.isDynamic : rightResult?.isDynamic,
+                }
+              );
+            }
+            checkReactionCombo(validatedMultimodalEvent.handGesture, validatedMultimodalEvent.handIdentity || 'Both');
+          }
+        }
+
         if (detectedHands.length === 0) {
           sequenceEngineRef.current.notifyTrackingLoss(now);
         }
         const curActiveSeqState = sequenceEngineRef.current.getActiveState(now);
         setActiveSequenceState(curActiveSeqState);
 
-        // Active Detection & Caption Resolution
-        let newLabel = 'SHOW YOUR HANDS';
-        let newCaption = 'HOLD A HAND GESTURE OR DUAL-HAND COMBO TO TRIGGER MEMES!';
+        // ─────────────────────────────────────────────────────────────
+        // 6. ACTIVE DETECTION & CAPTION RESOLUTION
+        // ─────────────────────────────────────────────────────────────
+        let newLabel = 'READY // SHOW FACE OR HANDS';
+        let newCaption = 'HOLD AN EXPRESSION OR GESTURE TO TRIGGER MEMES!';
 
-        if (currentDualComboId) {
+        if (validatedMultimodalEvent?.modality === 'MULTIMODAL' && validatedMultimodalEvent.comboId) {
+          const comboMeta = GOOFY_MULTIMODAL_COMBO_DEFINITIONS[validatedMultimodalEvent.comboId];
+          newLabel = `⚡ ${comboMeta.icon} ${comboMeta.label}`;
+          newCaption = config.actionCustomCaptions[validatedMultimodalEvent.comboId] || comboMeta.defaultCaption;
+        } else if (currentDualComboId) {
           const comboMeta = GOOFY_DUAL_COMBO_DEFINITIONS[currentDualComboId];
           newLabel = `${comboMeta.icon} ${comboMeta.label}`;
           newCaption = config.actionCustomCaptions[currentDualComboId] || comboMeta.defaultCaption;
@@ -1170,19 +1421,30 @@ export default function GoofyModePage() {
           const meta = GOOFY_HAND_METADATA[curLeftGesture];
           newLabel = `${meta?.icon} LEFT: ${meta?.label}`;
           newCaption = config.actionCustomCaptions[curLeftGesture] || meta?.defaultCaption;
+        } else if (faceSM.stabilizedExpression) {
+          const fMeta = GOOFY_FACE_METADATA[faceSM.stabilizedExpression];
+          newLabel = `${fMeta?.icon || '🙂'} FACE: ${fMeta?.label || faceSM.stabilizedExpression}`;
+          newCaption = config.actionCustomCaptions[faceSM.stabilizedExpression] || fMeta?.defaultCaption;
         } else if (customRightResult?.isMatch && customRightResult.label) {
           newLabel = `⚡ CUSTOM: ${customRightResult.label}`;
           newCaption = `CONFIDENCE: ${Math.round((customRightResult.confidence || 0.9) * 100)}% // CUSTOM GESTURE`;
         } else if (customLeftResult?.isMatch && customLeftResult.label) {
           newLabel = `⚡ CUSTOM: ${customLeftResult.label}`;
           newCaption = `CONFIDENCE: ${Math.round((customLeftResult.confidence || 0.9) * 100)}% // CUSTOM GESTURE`;
+        } else if (detectedHands.length > 0 && detectedFaceLandmarks) {
+          newLabel = 'FACE & HANDS DETECTED';
+          newCaption = `DIGITS: ${leftFingers + rightFingers} // EXPRESSION: NEUTRAL`;
+        } else if (detectedFaceLandmarks) {
+          newLabel = 'FACE DETECTED (NEUTRAL)';
+          newCaption = 'SMILE, OPEN JAW, RAISE BROWS OR COMBINE WITH HAND GESTURES!';
         } else if (detectedHands.length > 0) {
           newLabel = 'HANDS DETECTED (NO GESTURE)';
           newCaption = `DIGITS DETECTED: ${leftFingers + rightFingers} // FORM A GESTURE!`;
         }
 
-        // High-Performance React State Throttling: only re-render DOM when telemetry values mutate
         const totalFingers = leftFingers + rightFingers;
+        const curFaceExp = faceSM.stabilizedExpression;
+        const curCombo = (validatedMultimodalEvent?.modality === 'MULTIMODAL' ? validatedMultimodalEvent.comboId : null) || activeMultimodalCombo;
         const prevT = prevTelemetryRef.current;
         if (
           prevT.handCount !== detectedHands.length ||
@@ -1192,6 +1454,8 @@ export default function GoofyModePage() {
           prevT.rightFingers !== rightFingers ||
           prevT.totalFingers !== totalFingers ||
           prevT.dualCombo !== currentDualComboId ||
+          prevT.faceExpression !== curFaceExp ||
+          prevT.multimodalCombo !== curCombo ||
           prevT.label !== newLabel ||
           prevT.caption !== newCaption
         ) {
@@ -1203,6 +1467,9 @@ export default function GoofyModePage() {
             rightFingers,
             totalFingers,
             dualCombo: currentDualComboId,
+            faceExpression: curFaceExp,
+            faceState: faceSM.state,
+            multimodalCombo: curCombo,
             label: newLabel,
             caption: newCaption,
           };
@@ -1213,6 +1480,8 @@ export default function GoofyModePage() {
           setRightFingerCount(rightFingers);
           setTotalFingerCount(totalFingers);
           setActiveDualCombo(currentDualComboId);
+          setActiveFaceExpression(curFaceExp);
+          setActiveMultimodalCombo(curCombo);
           setActiveDetectionLabel(newLabel);
           setComicCaption(newCaption);
         }
@@ -1227,16 +1496,22 @@ export default function GoofyModePage() {
     config.customGestureSensitivity,
     config.enableCustomGestures,
     config.enableReactionCombos,
+    config.fusionWindowMs,
+    config.operatingMode,
     config.reactionCombos,
     customGestures,
     customStudioOpen,
     diagnosticsDrawerOpen,
     isMirrored,
     isStreaming,
+    showFaceMesh,
+    showFaceOverlay,
+    showHandOverlay,
     syntheticMode,
     videoRef,
     showDiagnostics,
     showFingertipMarkers,
+    activeMultimodalCombo,
   ]);
 
   // Animation Loop
@@ -1787,17 +2062,66 @@ export default function GoofyModePage() {
                   <ArrowLeft className="w-4 h-4" />
                 </Button>
               </Link>
-              <StampBadge label="HAND-ONLY" variant="sage" />
+              <StampBadge label="MULTIMODAL V8" variant="sage" />
+              <StampBadge label={config.operatingMode || 'MULTIMODAL'} variant="brick" />
               <h1 className="text-xl md:text-2xl font-black uppercase tracking-wider text-charcoal-dark">
-                GOOFY MODEL V7
+                GOOFY MODEL V8
               </h1>
             </div>
             <p className="text-xs text-ink-muted">
-              CUSTOM GESTURE STUDIO // INTELLIGENT REACTION COMBOS // TEMPORAL SEQUENCES // ADVANCED INTERACTION
+              MULTIMODAL FACE & HAND RECOGNITION ENGINE // DUAL CONCURRENT VISION // MEME REACTION ARBITRATION
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {/* Operating Mode Segmented Pill */}
+            <div className="flex items-center gap-1 bg-paper-dark/30 p-1 rounded-tactile border border-charcoal-soft/30 text-xs">
+              {(['MULTIMODAL', 'FACE_ONLY', 'HAND_ONLY'] as GoofyOperatingMode[]).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => setConfig((p) => ({ ...p, operatingMode: mode }))}
+                  className={`px-2.5 py-1 rounded text-[10px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                    (config.operatingMode || 'MULTIMODAL') === mode
+                      ? 'bg-amber-400 text-charcoal-dark shadow-sm'
+                      : 'text-ink-muted hover:text-charcoal-dark'
+                  }`}
+                >
+                  {mode === 'MULTIMODAL' ? '⚡ DUAL MULTIMODAL' : mode === 'FACE_ONLY' ? '🙂 FACE ONLY' : '✋ HAND ONLY'}
+                </button>
+              ))}
+            </div>
+
+            {/* Canvas Overlay Toggles */}
+            <div className="flex items-center gap-2.5 px-2.5 py-1 bg-paper-dark/20 border border-charcoal-soft/30 rounded text-[10px] font-bold">
+              <label className="flex items-center gap-1 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showFaceOverlay}
+                  onChange={(e) => setShowFaceOverlay(e.target.checked)}
+                  className="accent-amber-500"
+                />
+                <span>FACE</span>
+              </label>
+              <label className="flex items-center gap-1 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showFaceMesh}
+                  onChange={(e) => setShowFaceMesh(e.target.checked)}
+                  className="accent-amber-500"
+                />
+                <span>MESH</span>
+              </label>
+              <label className="flex items-center gap-1 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showHandOverlay}
+                  onChange={(e) => setShowHandOverlay(e.target.checked)}
+                  className="accent-cyan-500"
+                />
+                <span>HANDS</span>
+              </label>
+            </div>
+
             <Button
               size="sm"
               onClick={() => setCustomStudioOpen(true)}
@@ -1880,6 +2204,117 @@ export default function GoofyModePage() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           {/* Left Column: Live Hand Camera, Overlays, Telemetry & Log (7 Cols) */}
           <div className="lg:col-span-7 space-y-4 w-full">
+            {/* 3 Status / Recognition Cards: Face, Hand & Multimodal Fusion */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+              {/* Card 1: Face Recognition */}
+              <div className="p-2.5 rounded-tactile border-2 border-amber-400/80 bg-amber-50/50 shadow-tactile-sm space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-extrabold text-[11px] uppercase text-amber-900 flex items-center gap-1">
+                    <Smile className="w-3.5 h-3.5 text-amber-600" />
+                    FACE RECOGNITION
+                  </span>
+                  <span
+                    className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${
+                      diagnosticsData.face.state === 'EXPRESSION_CONFIRMED' || diagnosticsData.face.state === 'EXPRESSION_TRIGGERED'
+                        ? 'bg-emerald-500 text-white'
+                        : diagnosticsData.face.state === 'EXPRESSION_CANDIDATE'
+                        ? 'bg-amber-400 text-charcoal-dark animate-pulse'
+                        : diagnosticsData.face.landmarksValid
+                        ? 'bg-blue-200 text-blue-900'
+                        : 'bg-paper-dark/30 text-ink-muted'
+                    }`}
+                  >
+                    {diagnosticsData.face.state.replace('EXPRESSION_', '')}
+                  </span>
+                </div>
+                <div className="text-[11px] truncate">
+                  <span className="text-ink-muted">Expression: </span>
+                  <span className="font-bold text-amber-900 truncate">
+                    {diagnosticsData.face.stabilized
+                      ? `${GOOFY_FACE_METADATA[diagnosticsData.face.stabilized as GoofyFaceExpressionType]?.icon || '🙂'} ${GOOFY_FACE_METADATA[diagnosticsData.face.stabilized as GoofyFaceExpressionType]?.label || diagnosticsData.face.stabilized}`
+                      : diagnosticsData.face.landmarksValid
+                      ? 'NEUTRAL'
+                      : 'NO FACE'}
+                  </span>
+                </div>
+                <div className="w-full bg-amber-200 h-1.5 rounded overflow-hidden">
+                  <div
+                    className="bg-amber-500 h-full transition-all duration-75"
+                    style={{ width: `${Math.min(100, (diagnosticsData.face.holdDurationMs / 180) * 100)}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[9px] text-ink-muted">
+                  <span>478 3D MESH</span>
+                  <span className="font-bold text-amber-800">{Math.round(diagnosticsData.face.confidence * 100)}% CONF</span>
+                </div>
+              </div>
+
+              {/* Card 2: Hand Recognition */}
+              <div className="p-2.5 rounded-tactile border-2 border-cyan-400/80 bg-cyan-50/50 shadow-tactile-sm space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-extrabold text-[11px] uppercase text-cyan-900 flex items-center gap-1">
+                    <Hand className="w-3.5 h-3.5 text-cyan-600" />
+                    HAND RECOGNITION
+                  </span>
+                  <span
+                    className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase ${
+                      handCount > 0 ? 'bg-cyan-500 text-black' : 'bg-paper-dark/30 text-ink-muted'
+                    }`}
+                  >
+                    {handCount > 0 ? `${handCount} ACTIVE` : 'NO HANDS'}
+                  </span>
+                </div>
+                <div className="text-[11px] truncate">
+                  <span className="text-ink-muted">L: </span>
+                  <span className="font-bold text-cyan-900">{diagnosticsData.left.stabilized || 'NONE'}</span>
+                  <span className="text-ink-muted ml-2">R: </span>
+                  <span className="font-bold text-cyan-900">{diagnosticsData.right.stabilized || 'NONE'}</span>
+                </div>
+                <div className="w-full bg-cyan-200 h-1.5 rounded overflow-hidden">
+                  <div
+                    className="bg-cyan-600 h-full transition-all duration-75"
+                    style={{ width: `${Math.min(100, (totalFingerCount / 10) * 100)}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[9px] text-ink-muted">
+                  <span>21-PT DUAL</span>
+                  <span className="font-bold text-cyan-800">{totalFingerCount} DIGITS</span>
+                </div>
+              </div>
+
+              {/* Card 3: Multimodal Fusion Engine */}
+              <div className="p-2.5 rounded-tactile border-2 border-purple-400/80 bg-purple-50/50 shadow-tactile-sm space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="font-extrabold text-[11px] uppercase text-purple-900 flex items-center gap-1">
+                    <Zap className="w-3.5 h-3.5 text-purple-600" />
+                    MULTIMODAL FUSION
+                  </span>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded font-black uppercase bg-purple-600 text-white">
+                    {config.operatingMode || 'MULTIMODAL'}
+                  </span>
+                </div>
+                <div className="text-[11px] truncate">
+                  <span className="text-ink-muted">Combo: </span>
+                  <span className="font-bold text-purple-900 truncate">
+                    {activeMultimodalCombo
+                      ? `${GOOFY_MULTIMODAL_COMBO_DEFINITIONS[activeMultimodalCombo]?.icon || '⚡'} ${GOOFY_MULTIMODAL_COMBO_DEFINITIONS[activeMultimodalCombo]?.label || activeMultimodalCombo}`
+                      : diagnosticsData.multimodal.lastCombo
+                      ? `${GOOFY_MULTIMODAL_COMBO_DEFINITIONS[diagnosticsData.multimodal.lastCombo as GoofyMultimodalComboId]?.icon || '⚡'} ${GOOFY_MULTIMODAL_COMBO_DEFINITIONS[diagnosticsData.multimodal.lastCombo as GoofyMultimodalComboId]?.label || diagnosticsData.multimodal.lastCombo}`
+                      : 'AWAITING FUSION'}
+                  </span>
+                </div>
+                <div className="w-full bg-purple-200 h-1.5 rounded overflow-hidden">
+                  <div className="bg-purple-600 h-full w-full" />
+                </div>
+                <div className="flex items-center justify-between text-[9px] text-ink-muted">
+                  <span>WINDOW: {config.fusionWindowMs || 800}MS</span>
+                  <span className="font-bold text-purple-800">
+                    {config.operatingMode === 'MULTIMODAL' ? 'FACE + HANDS' : config.operatingMode}
+                  </span>
+                </div>
+              </div>
+            </div>
+
             {/* Camera Viewport Stage with Meme Pop-up Overlay */}
             <div
               ref={cameraWrapperRef}
@@ -1907,7 +2342,7 @@ export default function GoofyModePage() {
                   className={`w-full h-full object-cover ${isMirrored ? 'scale-x-[-1]' : ''}`}
                 />
 
-                {/* Hand Skeleton Overlay Canvas */}
+                {/* Face & Hand Perception Canvas */}
                 <canvas
                   ref={canvasRef}
                   className="absolute inset-0 w-full h-full pointer-events-none z-10"
@@ -1916,13 +2351,31 @@ export default function GoofyModePage() {
                 {/* AUTOMATIC MEME POP-UP OVERLAY ENGINE */}
                 <MemePopupOverlay popups={activePopups} />
 
-                {/* Top Telemetry HUD: Dedicated Hand Tracking Indicators */}
+                {/* Top Telemetry HUD: Multimodal Perception Indicators */}
                 <div className="absolute top-3 inset-x-3 md:inset-x-4 z-20 flex flex-wrap items-center justify-between gap-2 pointer-events-none">
-                  {/* Left Badges: Hand Detection & Gestures */}
+                  {/* Left Badges: Mode, Face & Hand Detection */}
                   <div className="flex flex-wrap items-center gap-1.5 text-[10px] font-black tracking-wider">
                     {/* FPS */}
                     <span className="px-2 py-0.5 bg-black/80 border border-white/20 text-white rounded shadow-sm">
                       FPS: {fps}
+                    </span>
+
+                    {/* Mode Badge */}
+                    <span className="px-2 py-0.5 bg-purple-600 text-white rounded shadow-sm flex items-center gap-1 font-bold">
+                      <Zap className="w-3 h-3" />
+                      {config.operatingMode || 'MULTIMODAL'}
+                    </span>
+
+                    {/* Face Badge */}
+                    <span
+                      className={`px-2 py-0.5 border rounded flex items-center gap-1 shadow-sm ${
+                        diagnosticsData.face.landmarksValid
+                          ? 'border-amber-400 bg-amber-500 text-black'
+                          : 'border-white/20 bg-black/80 text-white/70'
+                      }`}
+                    >
+                      <Smile className="w-3 h-3" />
+                      FACE: {diagnosticsData.face.stabilized ? diagnosticsData.face.stabilized.replace('FACE_', '') : diagnosticsData.face.landmarksValid ? 'TRACKING' : 'NONE'}
                     </span>
 
                     {/* Hand Count Badge */}
@@ -1959,8 +2412,19 @@ export default function GoofyModePage() {
 
                   {/* Right Badges & Fullscreen Controls */}
                   <div className="flex items-center gap-2 pointer-events-auto ml-auto">
+                    {/* Multimodal Combo Active Badge */}
+                    {activeMultimodalCombo && (
+                      <div className="flex items-center gap-1.5 border px-2.5 py-0.5 rounded font-black text-[10px] tracking-wider animate-pulse shadow-md bg-gradient-to-r from-amber-500 via-rose-500 to-purple-600 border-amber-300 text-white">
+                        <Sparkles className="w-3 h-3 text-amber-300" />
+                        <span>{GOOFY_MULTIMODAL_COMBO_DEFINITIONS[activeMultimodalCombo]?.label || activeMultimodalCombo}</span>
+                        <span className="text-[9px] bg-black/50 px-1 py-0.5 rounded text-amber-300 font-extrabold">
+                          COMBO
+                        </span>
+                      </div>
+                    )}
+
                     {/* Dual Combo Active Badge */}
-                    {activeDualCombo && (
+                    {!activeMultimodalCombo && activeDualCombo && (
                       <div
                         className={`flex items-center gap-1.5 border px-2.5 py-0.5 rounded font-black text-[10px] tracking-wider animate-pulse shadow-md ${
                           GOOFY_DUAL_COMBO_DEFINITIONS[activeDualCombo]?.isSecret
@@ -2028,11 +2492,11 @@ export default function GoofyModePage() {
                   </div>
                 )}
 
-                {/* Tracking Loss Warning Banner when Streaming with No Hands in View */}
-                {isStreaming && handCount === 0 && (
+                {/* Tracking Loss Warning Banner when Streaming with No Targets in View */}
+                {isStreaming && handCount === 0 && !diagnosticsData.face.landmarksValid && (
                   <div className="absolute top-14 left-1/2 -translate-x-1/2 z-20 px-3.5 py-1.5 bg-amber-500/20 border border-amber-400/70 rounded-full backdrop-blur-md flex items-center gap-2 text-amber-300 text-xs font-black tracking-wider animate-pulse shadow-lg pointer-events-none">
-                    <Hand className="w-3.5 h-3.5 text-amber-400" />
-                    <span>NO HANDS DETECTED // SHOW YOUR HANDS TO CAMERA</span>
+                    <AlertCircle className="w-3.5 h-3.5 text-amber-400" />
+                    <span>NO TARGET DETECTED // SHOW FACE OR HANDS TO CAMERA</span>
                   </div>
                 )}
 
@@ -2108,7 +2572,61 @@ export default function GoofyModePage() {
                   </label>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                  {/* FACE TELEMETRY */}
+                  <div className="p-2.5 rounded border border-amber-300 bg-amber-50/40 space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="font-extrabold uppercase text-amber-900 flex items-center gap-1">
+                        <span className="w-2 h-2 rounded-full bg-amber-500" />
+                        FACE PERCEPTION
+                      </span>
+                      <span
+                        className={`text-[10px] px-2 py-0.5 rounded font-black uppercase ${
+                          diagnosticsData.face.state === 'EXPRESSION_CONFIRMED' || diagnosticsData.face.state === 'EXPRESSION_TRIGGERED'
+                            ? 'bg-emerald-500 text-white'
+                            : diagnosticsData.face.state === 'EXPRESSION_CANDIDATE'
+                            ? 'bg-amber-400 text-charcoal-dark'
+                            : 'bg-paper-dark/30 text-ink-muted'
+                        }`}
+                      >
+                        {diagnosticsData.face.state.replace('EXPRESSION_', '')}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-x-2 gap-y-1 text-[11px]">
+                      <div>
+                        <span className="text-ink-muted">Raw: </span>
+                        <span className="font-bold text-charcoal-dark">{diagnosticsData.face.raw || 'NONE'}</span>
+                      </div>
+                      <div>
+                        <span className="text-ink-muted">Stabilized: </span>
+                        <span className="font-bold text-amber-800">{diagnosticsData.face.stabilized || 'NONE'}</span>
+                      </div>
+                      <div>
+                        <span className="text-ink-muted">Confidence: </span>
+                        <span className="font-bold">{(diagnosticsData.face.confidence * 100).toFixed(0)}%</span>
+                      </div>
+                      <div>
+                        <span className="text-ink-muted">Hold Time: </span>
+                        <span className="font-bold">{Math.round(diagnosticsData.face.holdDurationMs)} ms</span>
+                      </div>
+                    </div>
+
+                    <div className="w-full bg-amber-200 h-1.5 rounded overflow-hidden">
+                      <div
+                        className="bg-amber-500 h-full transition-all duration-75"
+                        style={{ width: `${Math.min(100, (diagnosticsData.face.holdDurationMs / 180) * 100)}%` }}
+                      />
+                    </div>
+
+                    <div className="text-[10px] text-ink-muted truncate">
+                      <span>Gate: </span>
+                      <span className="font-mono text-charcoal-soft">
+                        {diagnosticsData.face.rejectionReason || 'Valid Expression'}
+                      </span>
+                    </div>
+                  </div>
+
                   {/* LEFT HAND TELEMETRY */}
                   <div className="p-2.5 rounded border border-purple-300 bg-purple-50/40 space-y-1.5">
                     <div className="flex items-center justify-between">
@@ -2256,9 +2774,9 @@ export default function GoofyModePage() {
 
                 <div className="p-2 bg-paper-dark/15 rounded text-[11px] flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-ink-muted">Landmarks:</span>
+                    <span className="text-ink-muted">Perception:</span>
                     <span className="font-bold text-charcoal-dark">
-                      {diagnosticsData.handCount > 0 ? `${diagnosticsData.handCount * 21}/42 Validated (3D)` : 'None'}
+                      Face: {diagnosticsData.face.landmarksValid ? '478 pts (3D)' : 'None'} | Hands: {diagnosticsData.handCount > 0 ? `${diagnosticsData.handCount * 21} pts (3D)` : 'None'}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
@@ -2268,8 +2786,8 @@ export default function GoofyModePage() {
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-ink-muted">Clean Release:</span>
-                    <span className="font-bold text-emerald-700">Protocol Active (140ms)</span>
+                    <span className="text-ink-muted">Fusion Window:</span>
+                    <span className="font-bold text-purple-700">{config.fusionWindowMs || 800}ms Active</span>
                   </div>
                 </div>
               </div>
@@ -2633,8 +3151,30 @@ export default function GoofyModePage() {
               </div>
             </div>
 
-            {/* TAB SELECTOR: HAND GESTURES vs DUAL COMBOS vs SEQUENCES vs CREATOR vs MEME LIBRARY vs TEST BENCH */}
+            {/* TAB SELECTOR: MULTIMODAL vs FACE vs HANDS vs COMBOS vs CUSTOM vs SEQUENCES vs CREATOR vs MEMES vs TEST BENCH */}
             <div className="flex items-center border-b-2 border-charcoal-soft gap-1.5 flex-wrap">
+              <button
+                onClick={() => setActiveTab('MULTIMODAL')}
+                className={`px-2.5 py-1.5 text-[11px] font-extrabold uppercase border-b-2 transition-colors ${
+                  activeTab === 'MULTIMODAL'
+                    ? 'border-purple-600 text-charcoal-dark font-black'
+                    : 'border-transparent text-ink-muted hover:text-charcoal-dark'
+                }`}
+              >
+                MULTIMODAL (12)
+              </button>
+
+              <button
+                onClick={() => setActiveTab('FACE')}
+                className={`px-2.5 py-1.5 text-[11px] font-extrabold uppercase border-b-2 transition-colors ${
+                  activeTab === 'FACE'
+                    ? 'border-amber-500 text-charcoal-dark font-black'
+                    : 'border-transparent text-ink-muted hover:text-charcoal-dark'
+                }`}
+              >
+                FACE (10)
+              </button>
+
               <button
                 onClick={() => setActiveTab('HANDS')}
                 className={`px-2.5 py-1.5 text-[11px] font-extrabold uppercase border-b-2 transition-colors ${
@@ -2712,6 +3252,476 @@ export default function GoofyModePage() {
                 TEST BENCH (17)
               </button>
             </div>
+
+            {/* TAB: 12 MULTIMODAL COMBOS */}
+            {activeTab === 'MULTIMODAL' && (
+              <div className="space-y-2.5 max-h-[620px] overflow-y-auto pr-1">
+                <div className="flex items-center justify-between px-3 py-1.5 bg-paper-dark/20 border border-charcoal-soft/20 rounded text-[11px] font-mono">
+                  <span className="font-bold text-ink-muted uppercase">
+                    12 MULTIMODAL COMBOS ({expandedMultimodal.size} EXPANDED)
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleExpandAllMultimodal}
+                      className="text-purple-700 hover:text-purple-900 font-bold uppercase transition-colors cursor-pointer"
+                    >
+                      EXPAND ALL
+                    </button>
+                    <span className="text-charcoal-soft/30">&bull;</span>
+                    <button
+                      onClick={handleCollapseAllMultimodal}
+                      className="text-ink-muted hover:text-charcoal-dark font-bold uppercase transition-colors cursor-pointer"
+                    >
+                      COLLAPSE ALL
+                    </button>
+                  </div>
+                </div>
+
+                {(Object.keys(GOOFY_MULTIMODAL_COMBO_DEFINITIONS) as GoofyMultimodalComboId[]).map((comboKey) => {
+                  const meta = GOOFY_MULTIMODAL_COMBO_DEFINITIONS[comboKey];
+                  const assignedMemeId =
+                    config.actionMemeMappings[comboKey] ||
+                    meta.defaultMemeId ||
+                    getDefaultMemeForAction(comboKey).id;
+                  const memeDef =
+                    getMemeById(assignedMemeId, customMemes) ||
+                    getDefaultMemeForAction(comboKey);
+
+                  const isCurrentlyActive = activeMultimodalCombo === comboKey;
+                  const isExpanded = expandedMultimodal.has(comboKey);
+
+                  const faceReq = Array.isArray(meta.faceExpression) ? meta.faceExpression.join(' / ') : meta.faceExpression;
+                  const handReq = Array.isArray(meta.handGesture) ? meta.handGesture.join(' / ') : meta.handGesture;
+
+                  return (
+                    <div
+                      key={comboKey}
+                      className={`border-2 rounded-tactile bg-paper-cream shadow-tactile-sm transition-all duration-150 ${
+                        isCurrentlyActive
+                          ? 'border-purple-600 bg-purple-50/70 ring-2 ring-purple-500'
+                          : 'border-charcoal-soft hover:border-charcoal-dark'
+                      }`}
+                    >
+                      <div
+                        onClick={() => toggleMultimodalAccordion(comboKey)}
+                        className="p-2.5 flex items-center justify-between gap-2 cursor-pointer select-none"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <ChevronDown
+                            className={`w-4 h-4 text-charcoal-soft shrink-0 transition-transform duration-200 ${
+                              isExpanded ? 'rotate-180 text-purple-700' : ''
+                            }`}
+                          />
+                          <span className="text-lg shrink-0">{meta.icon}</span>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-extrabold text-xs uppercase text-charcoal-dark">
+                                {meta.label}
+                              </span>
+                              {isCurrentlyActive && (
+                                <span className="px-1.5 py-0.2 bg-purple-600 text-white rounded text-[8px] font-black uppercase animate-pulse">
+                                  ACTIVE
+                                </span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1 text-[9px] text-ink-muted truncate">
+                              <span className="text-amber-700 font-bold">Face: {faceReq.replace(/FACE_/g, '')}</span>
+                              <span>+</span>
+                              <span className="text-cyan-700 font-bold">Hand: {handReq}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <div className="hidden sm:flex items-center gap-1.5 text-[9px] font-bold font-mono">
+                            <span className="px-1.5 py-0.5 rounded bg-paper-dark/30 text-charcoal-dark flex items-center gap-1 max-w-[110px] truncate">
+                              <Music className="w-2.5 h-2.5 text-sage-green shrink-0" />
+                              <span className="truncate">{meta.defaultSoundId}</span>
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded bg-paper-dark/30 text-charcoal-dark flex items-center gap-1 max-w-[110px] truncate">
+                              🖼️ <span className="truncate">{memeDef.title}</span>
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              eventEngineRef.current.previewAction(
+                                comboKey,
+                                'MULTIMODAL',
+                                meta.defaultSoundId,
+                                memeDef.id
+                              );
+                            }}
+                            className="p-1 rounded hover:bg-purple-100 text-purple-700 transition-colors cursor-pointer"
+                            title="Quick Test Pop-Up"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="px-3 pb-3 pt-1 border-t border-charcoal-soft/15 space-y-2.5 text-xs">
+                          <div className="p-2 rounded bg-paper-dark/15 border border-charcoal-soft/20 text-[10px] space-y-1">
+                            <span className="font-bold text-ink-muted block uppercase">FUSION TRIGGER REQUIREMENTS</span>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="px-2 py-0.5 rounded bg-amber-100 text-amber-900 font-bold">🙂 {faceReq}</span>
+                              <span className="font-extrabold text-charcoal-soft">+</span>
+                              <span className="px-2 py-0.5 rounded bg-cyan-100 text-cyan-900 font-bold">✋ {handReq}</span>
+                              <span className="text-ink-muted text-[9px] ml-auto">Window: 800ms</span>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-bold text-ink-muted block uppercase">
+                                SOUND EFFECT
+                              </span>
+                              <select
+                                value={config.multimodalMappings?.[comboKey]?.soundId || meta.defaultSoundId}
+                                onChange={(e) =>
+                                  setConfig((p) => ({
+                                    ...p,
+                                    multimodalMappings: {
+                                      ...p.multimodalMappings,
+                                      [comboKey]: {
+                                        pose: comboKey as any,
+                                        soundId: e.target.value as GoofySoundId,
+                                        memeId: assignedMemeId,
+                                        enabled: true,
+                                      },
+                                    },
+                                  }))
+                                }
+                                className="w-full p-1.5 border border-charcoal-soft rounded bg-paper-cream text-xs font-mono font-bold"
+                              >
+                                {DEFAULT_SOUND_LIBRARY.map((s) => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-bold text-ink-muted block uppercase">
+                                MEME POP-UP
+                              </span>
+                              <button
+                                onClick={() => setMemeModalAction(comboKey)}
+                                className="w-full p-1.5 border border-charcoal-soft rounded bg-paper-dark/20 text-xs font-mono font-bold flex items-center justify-between hover:bg-paper-dark/40 truncate cursor-pointer"
+                              >
+                                <span className="truncate">🖼️ {memeDef.title}</span>
+                                <span className="text-[10px] text-purple-600 underline shrink-0">
+                                  CHANGE
+                                </span>
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <span className="text-[10px] font-bold text-ink-muted block uppercase">
+                              COMIC CAPTION
+                            </span>
+                            <input
+                              type="text"
+                              value={
+                                config.actionCustomCaptions[comboKey] || meta.defaultCaption
+                              }
+                              onChange={(e) =>
+                                setConfig((p) => ({
+                                  ...p,
+                                  actionCustomCaptions: {
+                                    ...p.actionCustomCaptions,
+                                    [comboKey]: e.target.value,
+                                  },
+                                }))
+                              }
+                              placeholder={meta.defaultCaption}
+                              className="w-full p-1 border border-charcoal-soft rounded bg-paper-cream text-xs font-mono"
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between pt-1 border-t border-charcoal-soft/10 text-xs">
+                            <div className="flex items-center gap-1.5">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  audioEngineRef.current.playSound(
+                                    meta.defaultSoundId,
+                                    config.volume
+                                  )
+                                }
+                                className="text-[10px] gap-1 p-1 h-6 cursor-pointer"
+                              >
+                                <Music className="w-3 h-3" />
+                                <span>PLAY SOUND</span>
+                              </Button>
+
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  eventEngineRef.current.previewAction(
+                                    comboKey,
+                                    'MULTIMODAL',
+                                    meta.defaultSoundId,
+                                    memeDef.id
+                                  )
+                                }
+                                className="text-[10px] gap-1 p-1 h-6 text-purple-600 font-bold cursor-pointer"
+                              >
+                                <Sparkles className="w-3 h-3" />
+                                <span>TEST POP-UP</span>
+                              </Button>
+                            </div>
+
+                            <span className="text-[9px] text-ink-muted font-mono">{meta.category}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* TAB: 10 FACE EXPRESSIONS */}
+            {activeTab === 'FACE' && (
+              <div className="space-y-2.5 max-h-[620px] overflow-y-auto pr-1">
+                <div className="flex items-center justify-between px-3 py-1.5 bg-paper-dark/20 border border-charcoal-soft/20 rounded text-[11px] font-mono">
+                  <span className="font-bold text-ink-muted uppercase">
+                    10 FACIAL EXPRESSIONS ({expandedFaces.size} EXPANDED)
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleExpandAllFaces}
+                      className="text-amber-700 hover:text-amber-900 font-bold uppercase transition-colors cursor-pointer"
+                    >
+                      EXPAND ALL
+                    </button>
+                    <span className="text-charcoal-soft/30">&bull;</span>
+                    <button
+                      onClick={handleCollapseAllFaces}
+                      className="text-ink-muted hover:text-charcoal-dark font-bold uppercase transition-colors cursor-pointer"
+                    >
+                      COLLAPSE ALL
+                    </button>
+                  </div>
+                </div>
+
+                {(
+                  [
+                    'FACE_SMILE',
+                    'FACE_BIG_SMILE',
+                    'FACE_JAW_OPEN',
+                    'FACE_EYEBROWS_RAISED',
+                    'FACE_EYES_WIDE',
+                    'FACE_BLINK',
+                    'FACE_FROWN_PATTERN',
+                    'FACE_LIP_PUCKER',
+                    'FACE_CHEEK_RAISE',
+                    'FACE_SURPRISE',
+                  ] as GoofyFaceExpressionType[]
+                ).map((faceKey) => {
+                  const meta = GOOFY_FACE_METADATA[faceKey];
+                  const assignedMemeId =
+                    config.actionMemeMappings[faceKey] ||
+                    meta.defaultMemeId ||
+                    getDefaultMemeForAction(faceKey).id;
+                  const memeDef =
+                    getMemeById(assignedMemeId, customMemes) ||
+                    getDefaultMemeForAction(faceKey);
+
+                  const isCurrentlyActive = diagnosticsData.face.stabilized === faceKey;
+                  const isExpanded = expandedFaces.has(faceKey);
+
+                  return (
+                    <div
+                      key={faceKey}
+                      className={`border-2 rounded-tactile bg-paper-cream shadow-tactile-sm transition-all duration-150 ${
+                        isCurrentlyActive
+                          ? 'border-amber-500 bg-amber-50/70 ring-2 ring-amber-500/50'
+                          : 'border-charcoal-soft hover:border-charcoal-dark'
+                      }`}
+                    >
+                      <div
+                        onClick={() => toggleFaceAccordion(faceKey)}
+                        className="p-2.5 flex items-center justify-between gap-2 cursor-pointer select-none"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <ChevronDown
+                            className={`w-4 h-4 text-charcoal-soft shrink-0 transition-transform duration-200 ${
+                              isExpanded ? 'rotate-180 text-amber-700' : ''
+                            }`}
+                          />
+                          <span className="text-lg shrink-0">{meta.icon}</span>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-extrabold text-xs uppercase text-charcoal-dark">
+                                {meta.label}
+                              </span>
+                              {isCurrentlyActive && (
+                                <span className="px-1.5 py-0.2 bg-amber-500 text-black rounded text-[8px] font-black uppercase animate-pulse">
+                                  ACTIVE
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-ink-muted truncate block">
+                              {meta.description}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2 shrink-0">
+                          <div className="hidden sm:flex items-center gap-1.5 text-[9px] font-bold font-mono">
+                            <span className="px-1.5 py-0.5 rounded bg-paper-dark/30 text-charcoal-dark flex items-center gap-1 max-w-[110px] truncate">
+                              <Music className="w-2.5 h-2.5 text-sage-green shrink-0" />
+                              <span className="truncate">{meta.defaultSoundId}</span>
+                            </span>
+                            <span className="px-1.5 py-0.5 rounded bg-paper-dark/30 text-charcoal-dark flex items-center gap-1 max-w-[110px] truncate">
+                              🖼️ <span className="truncate">{memeDef.title}</span>
+                            </span>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              eventEngineRef.current.previewAction(
+                                faceKey,
+                                'FACE',
+                                meta.defaultSoundId,
+                                memeDef.id
+                              );
+                            }}
+                            className="p-1 rounded hover:bg-amber-100 text-amber-700 transition-colors cursor-pointer"
+                            title="Quick Test Pop-Up"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {isExpanded && (
+                        <div className="px-3 pb-3 pt-1 border-t border-charcoal-soft/15 space-y-2.5 text-xs">
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-bold text-ink-muted block uppercase">
+                                SOUND EFFECT
+                              </span>
+                              <select
+                                value={config.faceMappings?.[faceKey]?.soundId || meta.defaultSoundId}
+                                onChange={(e) =>
+                                  setConfig((p) => ({
+                                    ...p,
+                                    faceMappings: {
+                                      ...p.faceMappings,
+                                      [faceKey]: {
+                                        pose: faceKey,
+                                        soundId: e.target.value as GoofySoundId,
+                                        memeId: assignedMemeId,
+                                        enabled: true,
+                                      },
+                                    },
+                                  }))
+                                }
+                                className="w-full p-1.5 border border-charcoal-soft rounded bg-paper-cream text-xs font-mono font-bold"
+                              >
+                                {DEFAULT_SOUND_LIBRARY.map((s) => (
+                                  <option key={s.id} value={s.id}>
+                                    {s.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            <div className="space-y-1">
+                              <span className="text-[10px] font-bold text-ink-muted block uppercase">
+                                MEME POP-UP
+                              </span>
+                              <button
+                                onClick={() => setMemeModalAction(faceKey)}
+                                className="w-full p-1.5 border border-charcoal-soft rounded bg-paper-dark/20 text-xs font-mono font-bold flex items-center justify-between hover:bg-paper-dark/40 truncate cursor-pointer"
+                              >
+                                <span className="truncate">🖼️ {memeDef.title}</span>
+                                <span className="text-[10px] text-amber-600 underline shrink-0">
+                                  CHANGE
+                                </span>
+                              </button>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1">
+                            <span className="text-[10px] font-bold text-ink-muted block uppercase">
+                              COMIC CAPTION
+                            </span>
+                            <input
+                              type="text"
+                              value={
+                                config.actionCustomCaptions[faceKey] || meta.defaultCaption
+                              }
+                              onChange={(e) =>
+                                setConfig((p) => ({
+                                  ...p,
+                                  actionCustomCaptions: {
+                                    ...p.actionCustomCaptions,
+                                    [faceKey]: e.target.value,
+                                  },
+                                }))
+                              }
+                              placeholder={meta.defaultCaption}
+                              className="w-full p-1 border border-charcoal-soft rounded bg-paper-cream text-xs font-mono"
+                            />
+                          </div>
+
+                          <div className="flex items-center justify-between pt-1 border-t border-charcoal-soft/10 text-xs">
+                            <div className="flex items-center gap-1.5">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  audioEngineRef.current.playSound(
+                                    meta.defaultSoundId,
+                                    config.volume
+                                  )
+                                }
+                                className="text-[10px] gap-1 p-1 h-6 cursor-pointer"
+                              >
+                                <Music className="w-3 h-3" />
+                                <span>PLAY SOUND</span>
+                              </Button>
+
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  eventEngineRef.current.previewAction(
+                                    faceKey,
+                                    'FACE',
+                                    meta.defaultSoundId,
+                                    memeDef.id
+                                  )
+                                }
+                                className="text-[10px] gap-1 p-1 h-6 text-amber-600 font-bold cursor-pointer"
+                              >
+                                <Sparkles className="w-3 h-3" />
+                                <span>TEST POP-UP</span>
+                              </Button>
+                            </div>
+
+                            <span className="text-[9px] text-ink-muted font-mono">{meta.category}</span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
 
             {/* TAB 1: 17 HAND GESTURES */}
             {activeTab === 'HANDS' && (
@@ -5088,20 +6098,32 @@ export default function GoofyModePage() {
         }}
       />
 
-      {/* DRAWER: HAND TRACKING DIAGNOSTICS WORKSPACE (V7) */}
+      {/* DRAWER: MULTIMODAL ACCURACY & DIAGNOSTICS WORKSPACE (V8) */}
       <HandTrackingDiagnosticsDrawer
         isOpen={diagnosticsDrawerOpen}
         onClose={() => setDiagnosticsDrawerOpen(false)}
         latencyMs={diagnosticsData.latencyMs}
+        faceLatencyMs={diagnosticsData.faceLatencyMs}
+        handLatencyMs={diagnosticsData.handLatencyMs}
         fps={fps}
         handCount={handCount}
+        faceCount={diagnosticsData.faceCount}
         leftHandLandmarks={leftHandLandmarksRef.current}
         rightHandLandmarks={rightHandLandmarksRef.current}
+        faceLandmarks={faceLandmarksRef.current}
         leftDiagnostics={diagnosticsData.left}
         rightDiagnostics={diagnosticsData.right}
+        faceDiagnostics={diagnosticsData.face}
+        multimodalDiagnostics={diagnosticsData.multimodal}
         activeSequence={activeSequenceState}
         showFingertipMarkers={showFingertipMarkers}
         onToggleFingertipMarkers={(v) => setShowFingertipMarkers(v)}
+        showFaceMesh={showFaceMesh}
+        onToggleFaceMesh={(v) => setShowFaceMesh(v)}
+        showFaceOverlay={showFaceOverlay}
+        onToggleFaceOverlay={(v) => setShowFaceOverlay(v)}
+        showHandOverlay={showHandOverlay}
+        onToggleHandOverlay={(v) => setShowHandOverlay(v)}
       />
     </div>
   );

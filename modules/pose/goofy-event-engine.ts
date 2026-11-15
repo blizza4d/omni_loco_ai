@@ -14,6 +14,10 @@ import {
   GoofyPoseType,
   GoofyHandGestureType,
   GoofyDualHandComboId,
+  GoofyFaceExpressionType,
+  GoofyMultimodalComboId,
+  GOOFY_FACE_METADATA,
+  GOOFY_MULTIMODAL_COMBO_DEFINITIONS,
   MemeVisualDefinition,
 } from './goofy-types';
 import { GoofyAudioEngine } from './goofy-audio-engine';
@@ -110,7 +114,7 @@ export class GoofyEventEngine {
    */
   dispatchActionTrigger(
     actionId: string,
-    source: 'BODY' | 'HAND' | 'DUAL_HAND' | 'SEQUENCE' | 'CUSTOM_GESTURE' | 'REACTION_COMBO',
+    source: 'BODY' | 'HAND' | 'DUAL_HAND' | 'SEQUENCE' | 'CUSTOM_GESTURE' | 'REACTION_COMBO' | 'FACE' | 'MULTIMODAL',
     hand?: 'Left' | 'Right' | 'Both',
     confidence = 0.95,
     context?: {
@@ -120,6 +124,8 @@ export class GoofyEventEngine {
     }
   ): UnifiedMemeEvent | null {
     // 1. Check if action is enabled in config
+    const faceDef = source === 'FACE' ? GOOFY_FACE_METADATA[actionId as GoofyFaceExpressionType] : undefined;
+    const multimodalDef = source === 'MULTIMODAL' ? GOOFY_MULTIMODAL_COMBO_DEFINITIONS[actionId as GoofyMultimodalComboId] : undefined;
     const comboDef = GOOFY_DUAL_COMBO_DEFINITIONS[actionId as GoofyDualHandComboId];
     const seqDef =
       source === 'SEQUENCE' || actionId.startsWith('SEQ_')
@@ -132,13 +138,17 @@ export class GoofyEventEngine {
       (rc) => rc.id === actionId
     );
 
-    let mapping = comboDef
+    let mapping = multimodalDef
+      ? this.config.multimodalMappings?.[actionId as GoofyMultimodalComboId]
+      : faceDef
+      ? this.config.faceMappings?.[actionId as GoofyFaceExpressionType]
+      : comboDef
       ? this.config.dualHandMappings?.[actionId as GoofyDualHandComboId]
       : source === 'BODY'
       ? this.config.mappings[actionId as GoofyPoseType]
       : this.config.handMappings[actionId as GoofyHandGestureType];
 
-    if (!mapping && !comboDef && !seqDef) {
+    if (!mapping && !comboDef && !seqDef && !faceDef && !multimodalDef) {
       mapping = this.config.mappings[actionId as GoofyPoseType];
     }
     if (mapping && !mapping.enabled) {
@@ -148,7 +158,13 @@ export class GoofyEventEngine {
     // 2. Resolve label & caption
     let actionLabel = actionId;
     let defaultCaption = 'MEME ACTION DETECTED!';
-    if (customDef) {
+    if (multimodalDef) {
+      actionLabel = `MULTIMODAL: ${multimodalDef.label}`;
+      defaultCaption = multimodalDef.defaultCaption;
+    } else if (faceDef) {
+      actionLabel = `FACE: ${faceDef.label}`;
+      defaultCaption = faceDef.defaultCaption;
+    } else if (customDef) {
       actionLabel = `CUSTOM: ${customDef.label}`;
       defaultCaption = customDef.defaultCaption || 'CUSTOM GESTURE RECOGNISED!';
     } else if (reactionComboDef) {
@@ -177,7 +193,13 @@ export class GoofyEventEngine {
     // 3. Resolve sound & meme visual via Semantic Matcher (or fallback)
     let soundId: GoofySoundId =
       (mapping && mapping.soundId) ||
+      (multimodalDef && multimodalDef.defaultSoundId) ||
+      (faceDef && 'VICTORY_BELL') ||
       (customDef && customDef.defaultSoundId) ||
+      (reactionComboDef && reactionComboDef.soundId) ||
+      (seqDef && seqDef.defaultSoundId) ||
+      (comboDef && comboDef.defaultSoundId) ||
+      'CHAD_GONG';
       (reactionComboDef && reactionComboDef.soundId) ||
       (seqDef && seqDef.defaultSoundId) ||
       (comboDef && comboDef.defaultSoundId) ||
@@ -233,6 +255,7 @@ export class GoofyEventEngine {
       const assignedMemeId =
         (mapping && mapping.memeId) ||
         this.config.actionMemeMappings[actionId] ||
+        (multimodalDef && multimodalDef.defaultMemeId) ||
         (comboDef && comboDef.defaultMemeId);
 
       if (assignedMemeId) {
@@ -456,20 +479,27 @@ export class GoofyEventEngine {
    */
   previewAction(
     actionId: string,
-    source: 'BODY' | 'HAND' | 'DUAL_HAND' | 'SEQUENCE' | 'CUSTOM_GESTURE' | 'REACTION_COMBO',
+    source: 'BODY' | 'HAND' | 'DUAL_HAND' | 'SEQUENCE' | 'CUSTOM_GESTURE' | 'REACTION_COMBO' | 'FACE' | 'MULTIMODAL',
     soundOverride?: GoofySoundId,
     memeOverride?: string,
     labelOverride?: string,
     captionOverride?: string
   ): ActiveMemePopup {
     const comboDef = GOOFY_DUAL_COMBO_DEFINITIONS[actionId as GoofyDualHandComboId];
+    const mmDef = GOOFY_MULTIMODAL_COMBO_DEFINITIONS[actionId as GoofyMultimodalComboId];
+    const faceMeta = GOOFY_FACE_METADATA[actionId as GoofyFaceExpressionType];
+
     let mapping = comboDef
       ? this.config.dualHandMappings?.[actionId as GoofyDualHandComboId]
+      : mmDef
+      ? this.config.multimodalMappings?.[actionId as GoofyMultimodalComboId]
+      : faceMeta
+      ? this.config.faceMappings?.[actionId as GoofyFaceExpressionType]
       : source === 'BODY'
       ? this.config.mappings[actionId as GoofyPoseType]
       : this.config.handMappings[actionId as GoofyHandGestureType];
 
-    if (!mapping && !comboDef) {
+    if (!mapping && !comboDef && !mmDef && !faceMeta) {
       mapping = this.config.mappings[actionId as GoofyPoseType];
     }
 
@@ -477,12 +507,16 @@ export class GoofyEventEngine {
       soundOverride ||
       (mapping && mapping.soundId) ||
       (comboDef && comboDef.defaultSoundId) ||
+      (mmDef && mmDef.defaultSoundId) ||
+      (faceMeta && faceMeta.defaultSoundId) ||
       'INCEPTION_BRAAAM';
     const memeId =
       memeOverride ||
       (mapping && mapping.memeId) ||
       this.config.actionMemeMappings[actionId] ||
       (comboDef && comboDef.defaultMemeId) ||
+      (mmDef && mmDef.defaultMemeId) ||
+      (faceMeta && faceMeta.defaultMemeId) ||
       getDefaultMemeForAction(actionId).id;
 
     const memeDef = getMemeById(memeId, this.customMemes) || getDefaultMemeForAction(actionId);
@@ -500,6 +534,12 @@ export class GoofyEventEngine {
       } else if (reactionComboDef) {
         actionLabel = `COMBO: ${reactionComboDef.label}`;
         defaultCaption = reactionComboDef.caption || 'INTELLIGENT COMBO';
+      } else if (mmDef) {
+        actionLabel = mmDef.label;
+        defaultCaption = mmDef.defaultCaption;
+      } else if (faceMeta) {
+        actionLabel = faceMeta.label;
+        defaultCaption = faceMeta.defaultCaption;
       } else if (comboDef) {
         actionLabel = comboDef.label;
         defaultCaption = comboDef.defaultCaption;

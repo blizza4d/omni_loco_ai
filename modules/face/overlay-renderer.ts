@@ -6,6 +6,7 @@ export interface FaceRenderOptions {
   layers: FaceMeshLayers;
   headPose?: HeadPose;
   isMirrored?: boolean;
+  clearBeforeRender?: boolean;
 }
 
 export function renderFaceOverlay(
@@ -15,9 +16,11 @@ export function renderFaceOverlay(
   height: number,
   options: FaceRenderOptions
 ): void {
-  const { layers, headPose, isMirrored = true } = options;
+  const { layers, headPose, isMirrored = true, clearBeforeRender = true } = options;
 
-  ctx.clearRect(0, 0, width, height);
+  if (clearBeforeRender) {
+    ctx.clearRect(0, 0, width, height);
+  }
   if (!landmarks || landmarks.length < 468) return;
 
   // 1. Tesselation Layer (Sage Green Mesh Wireframe)

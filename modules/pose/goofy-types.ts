@@ -36,6 +36,92 @@ export type GoofyHandGestureType =
   | 'FINGER_HEART'
   | 'THREE_FINGER_SALUTE';
 
+export type GoofyFaceExpressionType =
+  | 'FACE_SMILE'
+  | 'FACE_BIG_SMILE'
+  | 'FACE_JAW_OPEN'
+  | 'FACE_EYEBROWS_RAISED'
+  | 'FACE_EYES_WIDE'
+  | 'FACE_BLINK'
+  | 'FACE_FROWN_PATTERN'
+  | 'FACE_LIP_PUCKER'
+  | 'FACE_CHEEK_RAISE'
+  | 'FACE_SURPRISE';
+
+export type GoofyMultimodalComboId =
+  | 'POSITIVE_APPROVAL'
+  | 'SHOCKED_REACTION'
+  | 'VICTORY_REACTION'
+  | 'SUSPICIOUS_ACCUSATION'
+  | 'DRAMATIC_SURPRISE'
+  | 'DISAPPOINTMENT_REACTION'
+  | 'CELEBRATION'
+  | 'MAXIMUM_AURA'
+  | 'RAGE_ANGER'
+  | 'BLANK_DISBELIEF'
+  | 'CHEF_KISS'
+  | 'CHEEK_HEART';
+
+export type GoofyOperatingMode = 'MULTIMODAL' | 'FACE_ONLY' | 'HAND_ONLY';
+
+export type FaceRecognitionState =
+  | 'NO_FACE'
+  | 'SEARCHING'
+  | 'FACE_DETECTED'
+  | 'LANDMARKS_UNSTABLE'
+  | 'EXPRESSION_RECOGNIZED'
+  | 'EXPRESSION_TRIGGERED'
+  | 'COOLDOWN'
+  | 'TRACKING_LOST';
+
+export interface FaceClassificationResult {
+  expression: GoofyFaceExpressionType | null;
+  confidence: number;
+  label: string;
+  comicCaption: string;
+  rawScores: Record<string, number>;
+  blendshapeFeatures?: Record<string, number>;
+  metrics?: {
+    earLeft: number;
+    earRight: number;
+    earAvg: number;
+    mouthAspectRatio: number;
+    browInnerUp: number;
+    jawOpen: number;
+    smileAvg: number;
+  };
+  rejectionReason?: string;
+}
+
+export interface FaceStateMachineResult {
+  triggered: boolean;
+  expression: GoofyFaceExpressionType | null;
+  rawExpression: GoofyFaceExpressionType | null;
+  stabilizedExpression: GoofyFaceExpressionType | null;
+  state: FaceRecognitionState;
+  holdDurationMs: number;
+  confidence: number;
+  rejectionReason: string | null;
+}
+
+export interface MultimodalEvent {
+  id: string;
+  timestamp: number;
+  modality: 'FACE' | 'HAND' | 'MULTIMODAL';
+  source: 'FACE' | 'HAND' | 'MULTIMODAL';
+  faceExpression?: GoofyFaceExpressionType;
+  handGesture?: GoofyHandGestureType;
+  comboId?: GoofyMultimodalComboId;
+  label: string;
+  caption: string;
+  soundId: GoofySoundId;
+  memeId: string;
+  confidence: number;
+  validity: 'VALID' | 'REJECTED' | 'EXPIRED';
+  rejectionReason?: string;
+  handIdentity?: 'Left' | 'Right' | 'Both';
+}
+
 export type GoofyDualHandComboId =
   | 'DOUBLE_THUMBS_UP'
   | 'BOTH_HANDS_OPEN'
@@ -63,7 +149,9 @@ export type GoofyGestureSequenceId =
 export type GoofyActionId =
   | GoofyPoseType
   | GoofyHandGestureType
+  | GoofyFaceExpressionType
   | GoofyDualHandComboId
+  | GoofyMultimodalComboId
   | GoofyGestureSequenceId
   | string;
 
@@ -264,6 +352,8 @@ export interface MemeVisualDefinition {
   tags?: string[];
   gestureTags?: GoofyHandGestureType[];
   comboTags?: GoofyDualHandComboId[];
+  faceTags?: GoofyFaceExpressionType[];
+  multimodalTags?: GoofyMultimodalComboId[];
   isCustom?: boolean;
   fileName?: string;
   soundId?: GoofySoundId;
@@ -292,7 +382,7 @@ export interface ActiveMemePopup {
   id: string;
   actionId: string;
   actionLabel: string;
-  actionSource: 'BODY' | 'HAND' | 'DUAL_HAND' | 'SEQUENCE' | 'CUSTOM_GESTURE' | 'REACTION_COMBO';
+  actionSource: 'BODY' | 'HAND' | 'DUAL_HAND' | 'SEQUENCE' | 'CUSTOM_GESTURE' | 'REACTION_COMBO' | 'FACE' | 'MULTIMODAL';
   hand?: 'Left' | 'Right' | 'Both';
   memeId: string;
   memeTitle: string;
@@ -317,7 +407,7 @@ export interface ActiveMemePopup {
 export interface UnifiedMemeEvent {
   id: string;
   timestamp: number;
-  source: 'BODY' | 'HAND' | 'DUAL_HAND' | 'SEQUENCE' | 'CUSTOM_GESTURE' | 'REACTION_COMBO';
+  source: 'BODY' | 'HAND' | 'DUAL_HAND' | 'SEQUENCE' | 'CUSTOM_GESTURE' | 'REACTION_COMBO' | 'FACE' | 'MULTIMODAL';
   actionId: string;
   actionLabel: string;
   hand?: 'Left' | 'Right' | 'Both';
@@ -623,6 +713,19 @@ export interface GoofyModeConfig {
   enableReactionCombos?: boolean;
   comboWindowMs?: number; // Time window for intelligent reaction combos (default 2500ms)
   reactionCombos?: IntelligentReactionCombo[];
+  // V8 Multimodal Face & Hand Recognition Engine Additions
+  operatingMode?: GoofyOperatingMode; // 'MULTIMODAL' | 'FACE_ONLY' | 'HAND_ONLY'
+  faceMappings?: Partial<Record<GoofyFaceExpressionType, PoseSoundMapping>>;
+  multimodalMappings?: Partial<Record<GoofyMultimodalComboId, PoseSoundMapping>>;
+  faceSensitivity?: 'HIGH' | 'MEDIUM' | 'RELAXED';
+  multimodalWindowMs?: number; // Time window for combining face and hand events (default 800ms)
+  fusionWindowMs?: number; // Friendly alias for multimodalWindowMs
+  showFaceOverlay?: boolean; // Toggle facial landmarks/mesh canvas overlay
+  showHandOverlay?: boolean; // Toggle hand landmarks/skeleton canvas overlay
+  showFaceMeshTesselation?: boolean; // Toggle detailed face mesh wireframe
+  enableFaceExpressions?: boolean;
+  enableHandGestures?: boolean;
+  enableMultimodalFusion?: boolean;
 }
 
 export interface GoofyTriggerEvent {
@@ -1266,6 +1369,292 @@ export const GOOFY_DUAL_COMBO_DEFINITIONS: Record<GoofyDualHandComboId, DualHand
   },
 };
 
+export interface GoofyFaceMetadata {
+  id: GoofyFaceExpressionType;
+  label: string;
+  defaultCaption: string;
+  icon: string;
+  description: string;
+  blendshapes: string[];
+  defaultSoundId: GoofySoundId;
+  defaultMemeId: string;
+  category?: string;
+}
+
+export const GOOFY_FACE_METADATA: Record<GoofyFaceExpressionType, GoofyFaceMetadata> = {
+  FACE_SMILE: {
+    id: 'FACE_SMILE',
+    label: 'SMILE',
+    defaultCaption: 'GENUINE SMILE DETECTED // POSITIVE FREQUENCY',
+    icon: '😊',
+    description: 'Observable mouth smile detected via cheek elevation and mouth corner rise.',
+    blendshapes: ['mouthSmileLeft', 'mouthSmileRight'],
+    defaultSoundId: 'VICTORY_BELL',
+    defaultMemeId: 'REAL_MEME_SUCCESS_KID',
+    category: 'APPROVAL_CONFIDENCE',
+  },
+  FACE_BIG_SMILE: {
+    id: 'FACE_BIG_SMILE',
+    label: 'BIG SMILE',
+    defaultCaption: 'MAXIMUM HAPPINESS // RADIANT ENERGY',
+    icon: '😁',
+    description: 'High-intensity mouth smile with wide lip stretch and cheek rise.',
+    blendshapes: ['mouthSmileLeft', 'mouthSmileRight', 'jawOpen'],
+    defaultSoundId: 'BRASS_FANFARE',
+    defaultMemeId: 'REAL_MEME_DICAPRIO_TOAST',
+    category: 'VICTORY_CELEBRATION',
+  },
+  FACE_JAW_OPEN: {
+    id: 'FACE_JAW_OPEN',
+    label: 'JAW DROP',
+    defaultCaption: 'JAW DROPPED // IN ABSOLUTE DISBELIEF',
+    icon: '😲',
+    description: 'Observable mouth opening indicating astonishment or surprise.',
+    blendshapes: ['jawOpen'],
+    defaultSoundId: 'INCEPTION_BRAAAM',
+    defaultMemeId: 'REAL_MEME_SURPRISED_PIKACHU',
+    category: 'SURPRISE_SHOCK',
+  },
+  FACE_EYEBROWS_RAISED: {
+    id: 'FACE_EYEBROWS_RAISED',
+    label: 'RAISED BROWS',
+    defaultCaption: 'THE ROCK EYEBROW // SUSPICIOUS CURIOSITY',
+    icon: '🤨',
+    description: 'Inner or outer brow elevation showing intense curiosity or suspicion.',
+    blendshapes: ['browInnerUp', 'browOuterUpLeft', 'browOuterUpRight'],
+    defaultSoundId: 'DRAMATIC_SUSPENSE',
+    defaultMemeId: 'REAL_MEME_THE_ROCK_EYEBROW',
+    category: 'SUSPICION_JUDGEMENT',
+  },
+  FACE_EYES_WIDE: {
+    id: 'FACE_EYES_WIDE',
+    label: 'WIDE EYES',
+    defaultCaption: 'WIDE EYED STARE // HYPER AWARENESS ACTIVATED',
+    icon: '👀',
+    description: 'Eyelids retracting to reveal enlarged eye apertures.',
+    blendshapes: ['eyeWideLeft', 'eyeWideRight'],
+    defaultSoundId: 'RECORD_SCRATCH',
+    defaultMemeId: 'REAL_MEME_CONFUSED_TRAVOLTA',
+    category: 'CONFUSION',
+  },
+  FACE_BLINK: {
+    id: 'FACE_BLINK',
+    label: 'BLINK / WINK',
+    defaultCaption: 'DOUBLE TAKE // PROCESSING REALITY...',
+    icon: '😉',
+    description: 'Rapid eyelid closure event (blinking or intentional wink).',
+    blendshapes: ['eyeBlinkLeft', 'eyeBlinkRight'],
+    defaultSoundId: 'RECORD_SCRATCH',
+    defaultMemeId: 'REAL_MEME_BLINKING_GUY',
+    category: 'CONFUSION',
+  },
+  FACE_FROWN_PATTERN: {
+    id: 'FACE_FROWN_PATTERN',
+    label: 'FROWN / DISPLEASURE',
+    defaultCaption: 'DISAPPROVAL DETECTED // EMOTIONAL DAMAGE',
+    icon: '🙁',
+    description: 'Downward mouth angle with brow furrows denoting discontent or skepticism.',
+    blendshapes: ['mouthFrownLeft', 'mouthFrownRight', 'browDownLeft', 'browDownRight'],
+    defaultSoundId: 'SAD_TROMBONE',
+    defaultMemeId: 'REAL_MEME_EMOTIONAL_DAMAGE',
+    category: 'FAILURE_DISAPPOINTMENT',
+  },
+  FACE_LIP_PUCKER: {
+    id: 'FACE_LIP_PUCKER',
+    label: 'LIP PUCKER / KISS',
+    defaultCaption: 'CHEF\'S KISS PREPARATION // FOCUSED PRECISION',
+    icon: '😙',
+    description: 'Lips pursed forward into a pucker configuration.',
+    blendshapes: ['mouthPucker'],
+    defaultSoundId: 'SUCTION_POP',
+    defaultMemeId: 'MEME_OK_CHEFS_KISS',
+    category: 'APPROVAL_CONFIDENCE',
+  },
+  FACE_CHEEK_RAISE: {
+    id: 'FACE_CHEEK_RAISE',
+    label: 'CHEEK RAISE',
+    defaultCaption: 'CHEEK RAISE // PLAYFUL AFFECTION',
+    icon: '🥰',
+    description: 'Zygomatic cheek contraction with eye squint.',
+    blendshapes: ['cheekSquintLeft', 'cheekSquintRight'],
+    defaultSoundId: 'LEVEL_UP_NOTIFICATION',
+    defaultMemeId: 'REAL_MEME_KPOP_HEART',
+    category: 'VICTORY_CELEBRATION',
+  },
+  FACE_SURPRISE: {
+    id: 'FACE_SURPRISE',
+    label: 'SURPRISE / MIND BLOWN',
+    defaultCaption: 'MINDBLOWN REVELATION // REALITY COLLAPSED',
+    icon: '🤯',
+    description: 'Compound expression: open jaw combined with raised brows or widened eyes.',
+    blendshapes: ['jawOpen', 'browInnerUp', 'eyeWideLeft', 'eyeWideRight'],
+    defaultSoundId: 'ANIME_POWER_UP',
+    defaultMemeId: 'REAL_MEME_MIND_BLOWN_EXPLOSION',
+    category: 'SURPRISE_SHOCK',
+  },
+};
+
+export interface MultimodalComboDefinition {
+  id: GoofyMultimodalComboId;
+  label: string;
+  faceExpression: GoofyFaceExpressionType | GoofyFaceExpressionType[];
+  handGesture: GoofyHandGestureType | GoofyDualHandComboId | (GoofyHandGestureType | GoofyDualHandComboId)[];
+  defaultMemeId: string;
+  defaultSoundId: GoofySoundId;
+  defaultCaption: string;
+  icon: string;
+  description: string;
+  windowMs?: number;
+  category?: string;
+}
+
+export const GOOFY_MULTIMODAL_COMBO_DEFINITIONS: Record<GoofyMultimodalComboId, MultimodalComboDefinition> = {
+  POSITIVE_APPROVAL: {
+    id: 'POSITIVE_APPROVAL',
+    label: 'POSITIVE APPROVAL',
+    faceExpression: ['FACE_SMILE', 'FACE_BIG_SMILE'],
+    handGesture: 'THUMBS_UP',
+    defaultMemeId: 'REAL_MEME_GIGACHAD',
+    defaultSoundId: 'CHAD_GONG',
+    defaultCaption: 'SMILE + THUMBS UP // CERTIFIED GIGACHAD APPROVAL',
+    icon: '😊👍',
+    description: 'Simultaneous warm smile and thumbs up indicating unequivocal endorsement.',
+    category: 'APPROVAL_CONFIDENCE',
+  },
+  SHOCKED_REACTION: {
+    id: 'SHOCKED_REACTION',
+    label: 'SHOCKED REACTION',
+    faceExpression: ['FACE_JAW_OPEN', 'FACE_SURPRISE'],
+    handGesture: ['OPEN_PALM', 'FIVE_FINGERS', 'BOTH_HANDS_OPEN'],
+    defaultMemeId: 'REAL_MEME_SURPRISED_PIKACHU',
+    defaultSoundId: 'INCEPTION_BRAAAM',
+    defaultCaption: 'JAW OPEN + WIDE EYES // SURPRISED PIKACHU MOMENT',
+    icon: '😲✋',
+    description: 'Dropped jaw accompanied by open palm or hands raised in shock.',
+    category: 'SURPRISE_SHOCK',
+  },
+  VICTORY_REACTION: {
+    id: 'VICTORY_REACTION',
+    label: 'VICTORY REACTION',
+    faceExpression: ['FACE_SMILE', 'FACE_BIG_SMILE'],
+    handGesture: ['PEACE_SIGN', 'DOUBLE_PEACE'],
+    defaultMemeId: 'REAL_MEME_DICAPRIO_TOAST_GIF',
+    defaultSoundId: 'VICTORY_BELL',
+    defaultCaption: 'SMILE + PEACE // MAIN CHARACTER CELEBRATION',
+    icon: '😁✌️',
+    description: 'Celebratory smile combined with peace sign.',
+    category: 'VICTORY_CELEBRATION',
+  },
+  SUSPICIOUS_ACCUSATION: {
+    id: 'SUSPICIOUS_ACCUSATION',
+    label: 'SUSPICIOUS ACCUSATION',
+    faceExpression: ['FACE_EYEBROWS_RAISED', 'FACE_EYES_WIDE'],
+    handGesture: 'POINTING',
+    defaultMemeId: 'REAL_MEME_THE_ROCK_EYEBROW_GIF',
+    defaultSoundId: 'DRAMATIC_SUSPENSE',
+    defaultCaption: 'RAISED EYEBROW + POINT // BRO WHO DID THIS?!',
+    icon: '🤨👉',
+    description: 'Suspicious arched brow while pointing directly at camera.',
+    category: 'SUSPICION_JUDGEMENT',
+  },
+  DRAMATIC_SURPRISE: {
+    id: 'DRAMATIC_SURPRISE',
+    label: 'DRAMATIC SURPRISE',
+    faceExpression: ['FACE_JAW_OPEN', 'FACE_SURPRISE'],
+    handGesture: ['OPEN_PALM', 'BOTH_HANDS_OPEN'],
+    defaultMemeId: 'REAL_MEME_MIND_BLOWN_GIF',
+    defaultSoundId: 'ANIME_POWER_UP',
+    defaultCaption: 'JAW DROP + OPEN PALM // ABSOLUTE CINEMA!',
+    icon: '🤯✋',
+    description: 'Dropped jaw with wide hands: cosmic mind blown explosion.',
+    category: 'SURPRISE_SHOCK',
+  },
+  DISAPPOINTMENT_REACTION: {
+    id: 'DISAPPOINTMENT_REACTION',
+    label: 'DISAPPOINTMENT REACTION',
+    faceExpression: 'FACE_FROWN_PATTERN',
+    handGesture: 'THUMBS_DOWN',
+    defaultMemeId: 'REAL_MEME_EMOTIONAL_DAMAGE_GIF',
+    defaultSoundId: 'SAD_TROMBONE',
+    defaultCaption: 'FROWN + THUMBS DOWN // EMOTIONAL DAMAGE!',
+    icon: '🙁👎',
+    description: 'Frowning facial configuration combined with thumbs down.',
+    category: 'FAILURE_DISAPPOINTMENT',
+  },
+  CELEBRATION: {
+    id: 'CELEBRATION',
+    label: 'ULTRA CELEBRATION',
+    faceExpression: ['FACE_SMILE', 'FACE_BIG_SMILE'],
+    handGesture: ['BOTH_HANDS_OPEN', 'DOUBLE_THUMBS_UP', 'DOUBLE_PEACE'],
+    defaultMemeId: 'REAL_MEME_RONALDO_SIU_GIF',
+    defaultSoundId: 'CROWD_CHEER',
+    defaultCaption: 'BIG SMILE + BOTH HANDS // SIUUUUUUU!',
+    icon: '🤩🙌',
+    description: 'Big joyful smile combined with both hands raised or double gesture.',
+    category: 'VICTORY_CELEBRATION',
+  },
+  MAXIMUM_AURA: {
+    id: 'MAXIMUM_AURA',
+    label: 'MAXIMUM AURA',
+    faceExpression: ['FACE_BIG_SMILE', 'FACE_SMILE'],
+    handGesture: ['ROCK_SIGN', 'DOUBLE_ROCK'],
+    defaultMemeId: 'REAL_MEME_ULTRA_INSTINCT_SHAGGY_GIF',
+    defaultSoundId: 'ANIME_POWER_UP',
+    defaultCaption: 'BIG SMILE + ROCK SIGN // ULTRA INSTINCT AURA',
+    icon: '😎🤘',
+    description: 'Ecstatic smile with rock on sign displaying maximum aura.',
+    category: 'MAXIMUM_AURA',
+  },
+  RAGE_ANGER: {
+    id: 'RAGE_ANGER',
+    label: 'RAGE & ANGER',
+    faceExpression: 'FACE_FROWN_PATTERN',
+    handGesture: ['CLOSED_FIST', 'BOTH_HANDS_FIST'],
+    defaultMemeId: 'REAL_MEME_ARTHURS_FIST',
+    defaultSoundId: 'CARTOON_IMPACT',
+    defaultCaption: 'FROWN + CLENCHED FIST // ARTHUR RAGE UNLOCKED',
+    icon: '😠✊',
+    description: 'Furious frown combined with a tightly clenched fist.',
+    category: 'ANGER_AGGRESSION',
+  },
+  BLANK_DISBELIEF: {
+    id: 'BLANK_DISBELIEF',
+    label: 'BLANK DISBELIEF',
+    faceExpression: ['FACE_BLINK', 'FACE_EYES_WIDE'],
+    handGesture: ['POINTING', 'PINCH'],
+    defaultMemeId: 'REAL_MEME_BLINKING_GUY_GIF',
+    defaultSoundId: 'RECORD_SCRATCH',
+    defaultCaption: 'BLINK + DOUBLE TAKE // DID THAT JUST HAPPEN?!',
+    icon: '😐👉',
+    description: 'Blink / double-take while gesturing forward.',
+    category: 'CONFUSION',
+  },
+  CHEF_KISS: {
+    id: 'CHEF_KISS',
+    label: 'CHEF\'S KISS',
+    faceExpression: 'FACE_LIP_PUCKER',
+    handGesture: ['PINCH', 'OK_GESTURE'],
+    defaultMemeId: 'REAL_MEME_SALT_BAE_GIF',
+    defaultSoundId: 'SUCTION_POP',
+    defaultCaption: 'LIP PUCKER + PINCH // MAGNIFIQUE CHEF\'S KISS',
+    icon: '😙🤌',
+    description: 'Puckered lips combined with pinch or OK gesture.',
+    category: 'APPROVAL_CONFIDENCE',
+  },
+  CHEEK_HEART: {
+    id: 'CHEEK_HEART',
+    label: 'CHEEK HEART',
+    faceExpression: ['FACE_CHEEK_RAISE', 'FACE_SMILE'],
+    handGesture: 'FINGER_HEART',
+    defaultMemeId: 'REAL_MEME_KPOP_HEART_GIF',
+    defaultSoundId: 'LEVEL_UP_NOTIFICATION',
+    defaultCaption: 'CHEEK RAISE + FINGER HEART // WHOLESOME OVERLOAD',
+    icon: '🥰🫰',
+    description: 'Raised cheeks and smile paired with a Korean finger heart.',
+    category: 'VICTORY_CELEBRATION',
+  },
+};
+
 export const DEFAULT_GOOFY_CONFIG: GoofyModeConfig = {
   volume: 0.8,
   isMuted: false,
@@ -1662,6 +2051,188 @@ export const DEFAULT_GOOFY_CONFIG: GoofyModeConfig = {
     SEQ_POINT_TO_PEACE: 'MEME_SECRET_YOU_ARE_BREATHTAKING',
     SEQ_ROCK_TO_CALL: 'MEME_ROCK_STAR',
     SEQ_OK_TO_HEART: 'MEME_KPOP_HEART',
+    // V8 Face Expressions Mappings
+    FACE_SMILE: 'REAL_MEME_SUCCESS_KID',
+    FACE_BIG_SMILE: 'REAL_MEME_DICAPRIO_TOAST',
+    FACE_JAW_OPEN: 'REAL_MEME_SURPRISED_PIKACHU',
+    FACE_EYEBROWS_RAISED: 'REAL_MEME_THE_ROCK_EYEBROW',
+    FACE_EYES_WIDE: 'REAL_MEME_CONFUSED_TRAVOLTA',
+    FACE_BLINK: 'REAL_MEME_BLINKING_GUY',
+    FACE_FROWN_PATTERN: 'REAL_MEME_EMOTIONAL_DAMAGE',
+    FACE_LIP_PUCKER: 'MEME_OK_CHEFS_KISS',
+    FACE_CHEEK_RAISE: 'REAL_MEME_KPOP_HEART',
+    FACE_SURPRISE: 'REAL_MEME_MIND_BLOWN_EXPLOSION',
+    // V8 Multimodal Combos Mappings
+    POSITIVE_APPROVAL: 'REAL_MEME_GIGACHAD',
+    SHOCKED_REACTION: 'REAL_MEME_SURPRISED_PIKACHU',
+    VICTORY_REACTION: 'REAL_MEME_DICAPRIO_TOAST',
+    SUSPICIOUS_ACCUSATION: 'REAL_MEME_THE_ROCK_EYEBROW',
+    DRAMATIC_SURPRISE: 'REAL_MEME_MIND_BLOWN_EXPLOSION',
+    DISAPPOINTMENT_REACTION: 'REAL_MEME_EMOTIONAL_DAMAGE',
+    CELEBRATION: 'REAL_MEME_RONALDO_SIU',
+    MAXIMUM_AURA: 'REAL_MEME_ULTRA_INSTINCT_SHAGGY',
+    RAGE_ANGER: 'REAL_MEME_ARTHUR_FIST',
+    BLANK_DISBELIEF: 'REAL_MEME_BLINKING_GUY',
+    CHEF_KISS: 'MEME_OK_CHEFS_KISS',
+    CHEEK_HEART: 'REAL_MEME_KPOP_HEART',
+  },
+  faceMappings: {
+    FACE_SMILE: {
+      pose: 'FACE_SMILE',
+      soundId: 'VICTORY_BELL',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'REAL_MEME_SUCCESS_KID',
+    },
+    FACE_BIG_SMILE: {
+      pose: 'FACE_BIG_SMILE',
+      soundId: 'BRASS_FANFARE',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'REAL_MEME_DICAPRIO_TOAST',
+    },
+    FACE_JAW_OPEN: {
+      pose: 'FACE_JAW_OPEN',
+      soundId: 'INCEPTION_BRAAAM',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'REAL_MEME_SURPRISED_PIKACHU',
+    },
+    FACE_EYEBROWS_RAISED: {
+      pose: 'FACE_EYEBROWS_RAISED',
+      soundId: 'DRAMATIC_SUSPENSE',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'REAL_MEME_THE_ROCK_EYEBROW',
+    },
+    FACE_EYES_WIDE: {
+      pose: 'FACE_EYES_WIDE',
+      soundId: 'RECORD_SCRATCH',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'REAL_MEME_CONFUSED_TRAVOLTA',
+    },
+    FACE_BLINK: {
+      pose: 'FACE_BLINK',
+      soundId: 'RECORD_SCRATCH',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'REAL_MEME_BLINKING_GUY',
+    },
+    FACE_FROWN_PATTERN: {
+      pose: 'FACE_FROWN_PATTERN',
+      soundId: 'SAD_TROMBONE',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'REAL_MEME_EMOTIONAL_DAMAGE',
+    },
+    FACE_LIP_PUCKER: {
+      pose: 'FACE_LIP_PUCKER',
+      soundId: 'SUCTION_POP',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'MEME_OK_CHEFS_KISS',
+    },
+    FACE_CHEEK_RAISE: {
+      pose: 'FACE_CHEEK_RAISE',
+      soundId: 'LEVEL_UP_NOTIFICATION',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'REAL_MEME_KPOP_HEART',
+    },
+    FACE_SURPRISE: {
+      pose: 'FACE_SURPRISE',
+      soundId: 'ANIME_POWER_UP',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'REAL_MEME_MIND_BLOWN_EXPLOSION',
+    },
+  },
+  multimodalMappings: {
+    POSITIVE_APPROVAL: {
+      pose: 'POSITIVE_APPROVAL' as any,
+      soundId: 'CHAD_GONG',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'REAL_MEME_GIGACHAD',
+    },
+    SHOCKED_REACTION: {
+      pose: 'SHOCKED_REACTION' as any,
+      soundId: 'INCEPTION_BRAAAM',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'REAL_MEME_SURPRISED_PIKACHU',
+    },
+    VICTORY_REACTION: {
+      pose: 'VICTORY_REACTION' as any,
+      soundId: 'VICTORY_BELL',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'REAL_MEME_DICAPRIO_TOAST',
+    },
+    SUSPICIOUS_ACCUSATION: {
+      pose: 'SUSPICIOUS_ACCUSATION' as any,
+      soundId: 'DRAMATIC_SUSPENSE',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'REAL_MEME_THE_ROCK_EYEBROW',
+    },
+    DRAMATIC_SURPRISE: {
+      pose: 'DRAMATIC_SURPRISE' as any,
+      soundId: 'ANIME_POWER_UP',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'REAL_MEME_MIND_BLOWN_EXPLOSION',
+    },
+    DISAPPOINTMENT_REACTION: {
+      pose: 'DISAPPOINTMENT_REACTION' as any,
+      soundId: 'SAD_TROMBONE',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'REAL_MEME_EMOTIONAL_DAMAGE',
+    },
+    CELEBRATION: {
+      pose: 'CELEBRATION' as any,
+      soundId: 'CROWD_CHEER',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'REAL_MEME_RONALDO_SIU',
+    },
+    MAXIMUM_AURA: {
+      pose: 'MAXIMUM_AURA' as any,
+      soundId: 'ANIME_POWER_UP',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'REAL_MEME_ULTRA_INSTINCT_SHAGGY',
+    },
+    RAGE_ANGER: {
+      pose: 'RAGE_ANGER' as any,
+      soundId: 'CARTOON_IMPACT',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'REAL_MEME_ARTHUR_FIST',
+    },
+    BLANK_DISBELIEF: {
+      pose: 'BLANK_DISBELIEF' as any,
+      soundId: 'RECORD_SCRATCH',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'REAL_MEME_BLINKING_GUY',
+    },
+    CHEF_KISS: {
+      pose: 'CHEF_KISS' as any,
+      soundId: 'SUCTION_POP',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'MEME_OK_CHEFS_KISS',
+    },
+    CHEEK_HEART: {
+      pose: 'CHEEK_HEART' as any,
+      soundId: 'LEVEL_UP_NOTIFICATION',
+      enabled: true,
+      visualEnabled: true,
+      memeId: 'REAL_MEME_KPOP_HEART',
+    },
   },
   actionCustomCaptions: {},
   randomMemeMode: false,
@@ -1692,6 +2263,17 @@ export const DEFAULT_GOOFY_CONFIG: GoofyModeConfig = {
   enableReactionCombos: true,
   comboWindowMs: 2500,
   reactionCombos: [],
+  // V8 Multimodal Additions
+  operatingMode: 'MULTIMODAL',
+  faceSensitivity: 'HIGH',
+  multimodalWindowMs: 800,
+  fusionWindowMs: 800,
+  showFaceOverlay: true,
+  showHandOverlay: true,
+  showFaceMeshTesselation: false,
+  enableFaceExpressions: true,
+  enableHandGestures: true,
+  enableMultimodalFusion: true,
 };
 
 export interface MemePresetDefinition {

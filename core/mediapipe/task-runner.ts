@@ -377,6 +377,14 @@ export class MediaPipeTaskRunner {
     }
   }
 
+  isFaceLoaded(): boolean {
+    return !!this.faceLandmarker;
+  }
+
+  isHandLoaded(): boolean {
+    return !!(this.gestureRecognizer || this.handLandmarker);
+  }
+
   // 3. Initialize Pose Landmarker
   async initPoseLandmarker(modelPath = '/models/pose_landmarker_full.task'): Promise<boolean> {
     if (this.poseLandmarker) return true;

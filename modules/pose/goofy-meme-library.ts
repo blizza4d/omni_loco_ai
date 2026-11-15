@@ -3058,11 +3058,47 @@ export function getMemeById(
 ): MemeVisualDefinition | undefined {
   const fromCustom = customMemes.find((m) => m.id === id);
   if (fromCustom) return fromCustom;
-  return DEFAULT_MEME_LIBRARY.find((m) => m.id === id);
+  const direct = DEFAULT_MEME_LIBRARY.find((m) => m.id === id);
+  if (direct) return direct;
+
+  // Fallback alias matching
+  const aliasMatch = DEFAULT_MEME_LIBRARY.find(
+    (m) =>
+      m.id === `${id}_GIF` ||
+      m.id === `${id}_IMG` ||
+      id === `${m.id}_GIF` ||
+      (id.startsWith('REAL_MEME_') && m.id.startsWith(id)) ||
+      (m.id.startsWith('REAL_MEME_') && id.startsWith(m.id))
+  );
+  return aliasMatch;
 }
 
 export function getDefaultMemeForAction(actionId: string): MemeVisualDefinition {
   const mapping: Record<string, string> = {
+    // V8 Multimodal Combos
+    POSITIVE_APPROVAL: 'REAL_MEME_GIGACHAD',
+    SHOCKED_REACTION: 'REAL_MEME_SURPRISED_PIKACHU',
+    VICTORY_REACTION: 'REAL_MEME_DICAPRIO_TOAST_GIF',
+    SUSPICIOUS_ACCUSATION: 'REAL_MEME_THE_ROCK_EYEBROW_GIF',
+    DRAMATIC_SURPRISE: 'REAL_MEME_MIND_BLOWN_GIF',
+    DISAPPOINTMENT_REACTION: 'REAL_MEME_EMOTIONAL_DAMAGE_GIF',
+    CELEBRATION: 'REAL_MEME_RONALDO_SIU_GIF',
+    MAXIMUM_AURA: 'REAL_MEME_ULTRA_INSTINCT_SHAGGY_GIF',
+    RAGE_ANGER: 'REAL_MEME_ARTHURS_FIST',
+    BLANK_DISBELIEF: 'REAL_MEME_BLINKING_GUY_GIF',
+    CHEF_KISS: 'REAL_MEME_SALT_BAE_GIF',
+    CHEEK_HEART: 'REAL_MEME_KPOP_HEART_GIF',
+    // V8 Face Expressions
+    FACE_SMILE: 'REAL_MEME_SUCCESS_KID_GIF',
+    FACE_BIG_SMILE: 'REAL_MEME_DICAPRIO_TOAST_GIF',
+    FACE_JAW_OPEN: 'REAL_MEME_SURPRISED_PIKACHU',
+    FACE_EYEBROWS_RAISED: 'REAL_MEME_THE_ROCK_EYEBROW_GIF',
+    FACE_EYES_WIDE: 'REAL_MEME_CONFUSED_TRAVOLTA_GIF',
+    FACE_BLINK: 'REAL_MEME_BLINKING_GUY_GIF',
+    FACE_FROWN_PATTERN: 'REAL_MEME_EMOTIONAL_DAMAGE_GIF',
+    FACE_LIP_PUCKER: 'REAL_MEME_SALT_BAE_GIF',
+    FACE_CHEEK_RAISE: 'REAL_MEME_KPOP_HEART_GIF',
+    FACE_SURPRISE: 'REAL_MEME_MIND_BLOWN_GIF',
     // Gestures
     OPEN_PALM: 'REAL_MEME_CONFUSED_TRAVOLTA_GIF',
     CLOSED_FIST: 'REAL_MEME_ARTHURS_FIST',
