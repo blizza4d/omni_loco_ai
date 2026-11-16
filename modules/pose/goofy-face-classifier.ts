@@ -28,19 +28,19 @@ export const FACE_SENSITIVITY_PROFILES: Record<
   FaceClassifierSensitivityConfig
 > = {
   HIGH: {
-    activationMultiplier: 0.88,
-    releaseMultiplier: 0.85,
-    minHoldMs: 120,
+    activationMultiplier: 1.0,
+    releaseMultiplier: 0.90,
+    minHoldMs: 360,
   },
   MEDIUM: {
-    activationMultiplier: 1.0,
-    releaseMultiplier: 1.0,
-    minHoldMs: 160,
+    activationMultiplier: 1.15,
+    releaseMultiplier: 1.05,
+    minHoldMs: 440,
   },
   RELAXED: {
-    activationMultiplier: 1.15,
-    releaseMultiplier: 1.15,
-    minHoldMs: 220,
+    activationMultiplier: 1.30,
+    releaseMultiplier: 1.20,
+    minHoldMs: 520,
   },
 };
 
@@ -174,17 +174,17 @@ export class GoofyFaceClassifier {
     const profile = FACE_SENSITIVITY_PROFILES[this.sensitivity];
     const actMult = profile.activationMultiplier;
 
-    // Base activation thresholds
+    // Base activation thresholds - calibrated so natural passive posture / involuntary blinking never triggers
     const T_BIG_SMILE = 0.72 * actMult;
-    const T_SMILE = 0.36 * actMult;
-    const T_SURPRISE_JAW = 0.35 * actMult;
-    const T_JAW_OPEN = 0.38 * actMult;
-    const T_BROWS_RAISED = 0.38 * actMult;
-    const T_EYES_WIDE = 0.28 * actMult;
-    const T_BLINK = 0.48 * actMult;
-    const T_FROWN = 0.32 * actMult;
-    const T_PUCKER = 0.38 * actMult;
-    const T_CHEEK_RAISE = 0.36 * actMult;
+    const T_SMILE = 0.44 * actMult;
+    const T_SURPRISE_JAW = 0.45 * actMult;
+    const T_JAW_OPEN = 0.48 * actMult;
+    const T_BROWS_RAISED = 0.44 * actMult;
+    const T_EYES_WIDE = 0.40 * actMult;
+    const T_BLINK = 0.65 * actMult;
+    const T_FROWN = 0.42 * actMult;
+    const T_PUCKER = 0.42 * actMult;
+    const T_CHEEK_RAISE = 0.40 * actMult;
 
     const hasBlendshapes = blendshapes && Array.isArray(blendshapes) && blendshapes.length > 0;
     const scores: { expression: GoofyFaceExpressionType; score: number }[] = [];
@@ -235,13 +235,15 @@ export class GoofyFaceClassifier {
       scores.push({ expression: 'FACE_EYES_WIDE', score: Math.min(1, (earAvg - 0.35) * 4) });
     }
 
-    // 6. Blink / Wink (both eyes closed or one eye wink)
+    // 6. Blink / Wink: Only recognize deliberate intentional wink or eyes held tightly closed, NOT passive involuntary blinks!
     if (hasBlendshapes) {
-      if (blinkAvg >= T_BLINK || eyeBlinkLeft > 0.65 || eyeBlinkRight > 0.65) {
+      const isIntentionalWink = Math.abs(eyeBlinkLeft - eyeBlinkRight) > 0.40 && Math.max(eyeBlinkLeft, eyeBlinkRight) >= 0.65;
+      const isDeliberateEyesClosed = blinkAvg >= T_BLINK;
+      if (isIntentionalWink || isDeliberateEyesClosed) {
         const bScore = Math.max(blinkAvg, eyeBlinkLeft, eyeBlinkRight);
         scores.push({ expression: 'FACE_BLINK', score: Math.min(1, bScore) });
       }
-    } else if (earAvg < 0.18) {
+    } else if (earAvg < 0.14) {
       scores.push({ expression: 'FACE_BLINK', score: 0.9 });
     }
 

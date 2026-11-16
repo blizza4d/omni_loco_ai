@@ -12,6 +12,7 @@ import {
   GoofyModeConfig,
   GoofySoundId,
 } from './goofy-types';
+import { GESTURE_ELIGIBLE_MEMES } from './goofy-semantic-matcher';
 
 export interface RecentPerceptionSignal<T> {
   type: T;
@@ -161,7 +162,7 @@ export class GoofyMultimodalEngine {
     timestamp: number
   ): MultimodalEvent | null {
     // 1. Check if face modality is active
-    if (this.operatingMode === 'HAND_ONLY') {
+    if (this.operatingMode === 'HAND_ONLY' || this.config.enableFaceExpressions === false) {
       return {
         id: `rej_face_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         timestamp,
@@ -175,6 +176,24 @@ export class GoofyMultimodalEngine {
         confidence,
         validity: 'REJECTED',
         rejectionReason: 'MODALITY_DISABLED (HAND_ONLY_ACTIVE)',
+      };
+    }
+
+    // Require high intentional confidence to avoid triggering on transient expressions
+    if (confidence < 0.70) {
+      return {
+        id: `rej_face_conf_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        timestamp,
+        modality: 'FACE',
+        source: 'FACE',
+        faceExpression: expression,
+        label: GOOFY_FACE_METADATA[expression]?.label || expression,
+        caption: '',
+        soundId: 'RECORD_SCRATCH',
+        memeId: '',
+        confidence,
+        validity: 'REJECTED',
+        rejectionReason: 'CONFIDENCE_BELOW_THRESHOLD (>=0.70 REQUIRED)',
       };
     }
 
@@ -221,7 +240,7 @@ export class GoofyMultimodalEngine {
     handIdentity: 'Left' | 'Right' | 'Both' = 'Both'
   ): MultimodalEvent | null {
     // 1. Check if hand modality is active
-    if (this.operatingMode === 'FACE_ONLY') {
+    if (this.operatingMode === 'FACE_ONLY' || this.config.enableHandGestures === false) {
       return {
         id: `rej_hand_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         timestamp,
@@ -237,6 +256,27 @@ export class GoofyMultimodalEngine {
         confidence,
         validity: 'REJECTED',
         rejectionReason: 'MODALITY_DISABLED (FACE_ONLY_ACTIVE)',
+        handIdentity,
+      };
+    }
+
+    // Require high intentional confidence to avoid triggering on unintentional hand repositions
+    if (confidence < 0.70) {
+      return {
+        id: `rej_hand_conf_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        timestamp,
+        modality: 'HAND',
+        source: 'HAND',
+        handGesture: gesture as GoofyHandGestureType,
+        label: (GOOFY_HAND_METADATA[gesture as GoofyHandGestureType]?.label ||
+          GOOFY_DUAL_COMBO_DEFINITIONS[gesture as GoofyDualHandComboId]?.label ||
+          gesture) as string,
+        caption: '',
+        soundId: 'RECORD_SCRATCH',
+        memeId: '',
+        confidence,
+        validity: 'REJECTED',
+        rejectionReason: 'CONFIDENCE_BELOW_THRESHOLD (>=0.70 REQUIRED)',
         handIdentity,
       };
     }
@@ -359,6 +399,14 @@ export class GoofyMultimodalEngine {
     const meta = GOOFY_FACE_METADATA[expression];
     const triggerKey = `FACE_${expression}`;
 
+    const canonicalFaceMeme =
+      meta?.defaultMemeId ||
+      this.config.actionMemeMappings?.[expression] ||
+      'REAL_MEME_SUCCESS_KID';
+    const canonicalFaceSound: GoofySoundId =
+      meta?.defaultSoundId ||
+      'VICTORY_BELL';
+
     if (
       timestamp - this.lastTriggeredTime < this.cooldownMs &&
       this.lastTriggeredKey === triggerKey
@@ -371,8 +419,8 @@ export class GoofyMultimodalEngine {
         faceExpression: expression,
         label: meta.label,
         caption: meta.defaultCaption,
-        soundId: 'VICTORY_BELL',
-        memeId: '',
+        soundId: canonicalFaceSound,
+        memeId: canonicalFaceMeme,
         confidence,
         validity: 'REJECTED',
         rejectionReason: 'COOLDOWN_ACTIVE',
@@ -383,8 +431,8 @@ export class GoofyMultimodalEngine {
     this.lastTriggeredKey = triggerKey;
 
     const mapping = this.config.faceMappings?.[expression];
-    const memeId = mapping?.memeId || this.config.actionMemeMappings?.[expression] || 'REAL_MEME_SUCCESS_KID';
-    const soundId: GoofySoundId = mapping?.soundId || 'VICTORY_BELL';
+    const memeId = mapping?.memeId || this.config.actionMemeMappings?.[expression] || canonicalFaceMeme;
+    const soundId: GoofySoundId = mapping?.soundId || canonicalFaceSound;
     const caption = mapping?.customCaption || meta.defaultCaption;
 
     const event: MultimodalEvent = {
@@ -424,6 +472,14 @@ export class GoofyMultimodalEngine {
     const defaultCaption = meta?.defaultCaption || '';
     const triggerKey = `HAND_${gesture}`;
 
+    const canonicalHandMeme = isDual
+      ? (meta as any)?.defaultMemeId
+      : (GESTURE_ELIGIBLE_MEMES[gesture as GoofyHandGestureType]?.[0] || 'REAL_MEME_GIGACHAD');
+
+    const canonicalHandSound: GoofySoundId = isDual
+      ? (meta as any)?.defaultSoundId
+      : 'CHAD_GONG';
+
     if (
       timestamp - this.lastTriggeredTime < this.cooldownMs &&
       this.lastTriggeredKey === triggerKey
@@ -436,8 +492,8 @@ export class GoofyMultimodalEngine {
         handGesture: gesture as GoofyHandGestureType,
         label,
         caption: defaultCaption,
-        soundId: 'CHAD_GONG',
-        memeId: '',
+        soundId: canonicalHandSound,
+        memeId: canonicalHandMeme,
         confidence,
         validity: 'REJECTED',
         rejectionReason: 'COOLDOWN_ACTIVE',
@@ -455,14 +511,10 @@ export class GoofyMultimodalEngine {
     const memeId =
       mapping?.memeId ||
       this.config.actionMemeMappings?.[gesture] ||
-      (isDual
-        ? (meta as any).defaultMemeId
-        : 'MEME_MAXIMUM_AURA');
+      canonicalHandMeme;
     const soundId: GoofySoundId =
       mapping?.soundId ||
-      (isDual
-        ? (meta as any).defaultSoundId
-        : 'CHAD_GONG');
+      canonicalHandSound;
     const caption = mapping?.customCaption || defaultCaption;
 
     const event: MultimodalEvent = {

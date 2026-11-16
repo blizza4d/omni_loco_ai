@@ -346,10 +346,12 @@ export default function GoofyModePage() {
   const runnerRef = useRef<MediaPipeTaskRunner>(new MediaPipeTaskRunner());
   const handClassifierRef = useRef<GoofyHandClassifier>(new GoofyHandClassifier());
   const faceLandmarksRef = useRef<FaceLandmark[] | null>(null);
+  const lastFaceInferTimeRef = useRef(0);
+  const cachedFaceBlendshapesRef = useRef<{ categoryName: string; score: number }[]>([]);
   const faceClassifierRef = useRef<GoofyFaceClassifier>(new GoofyFaceClassifier());
   const faceSMRef = useRef<GoofyFaceStateMachine>(
     new GoofyFaceStateMachine({
-      minHoldMs: 180,
+      minHoldMs: (config as any).faceHoldTimeMs || 380,
       cooldownMs: config.cooldownMs,
     })
   );
@@ -363,19 +365,19 @@ export default function GoofyModePage() {
 
   const leftHandSMRef = useRef<GoofyHandStateMachine>(
     new GoofyHandStateMachine({
-      minHoldMs: 160,
+      minHoldMs: config.gestureHoldTimeMs || 240,
       cooldownMs: config.cooldownMs,
     })
   );
   const rightHandSMRef = useRef<GoofyHandStateMachine>(
     new GoofyHandStateMachine({
-      minHoldMs: 160,
+      minHoldMs: config.gestureHoldTimeMs || 240,
       cooldownMs: config.cooldownMs,
     })
   );
   const dualHandSMRef = useRef<GoofyDualHandStateMachine>(
     new GoofyDualHandStateMachine({
-      minHoldMs: 180,
+      minHoldMs: (config.gestureHoldTimeMs || 240) + 20,
       cooldownMs: config.cooldownMs,
     })
   );
@@ -471,10 +473,23 @@ export default function GoofyModePage() {
         // Quota guard
       }
     }
-    leftHandSMRef.current.updateConfig({ cooldownMs: config.cooldownMs });
-    rightHandSMRef.current.updateConfig({ cooldownMs: config.cooldownMs });
-    dualHandSMRef.current.updateConfig({ cooldownMs: config.cooldownMs });
-    faceSMRef.current.updateConfig({ cooldownMs: config.cooldownMs });
+    leftHandSMRef.current.updateConfig({
+      cooldownMs: config.cooldownMs,
+      minHoldMs: config.gestureHoldTimeMs || 240,
+    });
+    rightHandSMRef.current.updateConfig({
+      cooldownMs: config.cooldownMs,
+      minHoldMs: config.gestureHoldTimeMs || 240,
+    });
+    dualHandSMRef.current.updateConfig({
+      cooldownMs: config.cooldownMs,
+      minHoldMs: (config.gestureHoldTimeMs || 240) + 20,
+    });
+    faceSMRef.current.updateConfig({
+      cooldownMs: config.cooldownMs,
+      minHoldMs: (config as any).faceHoldTimeMs || 380,
+    });
+    multimodalEngineRef.current.updateConfig(config);
     multimodalEngineRef.current.setOperatingMode(config.operatingMode || 'MULTIMODAL');
     multimodalEngineRef.current.setFusionWindow(config.fusionWindowMs || 800);
     multimodalEngineRef.current.setCooldown(config.cooldownMs || 750);
@@ -804,23 +819,40 @@ export default function GoofyModePage() {
     const inferStart = performance.now();
     let faceInferDuration = 0;
     let handInferDuration = 0;
+    const currentMode = configRef.current.operatingMode || 'MULTIMODAL';
 
     // 1. Cooperative Face Perception (478 3D Landmarks + 52 ARKit Blendshapes)
+    // Pace face perception at ~30 FPS during Multimodal to keep 60 FPS frame budget
     let detectedFaceLandmarks: FaceLandmark[] | null = null;
     let detectedFaceBlendshapes: { categoryName: string; score: number }[] = [];
 
-    if (videoRef.current && videoRef.current.readyState >= 2 && runnerRef.current.isFaceLoaded()) {
+    const shouldDetectFace =
+      currentMode !== 'HAND_ONLY' &&
+      (currentMode === 'FACE_ONLY' || now - lastFaceInferTimeRef.current >= 32);
+
+    if (shouldDetectFace && videoRef.current && videoRef.current.readyState >= 2 && runnerRef.current.isFaceLoaded()) {
       const faceStart = performance.now();
       const faceResult = runnerRef.current.detectFace(videoRef.current, now);
       faceInferDuration = performance.now() - faceStart;
+      lastFaceInferTimeRef.current = now;
       if (faceResult && faceResult.faceLandmarks && faceResult.faceLandmarks.length > 0) {
         detectedFaceLandmarks = faceResult.faceLandmarks[0] as FaceLandmark[];
         if (faceResult.faceBlendshapes && faceResult.faceBlendshapes[0]?.categories) {
           detectedFaceBlendshapes = faceResult.faceBlendshapes[0].categories;
+          cachedFaceBlendshapesRef.current = detectedFaceBlendshapes;
         }
+      } else {
+        cachedFaceBlendshapesRef.current = [];
       }
+      faceLandmarksRef.current = detectedFaceLandmarks;
+    } else if (currentMode !== 'HAND_ONLY') {
+      // Reuse cached face landmarks on interleaved frames
+      detectedFaceLandmarks = faceLandmarksRef.current;
+      detectedFaceBlendshapes = cachedFaceBlendshapesRef.current;
+    } else {
+      faceLandmarksRef.current = null;
+      cachedFaceBlendshapesRef.current = [];
     }
-    faceLandmarksRef.current = detectedFaceLandmarks;
 
     // 2. Cooperative Hand Perception (21 3D Landmarks per hand)
     let detectedHands: {
@@ -831,80 +863,88 @@ export default function GoofyModePage() {
       bbox?: { minX: number; maxX: number; minY: number; maxY: number };
     }[] = [];
 
-    if (syntheticMode) {
-      const synthLm = generateSyntheticHand(now, 'point');
-      let minX = 1, maxX = 0, minY = 1, maxY = 0;
-      for (const pt of synthLm) {
-        if (pt.x < minX) minX = pt.x;
-        if (pt.x > maxX) maxX = pt.x;
-        if (pt.y < minY) minY = pt.y;
-        if (pt.y > maxY) maxY = pt.y;
-      }
-      detectedHands = [
-        {
-          handedness: 'Right',
-          landmarks: synthLm,
-          bbox: { minX, maxX, minY, maxY },
-        },
-      ];
-    } else if (videoRef.current && videoRef.current.readyState >= 2) {
-      const handStart = performance.now();
-      const handResult = runnerRef.current.detectHands(videoRef.current, now);
-      handInferDuration = performance.now() - handStart;
+    const shouldDetectHands = currentMode !== 'FACE_ONLY';
 
-      if (handResult && handResult.landmarks && handResult.landmarks.length > 0) {
-        detectedHands = handResult.landmarks.map((lms, idx) => {
-          const rawHandedness =
-            handResult.handedness && handResult.handedness[idx] && handResult.handedness[idx]![0]
-              ? (handResult.handedness[idx]![0]!.displayName as 'Left' | 'Right')
-              : idx === 0
-              ? 'Right'
-              : 'Left';
-
-          const worldLms = handResult.worldLandmarks && handResult.worldLandmarks[idx]
-            ? handResult.worldLandmarks[idx]!.map((pt) => ({ x: pt.x, y: pt.y, z: pt.z }))
-            : undefined;
-
-          const gestureHint = handResult.gestures && handResult.gestures[idx] && handResult.gestures[idx]![0]
-            ? {
-                category: handResult.gestures[idx]![0]!.categoryName,
-                score: handResult.gestures[idx]![0]!.score,
-              }
-            : undefined;
-
-          let minX = 1, maxX = 0, minY = 1, maxY = 0;
-          for (const pt of lms) {
-            if (pt.x < minX) minX = pt.x;
-            if (pt.x > maxX) maxX = pt.x;
-            if (pt.y < minY) minY = pt.y;
-            if (pt.y > maxY) maxY = pt.y;
-          }
-
-          return {
-            handedness: rawHandedness,
-            landmarks: lms.map((pt) => ({ x: pt.x, y: pt.y, z: pt.z })),
-            worldLandmarks: worldLms,
-            modelGestureHint: gestureHint,
-            bbox: { minX, maxX, minY, maxY },
-          };
-        });
-
-        if (detectedHands.length === 2 && detectedHands[0]?.landmarks[0] && detectedHands[1]?.landmarks[0]) {
-          const h0x = isMirrored ? (1 - detectedHands[0].landmarks[0].x) : detectedHands[0].landmarks[0].x;
-          const h1x = isMirrored ? (1 - detectedHands[1].landmarks[0].x) : detectedHands[1].landmarks[0].x;
-          if (h0x <= h1x) {
-            detectedHands[0].handedness = 'Left';
-            detectedHands[1].handedness = 'Right';
-          } else {
-            detectedHands[0].handedness = 'Right';
-            detectedHands[1].handedness = 'Left';
-          }
+    if (shouldDetectHands) {
+      if (syntheticMode) {
+        const synthLm = generateSyntheticHand(now, 'point');
+        let minX = 1, maxX = 0, minY = 1, maxY = 0;
+        for (const pt of synthLm) {
+          if (pt.x < minX) minX = pt.x;
+          if (pt.x > maxX) maxX = pt.x;
+          if (pt.y < minY) minY = pt.y;
+          if (pt.y > maxY) maxY = pt.y;
         }
+        detectedHands = [
+          {
+            handedness: 'Right',
+            landmarks: synthLm,
+            bbox: { minX, maxX, minY, maxY },
+          },
+        ];
+      } else if (videoRef.current && videoRef.current.readyState >= 2) {
+        const handStart = performance.now();
+        const handResult = runnerRef.current.detectHands(videoRef.current, now);
+        handInferDuration = performance.now() - handStart;
 
-        const leftH = detectedHands.find((h) => h.handedness === 'Left');
-        const rightH = detectedHands.find((h) => h.handedness === 'Right');
-        leftHandLandmarksRef.current = leftH ? leftH.landmarks : null;
-        rightHandLandmarksRef.current = rightH ? rightH.landmarks : null;
+        if (handResult && handResult.landmarks && handResult.landmarks.length > 0) {
+          detectedHands = handResult.landmarks.map((lms, idx) => {
+            const rawHandedness =
+              handResult.handedness && handResult.handedness[idx] && handResult.handedness[idx]![0]
+                ? (handResult.handedness[idx]![0]!.displayName as 'Left' | 'Right')
+                : idx === 0
+                ? 'Right'
+                : 'Left';
+
+            const worldLms = handResult.worldLandmarks && handResult.worldLandmarks[idx]
+              ? handResult.worldLandmarks[idx]!.map((pt) => ({ x: pt.x, y: pt.y, z: pt.z }))
+              : undefined;
+
+            const gestureHint = handResult.gestures && handResult.gestures[idx] && handResult.gestures[idx]![0]
+              ? {
+                  category: handResult.gestures[idx]![0]!.categoryName,
+                  score: handResult.gestures[idx]![0]!.score,
+                }
+              : undefined;
+
+            let minX = 1, maxX = 0, minY = 1, maxY = 0;
+            for (const pt of lms) {
+              if (pt.x < minX) minX = pt.x;
+              if (pt.x > maxX) maxX = pt.x;
+              if (pt.y < minY) minY = pt.y;
+              if (pt.y > maxY) maxY = pt.y;
+            }
+
+            return {
+              handedness: rawHandedness,
+              landmarks: lms.map((pt) => ({ x: pt.x, y: pt.y, z: pt.z })),
+              worldLandmarks: worldLms,
+              modelGestureHint: gestureHint,
+              bbox: { minX, maxX, minY, maxY },
+            };
+          });
+
+          if (detectedHands.length === 2 && detectedHands[0]?.landmarks[0] && detectedHands[1]?.landmarks[0]) {
+            const h0x = isMirrored ? (1 - detectedHands[0].landmarks[0].x) : detectedHands[0].landmarks[0].x;
+            const h1x = isMirrored ? (1 - detectedHands[1].landmarks[0].x) : detectedHands[1].landmarks[0].x;
+            if (h0x <= h1x) {
+              detectedHands[0].handedness = 'Left';
+              detectedHands[1].handedness = 'Right';
+            } else {
+              detectedHands[0].handedness = 'Right';
+              detectedHands[1].handedness = 'Left';
+            }
+          }
+
+          const leftH = detectedHands.find((h) => h.handedness === 'Left');
+          const rightH = detectedHands.find((h) => h.handedness === 'Right');
+          leftHandLandmarksRef.current = leftH ? leftH.landmarks : null;
+          rightHandLandmarksRef.current = rightH ? rightH.landmarks : null;
+        } else {
+          detectedHands = [];
+          leftHandLandmarksRef.current = null;
+          rightHandLandmarksRef.current = null;
+        }
       } else {
         detectedHands = [];
         leftHandLandmarksRef.current = null;
@@ -1127,9 +1167,9 @@ export default function GoofyModePage() {
           }
         }
 
-        // Diagnostics Telemetry Throttled Update
+        // Diagnostics Telemetry Throttled Update (pacing React state updates to ~5.5 Hz when drawer is visible)
         const totalInferMs = faceInferDuration + handInferDuration;
-        if ((showDiagnostics || diagnosticsDrawerOpen) && now - lastDiagUpdateRef.current >= 80) {
+        if ((showDiagnostics || diagnosticsDrawerOpen) && now - lastDiagUpdateRef.current >= 180) {
           lastDiagUpdateRef.current = now;
           setDiagnosticsData({
             latencyMs: totalInferMs,
@@ -1514,16 +1554,19 @@ export default function GoofyModePage() {
     activeMultimodalCombo,
   ]);
 
-  // Animation Loop
+  const tickRef = useRef<() => void>(() => {});
+  tickRef.current = tick;
+
+  // Animation Loop (Stable reference decoupled from React state churn)
   useEffect(() => {
     let animId: number;
     const loop = () => {
-      tick();
+      tickRef.current();
       animId = requestAnimationFrame(loop);
     };
     animId = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(animId);
-  }, [tick]);
+  }, []);
 
   // All combined memes (custom uploads first, followed by built-in vector pack)
   const allMemes: MemeVisualDefinition[] = useMemo(() => {

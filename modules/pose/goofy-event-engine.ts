@@ -256,6 +256,7 @@ export class GoofyEventEngine {
         (mapping && mapping.memeId) ||
         this.config.actionMemeMappings[actionId] ||
         (multimodalDef && multimodalDef.defaultMemeId) ||
+        (faceDef && (faceDef as any).defaultMemeId) ||
         (comboDef && comboDef.defaultMemeId);
 
       if (assignedMemeId) {
