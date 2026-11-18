@@ -90,6 +90,12 @@ const GESTURE_CATEGORY_AFFINITY: Record<string, MemeCategory[]> = {
   FACE_LIP_PUCKER: ['HAND_GESTURE_REACTION', 'APPROVAL_CONFIDENCE'],
   FACE_CHEEK_RAISE: ['APPROVAL_CONFIDENCE', 'VICTORY_CELEBRATION'],
   FACE_SURPRISE: ['SURPRISE_SHOCK', 'ABSOLUTE_CINEMA', 'CHAOS_UNEXPECTED'],
+  FACE_SUSPICIOUS: ['SUSPICION_JUDGEMENT', 'CONFUSION'],
+
+  // V9 Multimodal Secret Sequences
+  SECRET_SEQ_CHAOS_APPROVAL: ['APPROVAL_CONFIDENCE', 'MAXIMUM_AURA', 'VICTORY_CELEBRATION'],
+  SECRET_SEQ_SHOCK_REVEAL: ['SURPRISE_SHOCK', 'CHAOS_UNEXPECTED', 'ABSOLUTE_CINEMA'],
+  SECRET_SEQ_AURA_ASCENSION: ['MAXIMUM_AURA', 'RARE_REACTIONS', 'CHAOS_UNEXPECTED'],
 
   // V8 Multimodal Combos
   POSITIVE_APPROVAL: ['APPROVAL_CONFIDENCE', 'MAXIMUM_AURA'],
@@ -525,6 +531,32 @@ export const GESTURE_ELIGIBLE_MEMES: Record<string, string[]> = {
     'REAL_MEME_SURPRISED_PIKACHU',
     'REAL_MEME_GALAXY_BRAIN_ASCENDING_GIF',
   ],
+  FACE_SUSPICIOUS: [
+    'REAL_MEME_THE_ROCK_EYEBROW',
+    'REAL_MEME_THE_ROCK_EYEBROW_GIF',
+    'REAL_MEME_SIDE_EYE_DOG',
+    'REAL_MEME_FRY_SQUINT',
+    'MEME_SIDE_EYE',
+    'MEME_VERY_SUSPICIOUS',
+  ],
+  SECRET_SEQ_CHAOS_APPROVAL: [
+    'REAL_MEME_GIGACHAD',
+    'REAL_MEME_ABSOLUTE_CINEMA',
+    'REAL_MEME_KEANU_BREATHTAKING_GIF',
+    'MEME_MAXIMUM_AURA',
+  ],
+  SECRET_SEQ_SHOCK_REVEAL: [
+    'REAL_MEME_MIND_BLOWN_EXPLOSION',
+    'REAL_MEME_MIND_BLOWN_GIF',
+    'REAL_MEME_SURPRISED_PIKACHU',
+    'MEME_EXPLODING_HEAD',
+  ],
+  SECRET_SEQ_AURA_ASCENSION: [
+    'MEME_MAXIMUM_AURA',
+    'REAL_MEME_GIGACHAD',
+    'MEME_FINAL_BOSS_ENERGY',
+    'MEME_ROCK_STAR',
+  ],
 };
 
 /**
@@ -644,8 +676,83 @@ export class SemanticMemeMatcher {
       }
     }
 
-    // 5. Anti-Repetition Check (if preventImmediateRepetition or randomMemeMode is enabled)
+    // 4b. V9 CHAOS MODE // UNPREDICTABLE REACTIONS (Strictly bounded to suitable eligiblePool!)
+    const chaos = config.chaosMode;
     const recent = this.recentMemesByAction.get(actionId) || [];
+    if (chaos?.enabled) {
+      // Rare reaction drop check within eligiblePool
+      const rareFreq = Math.max(0, Math.min(0.4, chaos.rareReactionFrequency ?? 0.15));
+      if (rareFreq > 0 && Math.random() < rareFreq) {
+        const rarePool = eligiblePool.filter(
+          (m) => m.rarity === 'LEGENDARY' || m.rarity === 'RARE'
+        );
+        if (rarePool.length > 0) {
+          const filteredRare = chaos.repeatAvoidance
+            ? rarePool.filter((m) => !recent.includes(m.id))
+            : rarePool;
+          const targetRare = filteredRare.length > 0 ? filteredRare : rarePool;
+          const pickedRare = targetRare[Math.floor(Math.random() * targetRare.length)]!;
+          this.recordRecent(actionId, pickedRare.id);
+          return this.buildResult(
+            pickedRare,
+            actionId,
+            155,
+            'Chaos Mode Rare Drop (Eligible)',
+            config
+          );
+        }
+      }
+
+      // Score all strictly eligible candidates with contextual affinity + favorites + repeat avoidance
+      const affinityCats = GESTURE_CATEGORY_AFFINITY[actionId] || [];
+      const favorites = new Set(config.favoriteMemes || []);
+      const preferredCats = new Set(config.preferredCategories || []);
+
+      const scored = eligiblePool.map((meme) => {
+        let score = 60;
+        if (meme.id === explicitMemeId) score += 25;
+        if (affinityCats.includes(meme.category)) score += 18;
+        if (favorites.has(meme.id)) score += 30;
+        if (preferredCats.has(meme.category)) score += 15;
+        if (meme.mediaType === 'gif') score += 8;
+
+        if (chaos.repeatAvoidance) {
+          const recencyIdx = recent.indexOf(meme.id);
+          if (recencyIdx === 0) score -= 90;
+          else if (recencyIdx > 0) score -= 45 / recencyIdx;
+        }
+
+        // Add bounded chaos jitter proportional to chaosIntensity (0..100)
+        const intensityNorm = Math.max(0, Math.min(100, chaos.chaosIntensity ?? 65)) / 100;
+        score += Math.random() * 45 * intensityNorm;
+        return { meme, score };
+      });
+
+      scored.sort((a, b) => b.score - a.score);
+
+      // Variety controls how wide into the ranked eligible pool the softmax picker reaches
+      const varietyNorm = Math.max(0, Math.min(100, chaos.reactionVariety ?? 75)) / 100;
+      const topK = Math.max(1, Math.ceil(scored.length * Math.max(0.25, varietyNorm)));
+      const narrowed = scored.slice(0, topK);
+
+      // If repeatAvoidance is on and there is >1 candidate, filter out the immediate last shown meme if possible
+      const finalCandidates =
+        chaos.repeatAvoidance && recent.length > 0 && narrowed.length > 1
+          ? narrowed.filter((c) => c.meme.id !== recent[0])
+          : narrowed;
+      const pickPool = finalCandidates.length > 0 ? finalCandidates : narrowed;
+      const picked = this.weightedPick(pickPool);
+      this.recordRecent(actionId, picked.meme.id);
+      return this.buildResult(
+        picked.meme,
+        actionId,
+        Math.min(100, Math.max(70, Math.round(picked.score))),
+        `Chaos Mode Contextual Match (Intensity ${Math.round(chaos.chaosIntensity ?? 65)}%)`,
+        config
+      );
+    }
+
+    // 5. Anti-Repetition Check (if preventImmediateRepetition or randomMemeMode is enabled)
     if ((config.preventImmediateRepetition || config.randomMemeMode) && eligiblePool.length > 1) {
       const nonRecent = eligiblePool.filter((m) => !recent.includes(m.id));
       const poolToPick = nonRecent.length > 0 ? nonRecent : eligiblePool.filter((m) => m.id !== recent[0]);
@@ -664,7 +771,7 @@ export class SemanticMemeMatcher {
       }
     }
 
-    // 6. Deterministic Default: Return primary canonical eligible candidate
+    // 6. Deterministic Default: Return primary canonical eligible candidate (boosting user favorites if tied)
     const primaryCandidate = eligiblePool.find((m) => m.id === explicitMemeId) || eligiblePool[0]!;
     this.recordRecent(actionId, primaryCandidate.id);
     return this.buildResult(primaryCandidate, actionId, 100, 'Canonical action-to-meme binding', config);
@@ -674,8 +781,8 @@ export class SemanticMemeMatcher {
    * Helper to check if a meme is strictly eligible for an action.
    * A meme is eligible IF AND ONLY IF:
    * 1. Its ID is in GESTURE_ELIGIBLE_MEMES[actionId], OR
-   * 2. Its gestureTags / comboTags / suggestedActions explicitly mention actionId, OR
-   * 3. The user explicitly assigned it in config.multiMemeAssignments[actionId] or config.actionMemeMappings[actionId].
+   * 2. Its gestureTags / comboTags / faceTags / multimodalTags / suggestedActions explicitly mention actionId, OR
+   * 3. The user explicitly assigned it in config mappings / multiMemeAssignments / customReactionRules.
    */
   public isMemeEligibleForAction(
     meme: MemeVisualDefinition,
@@ -688,6 +795,8 @@ export class SemanticMemeMatcher {
     if (
       meme.gestureTags?.includes(actionId as GoofyHandGestureType) ||
       meme.comboTags?.includes(actionId as GoofyDualHandComboId) ||
+      meme.faceTags?.includes(actionId as GoofyFaceExpressionType) ||
+      meme.multimodalTags?.includes(actionId as GoofyMultimodalComboId) ||
       meme.suggestedActions?.includes(actionId as any)
     ) {
       return true;
@@ -697,6 +806,21 @@ export class SemanticMemeMatcher {
     if (config?.actionMemeMappings?.[actionId] === meme.id) return true;
     if (config?.handMappings?.[actionId as GoofyHandGestureType]?.memeId === meme.id) return true;
     if (config?.dualHandMappings?.[actionId as GoofyDualHandComboId]?.memeId === meme.id) return true;
+    if (config?.faceMappings?.[actionId as GoofyFaceExpressionType]?.memeId === meme.id) return true;
+    if (config?.multimodalMappings?.[actionId as GoofyMultimodalComboId]?.memeId === meme.id) return true;
+    if (
+      config?.customReactionRules?.some(
+        (r) =>
+          r.enabled &&
+          r.memeId === meme.id &&
+          (r.faceCondition === actionId ||
+            r.handCondition === actionId ||
+            r.combinedCondition === actionId ||
+            r.id === actionId)
+      )
+    ) {
+      return true;
+    }
 
     // V7 Custom Gestures & Intelligent Reaction Combos
     const customDef = config?.customGestures?.find((cg) => cg.id === actionId);

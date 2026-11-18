@@ -19,6 +19,8 @@ import {
   GOOFY_FACE_METADATA,
   GOOFY_MULTIMODAL_COMBO_DEFINITIONS,
   MemeVisualDefinition,
+  CustomReactionRule,
+  GoofyActionSource,
 } from './goofy-types';
 import { GoofyAudioEngine } from './goofy-audio-engine';
 import { GoofyVisualFXEngine } from './goofy-visual-fx';
@@ -47,6 +49,35 @@ export class GoofyEventEngine {
   private maxHistorySize = 50;
   private lastMemeIdByAction: Map<string, string> = new Map();
   private recentMemeIds: string[] = [];
+  private popupTimers: Set<ReturnType<typeof setTimeout>> = new Set();
+  private popupRateTimestamps: number[] = [];
+
+  private schedulePopupExpiry(id: string, durationMs: number): void {
+    const timer = setTimeout(() => {
+      this.popupTimers.delete(timer);
+      this.removePopup(id);
+    }, durationMs);
+    this.popupTimers.add(timer);
+  }
+
+  /**
+   * Enforces maxPopupsPerMinute cap (Chaos Mode rate limiter) using a rolling 60s window
+   */
+  private isRateLimited(nowWallMs = Date.now()): boolean {
+    const maxPerMin = this.config.chaosMode?.enabled
+      ? this.config.chaosMode.maxPopupsPerMinute
+      : undefined;
+    if (!maxPerMin || maxPerMin <= 0) return false;
+    const cutoff = nowWallMs - 60_000;
+    this.popupRateTimestamps = this.popupRateTimestamps.filter((ts) => ts >= cutoff);
+    return this.popupRateTimestamps.length >= maxPerMin;
+  }
+
+  private recordPopupRateTimestamp(nowWallMs = Date.now()): void {
+    const cutoff = nowWallMs - 60_000;
+    this.popupRateTimestamps = this.popupRateTimestamps.filter((ts) => ts >= cutoff);
+    this.popupRateTimestamps.push(nowWallMs);
+  }
 
   constructor(
     config: GoofyModeConfig,
@@ -285,7 +316,11 @@ export class GoofyEventEngine {
       ].slice(0, 15);
     }
 
-    // 5. Simultaneous Event & Concurrency Arbitration
+    // 5. Simultaneous Event, Rate-Limit & Concurrency Arbitration
+    if (this.isRateLimited()) {
+      return null;
+    }
+
     const now = performance.now();
     const durationMs = this.config.memeDurationMs || 1500;
     const concurrency = this.config.popupConcurrencyPolicy || 'ALLOW_SIMULTANEOUS';
@@ -380,11 +415,10 @@ export class GoofyEventEngine {
       };
 
       this.activePopups.push(popup);
+      this.recordPopupRateTimestamp();
 
-      // Auto-expire popup after duration
-      setTimeout(() => {
-        this.removePopup(eventId);
-      }, durationMs);
+      // Auto-expire popup after duration (tracked timer for leak-free disposal)
+      this.schedulePopupExpiry(eventId, durationMs);
     }
 
     // 9. Append to unified event history
@@ -603,10 +637,7 @@ export class GoofyEventEngine {
     };
 
     this.activePopups = [popup]; // Clear existing and show preview
-
-    setTimeout(() => {
-      this.removePopup(eventId);
-    }, durationMs);
+    this.schedulePopupExpiry(eventId, durationMs);
 
     const dummyEvent: UnifiedMemeEvent = {
       id: eventId,
@@ -627,6 +658,110 @@ export class GoofyEventEngine {
 
     this.notify(dummyEvent);
     return popup;
+  }
+
+  /**
+   * V9: Dispatches a validated declarative CustomReactionRule.
+   * When isPreview is true, isolates preview completely from genuine eventHistory & rate caps.
+   */
+  dispatchCustomRuleTrigger(
+    rule: CustomReactionRule,
+    confidence = 0.96,
+    isPreview = false
+  ): UnifiedMemeEvent | null {
+    if (!isPreview && !rule.enabled) return null;
+    if (!isPreview && this.isRateLimited()) return null;
+
+    const memeDef = getMemeById(rule.memeId, this.customMemes);
+    const soundId: GoofySoundId = rule.soundId || 'CHAD_GONG';
+    let playedSoundName: string = soundId;
+
+    if ((isPreview || this.config.enableSound) && !this.config.isMuted) {
+      this.audioEngine.playSound(soundId, this.config.volume);
+      const def = this.audioEngine.getSoundLibrary().find((s) => s.id === soundId);
+      if (def) playedSoundName = def.name;
+    }
+
+    if (!isPreview && this.config.enableVisualFx) {
+      this.visualFx.triggerPoseReaction('#10B981', this.config.enableScreenShake);
+    }
+
+    const now = performance.now();
+    const durationMs = Math.max(500, Math.min(6000, rule.durationMs || 1800));
+    const eventId = `${isPreview ? 'preview-rule' : 'rule'}-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+    const rotationDeg = Math.round((Math.random() * 6 - 3) * 10) / 10;
+    const source: GoofyActionSource = 'CUSTOM_RULE';
+
+    if ((isPreview || this.config.enableMemePopups) && memeDef) {
+      const popup: ActiveMemePopup = {
+        id: eventId,
+        actionId: rule.id,
+        actionLabel: isPreview ? `${rule.name} [PREVIEW]` : `RULE: ${rule.name}`,
+        actionSource: source,
+        memeId: memeDef.id,
+        memeTitle: memeDef.title,
+        memeUrl: memeDef.dataUrl,
+        mediaType: memeDef.mediaType || (memeDef.dataUrl.endsWith('.gif') ? 'gif' : 'image'),
+        sourceType: memeDef.sourceType || (memeDef.dataUrl.startsWith('/memes/') ? 'REAL_MEDIA' : 'ORIGINAL_SVG'),
+        caption: isPreview ? `[PREVIEW] ${rule.caption}` : rule.caption,
+        soundId,
+        soundName: playedSoundName,
+        timestamp: now,
+        durationMs,
+        rotationDeg,
+        isManualPreview: isPreview,
+        category: memeDef.category,
+        rarity: memeDef.rarity,
+        animationStyle: rule.animationStyle || this.config.popupAnimationStyle || 'CLASSIC',
+        matchScore: 100,
+        matchReason: isPreview ? 'Custom Rule Preview' : `Custom Rule: ${rule.name}`,
+      };
+
+      if (isPreview) {
+        this.activePopups = [popup];
+      } else {
+        const maxSimultaneous = this.config.maxSimultaneousPopups || 2;
+        while (this.activePopups.length >= maxSimultaneous) {
+          this.activePopups.shift();
+        }
+        this.activePopups.push(popup);
+        this.recordPopupRateTimestamp();
+      }
+      this.schedulePopupExpiry(eventId, durationMs);
+    }
+
+    const event: UnifiedMemeEvent = {
+      id: eventId,
+      timestamp: Date.now(),
+      source,
+      actionId: rule.id,
+      actionLabel: isPreview ? `${rule.name} [PREVIEW]` : `RULE: ${rule.name}`,
+      caption: isPreview ? `[PREVIEW] ${rule.caption}` : rule.caption,
+      soundId,
+      soundName: playedSoundName,
+      memeId: memeDef ? memeDef.id : 'NONE',
+      memeTitle: memeDef ? memeDef.title : 'No Matching Meme',
+      confidence: isPreview ? 1.0 : confidence,
+      isManualPreview: isPreview,
+      category: memeDef?.category,
+      rarity: memeDef?.rarity,
+    };
+
+    if (!isPreview) {
+      if (memeDef) {
+        this.recentMemeIds = [
+          memeDef.id,
+          ...this.recentMemeIds.filter((id) => id !== memeDef.id),
+        ].slice(0, 15);
+      }
+      this.eventHistory.unshift(event);
+      if (this.eventHistory.length > this.maxHistorySize) {
+        this.eventHistory.pop();
+      }
+    }
+
+    this.notify(event);
+    return event;
   }
 
   private removePopup(id: string): void {
@@ -651,8 +786,16 @@ export class GoofyEventEngine {
   }
 
   stopAll(): void {
+    this.popupTimers.forEach((t) => clearTimeout(t));
+    this.popupTimers.clear();
     this.activePopups = [];
     this.audioEngine.stopAll();
     this.visualFx.clear();
+  }
+
+  dispose(): void {
+    this.stopAll();
+    this.listeners.clear();
+    this.popupRateTimestamps = [];
   }
 }

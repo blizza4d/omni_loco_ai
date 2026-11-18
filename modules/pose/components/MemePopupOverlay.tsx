@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { ActiveMemePopup, MemeCategory, PopupAnimationStyle } from '../goofy-types';
 
 interface MemePopupOverlayProps {
@@ -12,6 +12,8 @@ export function MemePopupOverlay({
   popups,
   defaultAnimationStyle = 'CLASSIC',
 }: MemePopupOverlayProps) {
+  const [failedMediaIds, setFailedMediaIds] = useState<Record<string, boolean>>({});
+
   if (!popups || popups.length === 0) return null;
 
   const getBorderAndGlow = (popup: ActiveMemePopup) => {
@@ -74,6 +76,7 @@ export function MemePopupOverlay({
           const isExplosive = animStyle === 'EXPLOSIVE';
           const isChaos = animStyle === 'CHAOS';
           const isRetro = animStyle === 'RETRO_ARCADE';
+          const isGlitch = animStyle === 'GLITCH';
           const isMinimal = animStyle === 'MINIMAL';
           const isCinematic = animStyle === 'CINEMATIC';
           const isClean = animStyle === 'CLEAN';
@@ -82,13 +85,15 @@ export function MemePopupOverlay({
           let animClass = 'animate-meme-classic';
           if (isExplosive) animClass = 'animate-meme-explosive';
           else if (isChaos) animClass = 'animate-meme-chaos';
+          else if (isGlitch) animClass = 'animate-meme-glitch';
           else if (isRetro) animClass = 'animate-meme-retro';
           else if (isMinimal) animClass = 'animate-meme-minimal';
           else if (isCinematic) animClass = 'animate-meme-cinematic';
           else if (isClean) animClass = 'animate-meme-clean';
           else if (isNoAnim) animClass = 'animate-none';
 
-          const rot = isMinimal || isNoAnim || isCinematic || isClean ? 0 : popup.rotationDeg;
+          const rot = isMinimal || isNoAnim || isCinematic || isClean || isGlitch ? 0 : popup.rotationDeg;
+          const mediaFailed = !!failedMediaIds[popup.id];
 
           return (
             <div
@@ -123,13 +128,17 @@ export function MemePopupOverlay({
                   <span className="flex items-center gap-1.5 font-mono text-[11px] font-black uppercase tracking-wider text-white">
                     <span
                       className={`inline-block w-2.5 h-2.5 rounded-full ${
-                        popup.actionSource === 'DUAL_HAND'
+                        popup.actionSource === 'MULTIMODAL'
+                          ? 'bg-fuchsia-400 animate-ping'
+                          : popup.actionSource === 'FACE'
+                          ? 'bg-amber-400 animate-pulse'
+                          : popup.actionSource === 'DUAL_HAND'
                           ? 'bg-purple-400 animate-ping'
                           : popup.actionSource === 'HAND'
                           ? 'bg-cyan-400 animate-pulse'
-                          : popup.actionSource === 'CUSTOM_GESTURE'
+                          : popup.actionSource === 'CUSTOM_RULE' || popup.actionSource === 'CUSTOM_GESTURE'
                           ? 'bg-emerald-400 animate-pulse ring-2 ring-emerald-300'
-                          : popup.actionSource === 'REACTION_COMBO'
+                          : popup.actionSource === 'REACTION_COMBO' || popup.actionSource === 'SEQUENCE'
                           ? 'bg-amber-400 animate-bounce ring-2 ring-rose-400'
                           : 'bg-yellow-400 animate-pulse'
                       }`}
@@ -175,13 +184,28 @@ export function MemePopupOverlay({
 
                 {/* Meme Visual Display - Prominent Sizing for Main Attraction */}
                 <div className="relative aspect-[4/3] w-[340px] sm:w-[460px] md:w-[540px] lg:w-[620px] max-w-full bg-slate-950 flex items-center justify-center overflow-hidden">
-                  {popup.mediaType === 'video' || popup.memeUrl.endsWith('.mp4') ? (
+                  {mediaFailed || !popup.memeUrl ? (
+                    <div className="flex flex-col items-center justify-center p-6 text-center gap-2">
+                      <span className="font-mono text-xs font-black uppercase tracking-widest text-amber-400">
+                        {popup.actionSource} REACTION
+                      </span>
+                      <span className="font-sans font-black text-2xl text-white uppercase tracking-tight">
+                        {popup.memeTitle || popup.actionLabel}
+                      </span>
+                      <span className="font-mono text-[10px] text-slate-400">
+                        MEDIA ASSET UNAVAILABLE — DISPLAYING RECOGNIZED EVENT
+                      </span>
+                    </div>
+                  ) : popup.mediaType === 'video' || popup.memeUrl.endsWith('.mp4') ? (
                     <video
                       src={popup.memeUrl}
                       autoPlay
                       loop
                       muted
                       playsInline
+                      onError={() =>
+                        setFailedMediaIds((prev) => ({ ...prev, [popup.id]: true }))
+                      }
                       className="w-full h-full object-contain select-none"
                     />
                   ) : (
@@ -189,8 +213,24 @@ export function MemePopupOverlay({
                     <img
                       src={popup.memeUrl}
                       alt={popup.caption || popup.memeTitle}
+                      decoding="async"
+                      loading="eager"
+                      onError={() =>
+                        setFailedMediaIds((prev) => ({ ...prev, [popup.id]: true }))
+                      }
                       className="w-full h-full object-contain select-none transition-transform duration-300 hover:scale-105"
                       draggable={false}
+                    />
+                  )}
+
+                  {/* Glitch Chromatic Overlay */}
+                  {isGlitch && (
+                    <div
+                      className="absolute inset-0 pointer-events-none mix-blend-screen opacity-35"
+                      style={{
+                        backgroundImage:
+                          'repeating-linear-gradient(0deg, rgba(6,182,212,0.5) 0px, rgba(236,72,153,0.4) 2px, transparent 2px, transparent 6px)',
+                      }}
                     />
                   )}
 
@@ -365,6 +405,32 @@ export function MemePopupOverlay({
           }
         }
 
+        @keyframes memeGlitch {
+          0% {
+            opacity: 0;
+            transform: scale(0.92) skewX(10deg) translateX(-12px);
+            filter: hue-rotate(90deg) contrast(1.6);
+          }
+          25% {
+            opacity: 1;
+            transform: scale(1.04) skewX(-8deg) translateX(8px);
+            filter: hue-rotate(-60deg) saturate(2);
+          }
+          50% {
+            transform: scale(0.98) skewX(4deg) translateX(-5px);
+            filter: contrast(1.4);
+          }
+          75% {
+            transform: scale(1.01) skewX(-2deg) translateX(2px);
+            filter: none;
+          }
+          100% {
+            opacity: 1;
+            transform: scale(1) skewX(0deg) translateX(0);
+            filter: none;
+          }
+        }
+
         .animate-meme-classic {
           animation: memeClassic 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
         }
@@ -375,6 +441,10 @@ export function MemePopupOverlay({
 
         .animate-meme-chaos {
           animation: memeChaos 0.35s cubic-bezier(0.15, 1.45, 0.45, 1) forwards;
+        }
+
+        .animate-meme-glitch {
+          animation: memeGlitch 0.30s steps(5, end) forwards;
         }
 
         .animate-meme-minimal {
@@ -397,6 +467,7 @@ export function MemePopupOverlay({
           .animate-meme-classic,
           .animate-meme-explosive,
           .animate-meme-chaos,
+          .animate-meme-glitch,
           .animate-meme-minimal,
           .animate-meme-retro,
           .animate-meme-cinematic,

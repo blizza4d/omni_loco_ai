@@ -50,7 +50,10 @@ import {
   ActiveSequenceState,
   IntelligentReactionCombo,
   BUILTIN_INTELLIGENT_COMBOS,
+  DEFAULT_CHAOS_MODE_CONFIG,
+  CustomReactionRule,
 } from '@/modules/pose/goofy-types';
+import { evaluateCustomReactionRules } from '@/modules/pose/goofy-custom-rules';
 import {
   GoofyHandClassifier,
   GoofyHandStateMachine,
@@ -105,6 +108,7 @@ import { CustomGestureStudioModal } from '@/modules/pose/components/CustomGestur
 import { PersonalMemeReactionEditorModal } from '@/modules/pose/components/PersonalMemeReactionEditorModal';
 import { GestureSequenceCreatorModal } from '@/modules/pose/components/GestureSequenceCreatorModal';
 import { HandTrackingDiagnosticsDrawer } from '@/modules/pose/components/HandTrackingDiagnosticsDrawer';
+import { CustomReactionStudioModal } from '@/modules/pose/components/CustomReactionStudioModal';
 import { useSystemStore } from '@/core/store';
 import { ProtocolEventBus } from '@/modules/forge/event-bus';
 import { unlockAchievement } from '@/modules/easter-eggs/achievements';
@@ -168,6 +172,13 @@ export default function GoofyModePage() {
               ...DEFAULT_GOOFY_CONFIG.actionCustomCaptions,
               ...(parsed.actionCustomCaptions || {}),
             },
+            chaosMode: {
+              ...DEFAULT_CHAOS_MODE_CONFIG,
+              ...(parsed.chaosMode || {}),
+            },
+            customReactionRules: Array.isArray(parsed.customReactionRules)
+              ? parsed.customReactionRules
+              : [],
           };
         }
       } catch {
@@ -203,8 +214,10 @@ export default function GoofyModePage() {
   const [expandedFaces, setExpandedFaces] = useState<Set<string>>(new Set());
   const [expandedMultimodal, setExpandedMultimodal] = useState<Set<string>>(new Set());
 
-  // V7 Custom Gesture Studio & Intelligent Reaction Combos States
+  // V7/V9 Custom Gesture Studio, Custom Reaction Studio & Chaos Engine States
   const [customStudioOpen, setCustomStudioOpen] = useState(false);
+  const [customReactionStudioOpen, setCustomReactionStudioOpen] = useState(false);
+  const [chaosPanelExpanded, setChaosPanelExpanded] = useState(false);
   const [sequenceCreatorOpen, setSequenceCreatorOpen] = useState(false);
   const [reactionEditorAction, setReactionEditorAction] = useState<{ actionId: string; label: string } | null>(null);
   const [diagnosticsDrawerOpen, setDiagnosticsDrawerOpen] = useState(false);
@@ -557,42 +570,56 @@ export default function GoofyModePage() {
     return () => unsubscribe();
   }, []);
 
-  // Initialize Dual Concurrent Vision Pipelines (FaceLandmarker + GestureRecognizer/HandLandmarker)
+  // V9 Lazy Mode-Aware Dual Vision Pipelines (Loads only active modalities; disposes cleanly on unmount)
   useEffect(() => {
     let mounted = true;
     const runner = runnerRef.current;
-    const visualFx = visualFxRef.current;
-    const audioEngine = audioEngineRef.current;
+    const mode = config.operatingMode || 'MULTIMODAL';
 
-    runner
-      .initHandPipeline({
-        preferGestureRecognizer: true,
-        gestureModelPath: '/models/gesture_recognizer.task',
-        landmarkerModelPath: '/models/hand_landmarker.task',
-        config: {
-          numHands: 2,
-          minHandDetectionConfidence: 0.40,
-          minHandPresenceConfidence: 0.40,
-          minTrackingConfidence: 0.40,
-        },
-      })
-      .then(async () => {
-        if (mounted) {
-          setActiveHandModelName(runner.getActiveHandModel());
-          // Cooperatively initialize MediaPipe Face Landmarker for 478 3D landmarks + 52 ARKit blendshapes
+    const loadPipelines = async () => {
+      try {
+        if (mode !== 'FACE_ONLY' && !runner.isHandLoaded()) {
+          await runner.initHandPipeline({
+            preferGestureRecognizer: true,
+            gestureModelPath: '/models/gesture_recognizer.task',
+            landmarkerModelPath: '/models/hand_landmarker.task',
+            config: {
+              numHands: 2,
+              minHandDetectionConfidence: 0.40,
+              minHandPresenceConfidence: 0.40,
+              minTrackingConfidence: 0.40,
+            },
+          });
+          if (mounted) {
+            setActiveHandModelName(runner.getActiveHandModel());
+          }
+        }
+        if (mode !== 'HAND_ONLY' && !runner.isFaceLoaded()) {
           const faceSuccess = await runner.initFaceLandmarker('/models/face_landmarker.task');
           if (mounted && faceSuccess) {
             setIsFaceModelLoaded(true);
           }
         }
-      })
-      .catch((err) => {
+      } catch (err) {
         console.warn('[GoofyModel] MediaPipe perception pipeline notice:', err);
-      });
+      }
+    };
 
+    loadPipelines();
     return () => {
       mounted = false;
+    };
+  }, [config.operatingMode]);
+
+  // Complete Resource Disposal on Module Unmount (GPU/WASM, timers, audio, FX)
+  useEffect(() => {
+    const runner = runnerRef.current;
+    const visualFx = visualFxRef.current;
+    const audioEngine = audioEngineRef.current;
+    const eventEngine = eventEngineRef.current;
+    return () => {
       runner.dispose();
+      eventEngine.dispose();
       visualFx.clear();
       audioEngine.stopAll();
     };
@@ -601,16 +628,24 @@ export default function GoofyModePage() {
   const { setPerfStats } = useSystemStore();
 
   useEffect(() => {
+    const mode = config.operatingMode || 'MULTIMODAL';
     setPerfStats({
-      activeModule: 'GOOFY MODEL V8 (MULTIMODAL)',
-      activeModel: 'face_landmarker (478-pt) + hand_landmarker (21-pt dual)',
+      activeModule: config.chaosMode?.enabled
+        ? 'GOOFY MODEL V9 (CHAOS MODE)'
+        : 'GOOFY MODEL V9 (MULTIMODAL)',
+      activeModel:
+        mode === 'HAND_ONLY'
+          ? 'hand_landmarker (21-pt dual)'
+          : mode === 'FACE_ONLY'
+          ? 'face_landmarker (478-pt + 52 blendshapes)'
+          : 'face_landmarker (478-pt) + hand_landmarker (21-pt dual)',
       fps,
       p50Ms: 14,
       p95Ms: 22,
       trackingStatus: isStreaming ? 'TRACKING_ACTIVE' : 'STANDBY',
       streamStatus: isStreaming ? 'STREAMING' : 'STANDBY',
     });
-  }, [fps, isStreaming, setPerfStats]);
+  }, [fps, isStreaming, setPerfStats, config.operatingMode, config.chaosMode?.enabled]);
 
   // Audio Context unlock helper
   const handleUnlockAudio = () => {
@@ -779,6 +814,7 @@ export default function GoofyModePage() {
       'FACE_LIP_PUCKER',
       'FACE_CHEEK_RAISE',
       'FACE_SURPRISE',
+      'FACE_SUSPICIOUS',
     ];
     setExpandedFaces(new Set(all));
   }, []);
@@ -1213,16 +1249,21 @@ export default function GoofyModePage() {
               operatingMode: config.operatingMode || 'MULTIMODAL',
               fusionWindowMs: config.fusionWindowMs || 800,
               lastCombo: multimodalEngineRef.current.getLastTriggeredCombo() || undefined,
+              lastRejectionReason: multimodalEngineRef.current.getDiagnostics().lastRejectionReason,
             },
           });
         }
 
-        // Intelligent Reaction Combo Helper
+        // Intelligent Reaction Combo Helper (Honors Chaos Mode combo window when Chaos is active)
         const checkReactionCombo = (actionId: string, _hand: 'Left' | 'Right' | 'Both'): boolean => {
-          if (config.enableReactionCombos !== false) {
+          const chaosEnabled = configRef.current.chaosMode?.enabled === true;
+          if (config.enableReactionCombos !== false || chaosEnabled) {
             const combos = config.reactionCombos || BUILTIN_INTELLIGENT_COMBOS;
             const last = lastActionRef.current;
-            if (last && now - last.time <= (config.comboWindowMs || 2500)) {
+            const activeComboWindow = chaosEnabled
+              ? (configRef.current.chaosMode?.comboWindowMs || 2200)
+              : (config.comboWindowMs || 1500);
+            if (last && now - last.time <= activeComboWindow) {
               const matchedCombo = combos.find(
                 (c) =>
                   c.enabled !== false &&
@@ -1245,8 +1286,21 @@ export default function GoofyModePage() {
         // ─────────────────────────────────────────────────────────────
         let validatedMultimodalEvent: MultimodalEvent | null = null;
 
-        // A. Route Face Signal
+        // A. Route Face Signal (also advances V9 Multimodal Face+Hand Sequences)
         if (faceSM.triggered && faceSM.expression) {
+          const faceSeqRes = sequenceEngineRef.current.processEvent(faceSM.expression, now, 'Face');
+          if (faceSeqRes.triggered && faceSeqRes.sequence) {
+            eventEngineRef.current.dispatchSequenceTrigger(faceSeqRes.sequence);
+            unlockAchievement('GOOFY_DUAL_COMBO');
+            setSequenceProgress(null);
+            checkReactionCombo(faceSeqRes.sequence.id, 'Both');
+          } else if (faceSeqRes.progressPercent > 0) {
+            setSequenceProgress({
+              id: faceSeqRes.sequence?.id || 'ACTIVE_SEQUENCE',
+              pct: faceSeqRes.progressPercent,
+            });
+          }
+
           const mFace = multimodalEngineRef.current.onFaceExpressionValidated(
             faceSM.expression,
             faceSM.confidence,
@@ -1383,9 +1437,34 @@ export default function GoofyModePage() {
           }
         }
 
-        // D. Dispatch Validated Multimodal Action to Unified Event Engine
+        // D. Dispatch Validated Multimodal Action to Custom Reaction Rules or Unified Event Engine
         if (validatedMultimodalEvent) {
-          if (validatedMultimodalEvent.modality === 'MULTIMODAL' && validatedMultimodalEvent.comboId) {
+          const matchedCustomRule = evaluateCustomReactionRules(
+            configRef.current.customReactionRules,
+            {
+              faceExpression:
+                validatedMultimodalEvent.faceExpression ||
+                faceSM.stabilizedExpression ||
+                null,
+              handGesture:
+                (validatedMultimodalEvent.handGesture as GoofyHandGestureType | GoofyDualHandComboId) ||
+                currentDualComboId ||
+                curRightGesture ||
+                curLeftGesture ||
+                null,
+              comboId: validatedMultimodalEvent.comboId || null,
+              operatingMode: currentMode,
+            }
+          );
+
+          if (matchedCustomRule) {
+            eventEngineRef.current.dispatchCustomRuleTrigger(
+              matchedCustomRule,
+              validatedMultimodalEvent.confidence,
+              false
+            );
+            checkReactionCombo(matchedCustomRule.id, validatedMultimodalEvent.handIdentity || 'Both');
+          } else if (validatedMultimodalEvent.modality === 'MULTIMODAL' && validatedMultimodalEvent.comboId) {
             eventEngineRef.current.dispatchActionTrigger(
               validatedMultimodalEvent.comboId,
               'MULTIMODAL',
@@ -1428,7 +1507,7 @@ export default function GoofyModePage() {
           }
         }
 
-        if (detectedHands.length === 0) {
+        if (detectedHands.length === 0 && !detectedFaceLandmarks) {
           sequenceEngineRef.current.notifyTrackingLoss(now);
         }
         const curActiveSeqState = sequenceEngineRef.current.getActiveState(now);
@@ -3194,6 +3273,280 @@ export default function GoofyModePage() {
               </div>
             </div>
 
+            {/* V9 CHAOS ENGINE CONTROL DECK & CUSTOM REACTION STUDIO BAR */}
+            <div
+              className={`rounded-lg border-2 p-3 transition-all ${
+                config.chaosMode?.enabled
+                  ? 'border-fuchsia-500 bg-fuchsia-950/10 shadow-[0_0_20px_rgba(217,70,239,0.18)]'
+                  : 'border-charcoal-soft/30 bg-paper-dark/15'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setConfig((p) => ({
+                        ...p,
+                        chaosMode: {
+                          ...(p.chaosMode || DEFAULT_CHAOS_MODE_CONFIG),
+                          enabled: !(p.chaosMode?.enabled ?? false),
+                        },
+                      }))
+                    }
+                    className={`px-3 py-1.5 rounded font-mono text-[11px] font-black uppercase tracking-wider transition-all cursor-pointer ${
+                      config.chaosMode?.enabled
+                        ? 'bg-fuchsia-600 text-white shadow-md'
+                        : 'bg-charcoal-dark text-white hover:bg-charcoal-soft'
+                    }`}
+                  >
+                    {config.chaosMode?.enabled ? '🔥 CHAOS MODE: ACTIVE' : '⚡ CHAOS MODE: OFF'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setChaosPanelExpanded((v) => !v)}
+                    className="px-2 py-1 rounded border border-charcoal-soft/30 font-mono text-[10px] font-bold text-ink-muted hover:text-charcoal-dark cursor-pointer"
+                  >
+                    {chaosPanelExpanded ? 'HIDE TUNING ▲' : 'TUNE CHAOS ▼'}
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setCustomReactionStudioOpen(true)}
+                    className="px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white font-mono text-[10px] font-black uppercase tracking-wider cursor-pointer"
+                  >
+                    + REACTION STUDIO ({config.customReactionRules?.length || 0})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDiagnosticsDrawerOpen(true)}
+                    className="px-2.5 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-cyan-300 font-mono text-[10px] font-black uppercase tracking-wider cursor-pointer"
+                  >
+                    DIAGNOSTICS
+                  </button>
+                </div>
+              </div>
+
+              <p className="font-mono text-[9px] text-ink-muted mt-1.5">
+                {config.chaosMode?.enabled
+                  ? 'CHAOS MODE // UNPREDICTABLE REACTIONS active: varies meme selection among strictly suitable candidates only (never randomizes recognition).'
+                  : 'Deterministic Binding active: each verified Face, Hand, or Combined event triggers its exact canonical or custom rule reaction.'}
+              </p>
+
+              {chaosPanelExpanded && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 pt-3 border-t border-charcoal-soft/20 font-mono text-[10px]">
+                  <div>
+                    <div className="flex justify-between font-bold mb-1">
+                      <span>CHAOS INTENSITY</span>
+                      <span>{config.chaosMode?.chaosIntensity ?? 65}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={config.chaosMode?.chaosIntensity ?? 65}
+                      onChange={(e) =>
+                        setConfig((p) => ({
+                          ...p,
+                          chaosMode: {
+                            ...(p.chaosMode || DEFAULT_CHAOS_MODE_CONFIG),
+                            chaosIntensity: Number(e.target.value),
+                          },
+                        }))
+                      }
+                      className="w-full accent-fuchsia-600"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between font-bold mb-1">
+                      <span>REACTION VARIETY</span>
+                      <span>{config.chaosMode?.reactionVariety ?? 75}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      value={config.chaosMode?.reactionVariety ?? 75}
+                      onChange={(e) =>
+                        setConfig((p) => ({
+                          ...p,
+                          chaosMode: {
+                            ...(p.chaosMode || DEFAULT_CHAOS_MODE_CONFIG),
+                            reactionVariety: Number(e.target.value),
+                          },
+                        }))
+                      }
+                      className="w-full accent-purple-600"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between font-bold mb-1">
+                      <span>RARE REACTION FREQ</span>
+                      <span>{Math.round((config.chaosMode?.rareReactionFrequency ?? 0.15) * 100)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={40}
+                      value={Math.round((config.chaosMode?.rareReactionFrequency ?? 0.15) * 100)}
+                      onChange={(e) =>
+                        setConfig((p) => ({
+                          ...p,
+                          chaosMode: {
+                            ...(p.chaosMode || DEFAULT_CHAOS_MODE_CONFIG),
+                            rareReactionFrequency: Number(e.target.value) / 100,
+                          },
+                        }))
+                      }
+                      className="w-full accent-amber-500"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between font-bold mb-1">
+                      <span>COMBO WINDOW</span>
+                      <span>{config.chaosMode?.comboWindowMs ?? 2200}ms</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={800}
+                      max={4000}
+                      step={100}
+                      value={config.chaosMode?.comboWindowMs ?? 2200}
+                      onChange={(e) =>
+                        setConfig((p) => ({
+                          ...p,
+                          chaosMode: {
+                            ...(p.chaosMode || DEFAULT_CHAOS_MODE_CONFIG),
+                            comboWindowMs: Number(e.target.value),
+                          },
+                        }))
+                      }
+                      className="w-full accent-cyan-600"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between font-bold mb-1">
+                      <span>MAX POPUPS / MIN</span>
+                      <span>{config.chaosMode?.maxPopupsPerMinute ?? 24}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={6}
+                      max={60}
+                      step={2}
+                      value={config.chaosMode?.maxPopupsPerMinute ?? 24}
+                      onChange={(e) =>
+                        setConfig((p) => ({
+                          ...p,
+                          chaosMode: {
+                            ...(p.chaosMode || DEFAULT_CHAOS_MODE_CONFIG),
+                            maxPopupsPerMinute: Number(e.target.value),
+                          },
+                        }))
+                      }
+                      className="w-full accent-rose-600"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="flex items-center gap-1.5 cursor-pointer font-bold">
+                      <input
+                        type="checkbox"
+                        checked={config.chaosMode?.repeatAvoidance ?? true}
+                        onChange={(e) =>
+                          setConfig((p) => ({
+                            ...p,
+                            chaosMode: {
+                              ...(p.chaosMode || DEFAULT_CHAOS_MODE_CONFIG),
+                              repeatAvoidance: e.target.checked,
+                            },
+                          }))
+                        }
+                        className="accent-emerald-600"
+                      />
+                      <span>REPEAT AVOIDANCE</span>
+                    </label>
+                    <select
+                      aria-label="Popup Animation Preset"
+                      value={config.popupAnimationStyle || 'CLASSIC'}
+                      onChange={(e) =>
+                        setConfig((p) => ({
+                          ...p,
+                          popupAnimationStyle: e.target.value as PopupAnimationStyle,
+                        }))
+                      }
+                      className="px-2 py-1 rounded border border-charcoal-soft/40 bg-white text-charcoal-dark font-mono text-[10px] font-bold"
+                    >
+                      <option value="CLASSIC">FX: CLASSIC</option>
+                      <option value="EXPLOSIVE">FX: EXPLOSIVE</option>
+                      <option value="CINEMATIC">FX: CINEMATIC</option>
+                      <option value="RETRO_ARCADE">FX: RETRO ARCADE</option>
+                      <option value="GLITCH">FX: GLITCH</option>
+                      <option value="CHAOS">FX: CHAOS</option>
+                      <option value="MINIMAL">FX: MINIMAL</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* PHASE 10 PROFESSIONAL 4-PILLAR WORKSPACE BAR */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 font-mono text-[10px]">
+              <button
+                type="button"
+                onClick={() => setActiveTab('MULTIMODAL')}
+                className={`py-1.5 px-2 rounded border font-black uppercase tracking-wider transition-all cursor-pointer ${
+                  ['MULTIMODAL', 'FACE', 'HANDS', 'COMBOS'].includes(activeTab)
+                    ? 'bg-charcoal-dark text-white border-charcoal-dark'
+                    : 'bg-paper-dark/20 text-ink-muted border-charcoal-soft/30 hover:text-charcoal-dark'
+                }`}
+              >
+                A. LIVE RECOGNITION
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('MEMES')}
+                className={`py-1.5 px-2 rounded border font-black uppercase tracking-wider transition-all cursor-pointer ${
+                  activeTab === 'MEMES'
+                    ? 'bg-emerald-700 text-white border-emerald-700'
+                    : 'bg-paper-dark/20 text-ink-muted border-charcoal-soft/30 hover:text-charcoal-dark'
+                }`}
+              >
+                B. REACTION LIBRARY
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('CREATOR')}
+                className={`py-1.5 px-2 rounded border font-black uppercase tracking-wider transition-all cursor-pointer ${
+                  ['CREATOR', 'CUSTOM', 'SEQUENCES'].includes(activeTab)
+                    ? 'bg-rose-700 text-white border-rose-700'
+                    : 'bg-paper-dark/20 text-ink-muted border-charcoal-soft/30 hover:text-charcoal-dark'
+                }`}
+              >
+                C. REACTION EDITOR
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveTab('TESTBENCH');
+                  setDiagnosticsDrawerOpen(true);
+                }}
+                className={`py-1.5 px-2 rounded border font-black uppercase tracking-wider transition-all cursor-pointer ${
+                  activeTab === 'TESTBENCH'
+                    ? 'bg-indigo-700 text-white border-indigo-700'
+                    : 'bg-paper-dark/20 text-ink-muted border-charcoal-soft/30 hover:text-charcoal-dark'
+                }`}
+              >
+                D. DIAGNOSTICS
+              </button>
+            </div>
+
             {/* TAB SELECTOR: MULTIMODAL vs FACE vs HANDS vs COMBOS vs CUSTOM vs SEQUENCES vs CREATOR vs MEMES vs TEST BENCH */}
             <div className="flex items-center border-b-2 border-charcoal-soft gap-1.5 flex-wrap">
               <button
@@ -3215,7 +3568,7 @@ export default function GoofyModePage() {
                     : 'border-transparent text-ink-muted hover:text-charcoal-dark'
                 }`}
               >
-                FACE (10)
+                FACE (11)
               </button>
 
               <button
@@ -6141,7 +6494,43 @@ export default function GoofyModePage() {
         }}
       />
 
-      {/* DRAWER: MULTIMODAL ACCURACY & DIAGNOSTICS WORKSPACE (V8) */}
+      {/* MODAL 8: CUSTOM REACTION STUDIO (V9 DECLARATIVE RULE ENGINE) */}
+      <CustomReactionStudioModal
+        isOpen={customReactionStudioOpen}
+        onClose={() => setCustomReactionStudioOpen(false)}
+        rules={config.customReactionRules || []}
+        allMemes={allMemes}
+        onSaveRules={(updatedRules: CustomReactionRule[]) => {
+          setConfig((prev) => ({
+            ...prev,
+            customReactionRules: updatedRules,
+          }));
+        }}
+        onPreviewRule={(rule: CustomReactionRule) => {
+          eventEngineRef.current.dispatchCustomRuleTrigger(rule, 1.0, true);
+        }}
+        onPreviewSound={(soundId) => {
+          audioEngineRef.current.playSound(soundId, config.volume);
+        }}
+        onUploadMemeFile={async (file: File) => {
+          try {
+            const title = file.name.replace(/\.[^/.]+$/, '').slice(0, 40) || 'Custom Meme';
+            const saved = await saveCustomMemeToDB(file, title);
+            if (saved) {
+              setCustomMemes((prev) => {
+                const next = [saved, ...prev];
+                eventEngineRef.current.setCustomMemes(next);
+                return next;
+              });
+            }
+            return saved;
+          } catch {
+            return null;
+          }
+        }}
+      />
+
+      {/* DRAWER: MULTIMODAL ACCURACY & DIAGNOSTICS WORKSPACE (V8/V9) */}
       <HandTrackingDiagnosticsDrawer
         isOpen={diagnosticsDrawerOpen}
         onClose={() => setDiagnosticsDrawerOpen(false)}

@@ -20,15 +20,124 @@ interface FingerEvalResult {
   extensionRatio: number;
 }
 
+export interface DynamicHandGestureResult {
+  gesture: 'SWIPE_LEFT' | 'SWIPE_RIGHT' | null;
+  confidence: number;
+  velocity: { vx: number; vy: number; speed: number };
+}
+
+/**
+ * Separate temporal classifier dedicated exclusively to dynamic hand motion
+ * (SWIPE_LEFT, SWIPE_RIGHT) with per-hand isolation, mirrored-camera sign
+ * correction, lateral-dominance gating, and cooldown protection.
+ */
+export class DynamicHandGestureClassifier {
+  private velocityHistories: Map<'Left' | 'Right', VelocityPoint[]> = new Map();
+  private lastSwipeTimes: Map<'Left' | 'Right', number> = new Map();
+  private swipeCooldownMs: number;
+  private windowMs: number;
+
+  constructor(swipeCooldownMs = 600, windowMs = 250) {
+    this.swipeCooldownMs = swipeCooldownMs;
+    this.windowMs = windowMs;
+  }
+
+  public reset(handedness?: 'Left' | 'Right'): void {
+    if (handedness) {
+      this.velocityHistories.delete(handedness);
+      this.lastSwipeTimes.delete(handedness);
+    } else {
+      this.velocityHistories.clear();
+      this.lastSwipeTimes.clear();
+    }
+  }
+
+  public evaluate(
+    wrist: Landmark3D,
+    handedness: 'Left' | 'Right',
+    timestamp: number,
+    isMirrored = false
+  ): DynamicHandGestureResult {
+    let vHistory = this.velocityHistories.get(handedness) || [];
+    // Detect timestamp rewind or large gap (tracking loss recovery)
+    if (vHistory.length > 0 && timestamp - vHistory[vHistory.length - 1]!.time > 350) {
+      vHistory = [];
+    }
+    vHistory.push({ x: wrist.x, y: wrist.y, time: timestamp });
+    const windowStart = timestamp - this.windowMs;
+    vHistory = vHistory.filter((p) => p.time >= windowStart);
+    this.velocityHistories.set(handedness, vHistory);
+
+    const lastSwipe = this.lastSwipeTimes.get(handedness) || 0;
+    if (vHistory.length >= 3 && timestamp - lastSwipe > this.swipeCooldownMs) {
+      const oldest = vHistory[0]!;
+      const newest = vHistory[vHistory.length - 1]!;
+      const dt = (newest.time - oldest.time) / 1000;
+
+      if (dt >= 0.08) {
+        const rawDx = newest.x - oldest.x;
+        const dx = isMirrored ? -rawDx : rawDx;
+        const dy = newest.y - oldest.y;
+        const vx = dx / dt;
+        const vy = dy / dt;
+        const speed = Math.sqrt(vx * vx + vy * vy);
+
+        // Require deliberate lateral displacement (>= 15% screen width) and velocity dominance
+        if (Math.abs(dx) >= 0.15 && speed >= 1.20 && Math.abs(vx) > Math.abs(vy) * 1.8) {
+          this.lastSwipeTimes.set(handedness, timestamp);
+          return {
+            gesture: vx > 0 ? 'SWIPE_RIGHT' : 'SWIPE_LEFT',
+            confidence: 0.95,
+            velocity: { vx, vy, speed },
+          };
+        }
+        return { gesture: null, confidence: 0, velocity: { vx, vy, speed } };
+      }
+    }
+
+    return { gesture: null, confidence: 0, velocity: { vx: 0, vy: 0, speed: 0 } };
+  }
+}
+
 export class GoofyHandClassifier {
   // Separate per-hand tracking state to prevent dual-hand contamination
   private lastPinchStates: Map<'Left' | 'Right', boolean> = new Map();
-  private velocityHistories: Map<'Left' | 'Right', VelocityPoint[]> = new Map();
-  private lastSwipeTimes: Map<'Left' | 'Right', number> = new Map();
   private smoothedLandmarks: Map<'Left' | 'Right', Landmark3D[]> = new Map();
+  private dynamicClassifier = new DynamicHandGestureClassifier(600, 250);
 
-  private swipeCooldownMs = 600;
   private smoothingAlpha = 0.68;
+
+  public reset(handedness?: 'Left' | 'Right'): void {
+    if (handedness) {
+      this.smoothedLandmarks.delete(handedness);
+      this.lastPinchStates.delete(handedness);
+      this.dynamicClassifier.reset(handedness);
+    } else {
+      this.smoothedLandmarks.clear();
+      this.lastPinchStates.clear();
+      this.dynamicClassifier.reset();
+    }
+  }
+
+  public validateLandmarks(rawLandmarks: Landmark3D[] | null | undefined): { valid: boolean; reason?: string } {
+    if (!rawLandmarks || rawLandmarks.length < 21) {
+      return { valid: false, reason: 'NO_LANDMARKS' };
+    }
+    for (let i = 0; i < 21; i++) {
+      const pt = rawLandmarks[i];
+      if (!pt || !Number.isFinite(pt.x) || !Number.isFinite(pt.y)) {
+        return { valid: false, reason: 'INVALID_OR_OCCLUDED_LANDMARKS' };
+      }
+      if (pt.x < -0.5 || pt.x > 1.5 || pt.y < -0.5 || pt.y > 1.5) {
+        return { valid: false, reason: 'LANDMARKS_OUT_OF_BOUNDS' };
+      }
+    }
+    const palmSpan = this.dist2D(rawLandmarks[0]!, rawLandmarks[9]!);
+    if (palmSpan < 0.015) {
+      return { valid: false, reason: 'COLLAPSED_OR_OCCLUDED_HAND' };
+    }
+    return { valid: true };
+  }
 
   private dist3D(a: Landmark3D, b: Landmark3D): number {
     const dx = a.x - b.x;
@@ -157,10 +266,9 @@ export class GoofyHandClassifier {
     worldLandmarks?: Landmark3D[],
     modelGestureHint?: { category: string; score: number }
   ): HandClassificationResult {
-    if (!rawLandmarks || rawLandmarks.length < 21) {
-      this.smoothedLandmarks.delete(handedness);
-      this.velocityHistories.delete(handedness);
-      this.lastPinchStates.delete(handedness);
+    const validation = this.validateLandmarks(rawLandmarks);
+    if (!validation.valid) {
+      this.reset(handedness);
       return {
         gesture: null,
         handedness,
@@ -168,7 +276,7 @@ export class GoofyHandClassifier {
         label: 'NO HAND DETECTED',
         comicCaption: 'SHOW YOUR HAND TO TRIGGER MEMES!',
         fingerCount: 0,
-        rejectionReason: 'NO_LANDMARKS',
+        rejectionReason: validation.reason || 'NO_LANDMARKS',
       };
     }
 
@@ -281,38 +389,15 @@ export class GoofyHandClassifier {
     const neuralHint = modelGestureHint && modelGestureHint.score >= 0.50 ? modelGestureHint : null;
 
     // ─────────────────────────────────────────────────────────────
-    // DYNAMIC GESTURES: SWIPE LEFT & SWIPE RIGHT (Strict Per-Hand History)
+    // DYNAMIC GESTURES: SWIPE LEFT & SWIPE RIGHT (Dedicated Temporal Classifier)
     // ─────────────────────────────────────────────────────────────
-    let vHistory = this.velocityHistories.get(handedness) || [];
-    vHistory.push({ x: wrist.x, y: wrist.y, time: timestamp });
-    const windowStart = timestamp - 250;
-    vHistory = vHistory.filter((p) => p.time >= windowStart);
-    this.velocityHistories.set(handedness, vHistory);
-
-    const lastSwipe = this.lastSwipeTimes.get(handedness) || 0;
-    if (vHistory.length >= 3 && timestamp - lastSwipe > this.swipeCooldownMs) {
-      const oldest = vHistory[0]!;
-      const newest = vHistory[vHistory.length - 1]!;
-      const dt = (newest.time - oldest.time) / 1000;
-
-      if (dt >= 0.08) {
-        const rawDx = newest.x - oldest.x;
-        const dx = isMirrored ? -rawDx : rawDx;
-        const dy = newest.y - oldest.y;
-        const vx = dx / dt;
-        const vy = dy / dt;
-        const speed = Math.sqrt(vx * vx + vy * vy);
-
-        // Require deliberate lateral displacement (>= 15% screen width) and velocity dominance
-        if (Math.abs(dx) >= 0.15 && speed >= 1.20 && Math.abs(vx) > Math.abs(vy) * 1.8) {
-          this.lastSwipeTimes.set(handedness, timestamp);
-          if (vx > 0) {
-            candidates.push({ gesture: 'SWIPE_RIGHT', score: 0.95, isDynamic: true });
-          } else {
-            candidates.push({ gesture: 'SWIPE_LEFT', score: 0.95, isDynamic: true });
-          }
-        }
-      }
+    const dynamicRes = this.dynamicClassifier.evaluate(wrist, handedness, timestamp, isMirrored);
+    if (dynamicRes.gesture) {
+      candidates.push({
+        gesture: dynamicRes.gesture,
+        score: dynamicRes.confidence,
+        isDynamic: true,
+      });
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -570,13 +655,6 @@ export class GoofyHandClassifier {
         pinky: pinkyState.isExtended,
       },
     };
-  }
-
-  reset(): void {
-    this.lastPinchStates.clear();
-    this.velocityHistories.clear();
-    this.lastSwipeTimes.clear();
-    this.smoothedLandmarks.clear();
   }
 }
 

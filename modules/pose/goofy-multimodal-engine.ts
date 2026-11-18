@@ -18,8 +18,20 @@ export interface RecentPerceptionSignal<T> {
   type: T;
   timestamp: number;
   confidence: number;
+  sessionId: string;
   handIdentity?: 'Left' | 'Right' | 'Both';
   rawOutput?: Record<string, number>;
+}
+
+export interface MultimodalDiagnosticsSnapshot {
+  operatingMode: GoofyOperatingMode;
+  fusionWindowMs: number;
+  cooldownMs: number;
+  sessionId: string;
+  lastFaceType: GoofyFaceExpressionType | null;
+  lastHandType: GoofyHandGestureType | GoofyDualHandComboId | null;
+  lastComboId: GoofyMultimodalComboId | null;
+  lastRejectionReason: string | null;
 }
 
 export type MultimodalEventListener = (event: MultimodalEvent) => void;
@@ -29,6 +41,7 @@ export class GoofyMultimodalEngine {
   private operatingMode: GoofyOperatingMode = 'MULTIMODAL';
   private fusionWindowMs = 800;
   private cooldownMs = 700;
+  private sessionId = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
 
   private lastFaceSignal: RecentPerceptionSignal<GoofyFaceExpressionType> | null = null;
   private lastHandSignal: RecentPerceptionSignal<GoofyHandGestureType | GoofyDualHandComboId> | null = null;
@@ -36,6 +49,7 @@ export class GoofyMultimodalEngine {
   private lastTriggeredTime = 0;
   private lastTriggeredKey = '';
   private lastTriggeredComboId: GoofyMultimodalComboId | null = null;
+  private lastRejectionReason: string | null = null;
   private eventHistory: MultimodalEvent[] = [];
   private listeners: Set<MultimodalEventListener> = new Set();
   private maxHistorySize = 60;
@@ -72,7 +86,12 @@ export class GoofyMultimodalEngine {
   }
 
   setOperatingMode(mode: GoofyOperatingMode): void {
-    this.operatingMode = mode;
+    if (this.operatingMode !== mode) {
+      this.operatingMode = mode;
+      // Flush stale cross-modality signals whenever operating mode switches
+      this.lastFaceSignal = null;
+      this.lastHandSignal = null;
+    }
   }
 
   getOperatingMode(): GoofyOperatingMode {
@@ -89,6 +108,58 @@ export class GoofyMultimodalEngine {
 
   getLastTriggeredCombo(): GoofyMultimodalComboId | null {
     return this.lastTriggeredComboId;
+  }
+
+  getSessionId(): string {
+    return this.sessionId;
+  }
+
+  /**
+   * Starts a clean tracking session, invalidating any buffered face/hand signals
+   * from a previous camera session so stale signals never fuse.
+   */
+  resetSession(): void {
+    this.sessionId = `sess_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    this.lastFaceSignal = null;
+    this.lastHandSignal = null;
+    this.lastTriggeredTime = 0;
+    this.lastTriggeredKey = '';
+    this.lastRejectionReason = null;
+  }
+
+  getDiagnostics(): MultimodalDiagnosticsSnapshot {
+    return {
+      operatingMode: this.operatingMode,
+      fusionWindowMs: this.fusionWindowMs,
+      cooldownMs: this.cooldownMs,
+      sessionId: this.sessionId,
+      lastFaceType: this.lastFaceSignal?.type ?? null,
+      lastHandType: this.lastHandSignal?.type ?? null,
+      lastComboId: this.lastTriggeredComboId,
+      lastRejectionReason: this.lastRejectionReason,
+    };
+  }
+
+  /**
+   * Prunes any buffered signal whose age exceeds the configured fusion window
+   */
+  private pruneStaleSignals(now: number): void {
+    if (
+      this.lastFaceSignal &&
+      (this.lastFaceSignal.sessionId !== this.sessionId ||
+        now - this.lastFaceSignal.timestamp > this.fusionWindowMs ||
+        now < this.lastFaceSignal.timestamp)
+    ) {
+      this.lastFaceSignal = null;
+    }
+    if (
+      this.lastHandSignal &&
+      (this.lastHandSignal.sessionId !== this.sessionId ||
+        now - this.lastHandSignal.timestamp > this.fusionWindowMs ||
+        now < this.lastHandSignal.timestamp)
+    ) {
+      this.lastHandSignal = null;
+    }
   }
 
   subscribe(listener: MultimodalEventListener): () => void {
@@ -131,6 +202,11 @@ export class GoofyMultimodalEngine {
     faceExp: GoofyFaceExpressionType,
     handGesture: GoofyHandGestureType | GoofyDualHandComboId
   ): GoofyMultimodalComboId | null {
+    // Support V9 FACE_SUSPICIOUS pairing with POINTING -> SUSPICIOUS_ACCUSATION
+    if (faceExp === 'FACE_SUSPICIOUS' && handGesture === 'POINTING') {
+      return 'SUSPICIOUS_ACCUSATION';
+    }
+
     const comboKeys = Object.keys(
       GOOFY_MULTIMODAL_COMBO_DEFINITIONS
     ) as GoofyMultimodalComboId[];
@@ -161,8 +237,11 @@ export class GoofyMultimodalEngine {
     confidence: number,
     timestamp: number
   ): MultimodalEvent | null {
+    this.pruneStaleSignals(timestamp);
+
     // 1. Check if face modality is active
     if (this.operatingMode === 'HAND_ONLY' || this.config.enableFaceExpressions === false) {
+      this.lastRejectionReason = 'MODALITY_DISABLED (HAND_ONLY_ACTIVE)';
       return {
         id: `rej_face_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         timestamp,
@@ -175,12 +254,13 @@ export class GoofyMultimodalEngine {
         memeId: '',
         confidence,
         validity: 'REJECTED',
-        rejectionReason: 'MODALITY_DISABLED (HAND_ONLY_ACTIVE)',
+        rejectionReason: this.lastRejectionReason,
       };
     }
 
     // Require high intentional confidence to avoid triggering on transient expressions
     if (confidence < 0.70) {
+      this.lastRejectionReason = 'CONFIDENCE_BELOW_THRESHOLD (>=0.70 REQUIRED)';
       return {
         id: `rej_face_conf_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         timestamp,
@@ -193,7 +273,7 @@ export class GoofyMultimodalEngine {
         memeId: '',
         confidence,
         validity: 'REJECTED',
-        rejectionReason: 'CONFIDENCE_BELOW_THRESHOLD (>=0.70 REQUIRED)',
+        rejectionReason: this.lastRejectionReason,
       };
     }
 
@@ -201,12 +281,16 @@ export class GoofyMultimodalEngine {
       type: expression,
       timestamp,
       confidence,
+      sessionId: this.sessionId,
     };
 
-    // 2. Multimodal Fusion Check: Did we receive a compatible hand gesture recently?
+    // 2. Multimodal Fusion Check: Did we receive a compatible hand gesture recently in this session?
     if (
       this.operatingMode === 'MULTIMODAL' &&
+      this.config.enableMultimodalFusion !== false &&
       this.lastHandSignal &&
+      this.lastHandSignal.sessionId === this.sessionId &&
+      timestamp >= this.lastHandSignal.timestamp &&
       timestamp - this.lastHandSignal.timestamp <= this.fusionWindowMs
     ) {
       const matchedCombo = this.matchMultimodalCombo(
@@ -215,6 +299,7 @@ export class GoofyMultimodalEngine {
       );
 
       if (matchedCombo) {
+        this.lastRejectionReason = null;
         return this.emitCombinedEvent(
           matchedCombo,
           expression,
@@ -227,6 +312,7 @@ export class GoofyMultimodalEngine {
     }
 
     // 3. Otherwise, emit single Face Event if cooldown permits
+    this.lastRejectionReason = null;
     return this.emitFaceOnlyEvent(expression, confidence, timestamp);
   }
 
@@ -239,8 +325,11 @@ export class GoofyMultimodalEngine {
     timestamp: number,
     handIdentity: 'Left' | 'Right' | 'Both' = 'Both'
   ): MultimodalEvent | null {
+    this.pruneStaleSignals(timestamp);
+
     // 1. Check if hand modality is active
     if (this.operatingMode === 'FACE_ONLY' || this.config.enableHandGestures === false) {
+      this.lastRejectionReason = 'MODALITY_DISABLED (FACE_ONLY_ACTIVE)';
       return {
         id: `rej_hand_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         timestamp,
@@ -255,13 +344,14 @@ export class GoofyMultimodalEngine {
         memeId: '',
         confidence,
         validity: 'REJECTED',
-        rejectionReason: 'MODALITY_DISABLED (FACE_ONLY_ACTIVE)',
+        rejectionReason: this.lastRejectionReason,
         handIdentity,
       };
     }
 
     // Require high intentional confidence to avoid triggering on unintentional hand repositions
     if (confidence < 0.70) {
+      this.lastRejectionReason = 'CONFIDENCE_BELOW_THRESHOLD (>=0.70 REQUIRED)';
       return {
         id: `rej_hand_conf_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         timestamp,
@@ -276,7 +366,7 @@ export class GoofyMultimodalEngine {
         memeId: '',
         confidence,
         validity: 'REJECTED',
-        rejectionReason: 'CONFIDENCE_BELOW_THRESHOLD (>=0.70 REQUIRED)',
+        rejectionReason: this.lastRejectionReason,
         handIdentity,
       };
     }
@@ -285,13 +375,17 @@ export class GoofyMultimodalEngine {
       type: gesture,
       timestamp,
       confidence,
+      sessionId: this.sessionId,
       handIdentity,
     };
 
-    // 2. Multimodal Fusion Check: Did we receive a compatible face expression recently?
+    // 2. Multimodal Fusion Check: Did we receive a compatible face expression recently in this session?
     if (
       this.operatingMode === 'MULTIMODAL' &&
+      this.config.enableMultimodalFusion !== false &&
       this.lastFaceSignal &&
+      this.lastFaceSignal.sessionId === this.sessionId &&
+      timestamp >= this.lastFaceSignal.timestamp &&
       timestamp - this.lastFaceSignal.timestamp <= this.fusionWindowMs
     ) {
       const matchedCombo = this.matchMultimodalCombo(

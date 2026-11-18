@@ -4,6 +4,9 @@ import {
   ActiveSequenceState,
   ActiveSequenceStepStatus,
   GOOFY_HAND_METADATA,
+  GOOFY_FACE_METADATA,
+  GOOFY_DUAL_COMBO_DEFINITIONS,
+  GOOFY_MULTIMODAL_COMBO_DEFINITIONS,
 } from './goofy-types';
 
 export interface SequenceStepProgress {
@@ -74,19 +77,53 @@ export class GoofySequenceEngine {
     this.trackingLostTime = null;
   }
 
-  /**
-   * Helper to resolve readable label and icon for a step gesture (built-in or custom)
-   */
-  private getStepVisuals(gestureId: string): { label: string; icon: string } {
-    const meta = (GOOFY_HAND_METADATA as Record<string, any>)[gestureId];
-    if (meta) {
-      return { label: meta.label || gestureId, icon: meta.icon || '✋' };
-    }
-    return { label: gestureId.replace(/_/g, ' '), icon: '⚡' };
+  public getSequences(): GestureSequenceDefinition[] {
+    return [...this.sequences];
+  }
+
+  public cancelSequence(): void {
+    this.resetProgress();
   }
 
   /**
-   * Ingests a confirmed stable gesture event (built-in or custom) and evaluates sequence progression.
+   * Helper to resolve readable label and icon for any step (Face, Hand, Dual Combo, Multimodal, or Custom)
+   */
+  private getStepVisuals(eventId: string): { label: string; icon: string } {
+    const faceMeta = (GOOFY_FACE_METADATA as Record<string, any>)[eventId];
+    if (faceMeta) {
+      return { label: faceMeta.label || eventId, icon: faceMeta.icon || '🙂' };
+    }
+    const handMeta = (GOOFY_HAND_METADATA as Record<string, any>)[eventId];
+    if (handMeta) {
+      return { label: handMeta.label || eventId, icon: handMeta.icon || '✋' };
+    }
+    const dualMeta = (GOOFY_DUAL_COMBO_DEFINITIONS as Record<string, any>)[eventId];
+    if (dualMeta) {
+      return { label: dualMeta.label || eventId, icon: dualMeta.icon || '🙌' };
+    }
+    const mmMeta = (GOOFY_MULTIMODAL_COMBO_DEFINITIONS as Record<string, any>)[eventId];
+    if (mmMeta) {
+      return { label: mmMeta.label || eventId, icon: mmMeta.icon || '⚡' };
+    }
+    return { label: eventId.replace(/_/g, ' '), icon: '⚡' };
+  }
+
+  /**
+   * V9 Multimodal Sequence Entry Point: accepts validated Face expressions, Hand gestures,
+   * Dual Combos, or Custom Gestures in any order.
+   */
+  public processEvent(
+    eventId: string,
+    timestamp = performance.now(),
+    handOrModality: 'Left' | 'Right' | 'Face' | 'Both' = 'Right'
+  ): SequenceEngineResult {
+    const hand: 'Left' | 'Right' =
+      handOrModality === 'Left' ? 'Left' : 'Right';
+    return this.processGesture(eventId, timestamp, hand);
+  }
+
+  /**
+   * Ingests a confirmed stable gesture or face event (built-in or custom) and evaluates sequence progression.
    * Flexibly accepts (gesture, timestamp?, hand?) or (gesture, hand?, timestamp?)
    */
   public processGesture(
@@ -116,7 +153,7 @@ export class GoofySequenceEngine {
       return { triggered: false, sequence: null, timestamp, progressPercent: 0, activeState: null };
     }
 
-    // Debounce / anti-repetition: continuous frames of identical gesture on same hand are ignored
+    // Debounce / anti-repetition: continuous frames of identical gesture/expression are ignored
     if (
       gesture === this.lastObservedGesture &&
       hand === this.lastObservedHand &&
@@ -147,9 +184,14 @@ export class GoofySequenceEngine {
       }
 
       const elapsedSinceLast = timestamp - prog.lastStepTime;
+      const elapsedTotal = timestamp - prog.startTime;
+      const maxTotalMs = seq.maxTotalDurationMs || seq.maxWindowMs * seq.steps.length;
 
-      // Check timeout expiry
-      if (prog.currentStep > 0 && elapsedSinceLast > seq.maxWindowMs) {
+      // Check both inter-step timeout AND maximum total sequence duration expiry
+      if (
+        prog.currentStep > 0 &&
+        (elapsedSinceLast > seq.maxWindowMs || elapsedTotal > maxTotalMs)
+      ) {
         prog.currentStep = 0;
         prog.startTime = timestamp;
         prog.lastStepTime = 0;
@@ -159,7 +201,10 @@ export class GoofySequenceEngine {
       const expectedGesture = seq.steps[prog.currentStep];
       const expectedHand = seq.stepHands?.[prog.currentStep] ?? 'Any';
 
-      const handMatches = expectedHand === 'Any' || expectedHand === hand;
+      const handMatches =
+        expectedHand === 'Any' ||
+        expectedGesture?.startsWith('FACE_') ||
+        expectedHand === hand;
 
       if (gesture === expectedGesture && handMatches) {
         // Step completed!
@@ -185,7 +230,10 @@ export class GoofySequenceEngine {
         // Check if current gesture matches START of sequence instead
         const firstExpected = seq.steps[0];
         const firstHand = seq.stepHands?.[0] ?? 'Any';
-        const firstHandMatches = firstHand === 'Any' || firstHand === hand;
+        const firstHandMatches =
+          firstHand === 'Any' ||
+          firstExpected?.startsWith('FACE_') ||
+          firstHand === hand;
 
         if (gesture === firstExpected && firstHandMatches) {
           prog.currentStep = 1;

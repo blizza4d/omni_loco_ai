@@ -46,13 +46,85 @@ export const FACE_SENSITIVITY_PROFILES: Record<
 
 export class GoofyFaceClassifier {
   private sensitivity: 'HIGH' | 'MEDIUM' | 'RELAXED' = 'HIGH';
+  private smoothedBlendshapes: Record<string, number> = {};
+  private hasSmoothedHistory = false;
+  private smoothingAlpha = 0.65;
 
-  constructor(sensitivity: 'HIGH' | 'MEDIUM' | 'RELAXED' = 'HIGH') {
+  constructor(sensitivity: 'HIGH' | 'MEDIUM' | 'RELAXED' = 'HIGH', smoothingAlpha = 0.65) {
     this.sensitivity = sensitivity;
+    this.smoothingAlpha = Math.max(0.1, Math.min(1.0, smoothingAlpha));
   }
 
   setSensitivity(sensitivity: 'HIGH' | 'MEDIUM' | 'RELAXED'): void {
     this.sensitivity = sensitivity;
+  }
+
+  setSmoothingAlpha(alpha: number): void {
+    this.smoothingAlpha = Math.max(0.1, Math.min(1.0, alpha));
+  }
+
+  /**
+   * Resets internal blendshape EMA smoother (call on face tracking loss or mode switch)
+   */
+  reset(): void {
+    this.smoothedBlendshapes = {};
+    this.hasSmoothedHistory = false;
+  }
+
+  /**
+   * Validates facial landmarks for numerical integrity and non-collapsed geometry
+   */
+  public validateLandmarks(landmarks: FaceLandmarkPoint[]): { valid: boolean; reason?: string } {
+    if (!landmarks || landmarks.length < 468) {
+      return { valid: false, reason: 'MISSING_OR_INSUFFICIENT_LANDMARKS' };
+    }
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    // Sample canonical keypoints & contour vertices for fast O(1) validity verification
+    const sampleIndices = [0, 1, 10, 13, 14, 33, 61, 133, 152, 234, 263, 291, 362, 454];
+    for (const idx of sampleIndices) {
+      const pt = landmarks[idx];
+      if (!pt || !Number.isFinite(pt.x) || !Number.isFinite(pt.y)) {
+        return { valid: false, reason: 'CORRUPT_NON_FINITE_LANDMARKS' };
+      }
+      if (pt.x < -0.5 || pt.x > 1.5 || pt.y < -0.5 || pt.y > 1.5) {
+        return { valid: false, reason: 'LANDMARKS_OUT_OF_BOUNDS' };
+      }
+      if (pt.x < minX) minX = pt.x;
+      if (pt.x > maxX) maxX = pt.x;
+      if (pt.y < minY) minY = pt.y;
+      if (pt.y > maxY) maxY = pt.y;
+    }
+    if (maxX - minX < 0.01 || maxY - minY < 0.01) {
+      return { valid: false, reason: 'COLLAPSED_FACE_GEOMETRY' };
+    }
+    return { valid: true };
+  }
+
+  /**
+   * Applies Exponential Moving Average smoothing to ARKit blendshapes to eliminate frame jitter
+   */
+  private smoothBlendshapes(rawMap: Record<string, number>): Record<string, number> {
+    if (!this.hasSmoothedHistory) {
+      this.smoothedBlendshapes = { ...rawMap };
+      this.hasSmoothedHistory = true;
+      return { ...this.smoothedBlendshapes };
+    }
+    const a = this.smoothingAlpha;
+    const allKeys = Array.from(
+      new Set([...Object.keys(this.smoothedBlendshapes), ...Object.keys(rawMap)])
+    );
+    const next: Record<string, number> = {};
+    for (let i = 0; i < allKeys.length; i++) {
+      const key = allKeys[i]!;
+      const curr = rawMap[key] ?? 0;
+      const prev = this.smoothedBlendshapes[key] ?? 0;
+      const val = a * curr + (1 - a) * prev;
+      if (val > 0.001) {
+        next[key] = val;
+      }
+    }
+    this.smoothedBlendshapes = next;
+    return { ...next };
   }
 
   /**
@@ -108,44 +180,54 @@ export class GoofyFaceClassifier {
     landmarks: FaceLandmarkPoint[] | null | undefined,
     blendshapes: FaceBlendshapeInput[] | null | undefined
   ): FaceClassificationResult {
-    if (!landmarks || landmarks.length < 468) {
+    const validation = this.validateLandmarks(landmarks as FaceLandmarkPoint[]);
+    if (!validation.valid) {
+      this.reset();
       return {
         expression: null,
         confidence: 0,
         label: 'NO FACE',
         comicCaption: 'NO FACE DETECTED',
         rawScores: {},
-        rejectionReason: 'MISSING_OR_INSUFFICIENT_LANDMARKS',
+        rejectionReason: validation.reason || 'MISSING_OR_INSUFFICIENT_LANDMARKS',
       };
     }
 
-    // Convert blendshapes array to fast score lookup map
-    const bMap: Record<string, number> = {};
-    if (blendshapes && Array.isArray(blendshapes)) {
+    const validLandmarks = landmarks as FaceLandmarkPoint[];
+
+    // Convert blendshapes array to fast score lookup map & apply EMA temporal smoothing
+    const rawMap: Record<string, number> = {};
+    const hasBlendshapes = !!(blendshapes && Array.isArray(blendshapes) && blendshapes.length > 0);
+    if (hasBlendshapes) {
       for (let i = 0; i < blendshapes.length; i++) {
         const item = blendshapes[i];
-        if (item && item.categoryName) {
-          bMap[item.categoryName] = item.score;
+        if (item && item.categoryName && Number.isFinite(item.score)) {
+          rawMap[item.categoryName] = Math.max(0, Math.min(1, item.score));
         }
       }
     }
+    const bMap = hasBlendshapes ? this.smoothBlendshapes(rawMap) : {};
 
-    // Key blendshape measurements
+    // Key smoothed blendshape measurements
     const smileLeft = bMap['mouthSmileLeft'] || 0;
     const smileRight = bMap['mouthSmileRight'] || 0;
     const smileAvg = (smileLeft + smileRight) / 2;
 
     const jawOpen = bMap['jawOpen'] || 0;
-    const mouthOpen = bMap['mouthFunnel'] || 0;
 
     const browInnerUp = bMap['browInnerUp'] || 0;
     const browOuterUpLeft = bMap['browOuterUpLeft'] || 0;
     const browOuterUpRight = bMap['browOuterUpRight'] || 0;
     const browUpAvg = Math.max(browInnerUp, (browOuterUpLeft + browOuterUpRight) / 2);
+    const browAsymmetry = Math.abs(browOuterUpLeft - browOuterUpRight);
 
     const eyeWideLeft = bMap['eyeWideLeft'] || 0;
     const eyeWideRight = bMap['eyeWideRight'] || 0;
     const eyeWideAvg = (eyeWideLeft + eyeWideRight) / 2;
+
+    const eyeSquintLeft = bMap['eyeSquintLeft'] || 0;
+    const eyeSquintRight = bMap['eyeSquintRight'] || 0;
+    const eyeSquintAvg = (eyeSquintLeft + eyeSquintRight) / 2;
 
     const eyeBlinkLeft = bMap['eyeBlinkLeft'] || 0;
     const eyeBlinkRight = bMap['eyeBlinkRight'] || 0;
@@ -166,10 +248,10 @@ export class GoofyFaceClassifier {
     const cheekRaiseAvg = (cheekSquintLeft + cheekSquintRight) / 2;
 
     // Geometric checks from landmark coordinates
-    const earLeft = this.calculateEAR(landmarks, [33, 160, 158, 133, 153, 144]);
-    const earRight = this.calculateEAR(landmarks, [362, 385, 387, 263, 373, 380]);
+    const earLeft = this.calculateEAR(validLandmarks, [33, 160, 158, 133, 153, 144]);
+    const earRight = this.calculateEAR(validLandmarks, [362, 385, 387, 263, 373, 380]);
     const earAvg = (earLeft + earRight) / 2;
-    const mar = this.calculateMAR(landmarks);
+    const mar = this.calculateMAR(validLandmarks);
 
     const profile = FACE_SENSITIVITY_PROFILES[this.sensitivity];
     const actMult = profile.activationMultiplier;
@@ -186,10 +268,9 @@ export class GoofyFaceClassifier {
     const T_PUCKER = 0.42 * actMult;
     const T_CHEEK_RAISE = 0.40 * actMult;
 
-    const hasBlendshapes = blendshapes && Array.isArray(blendshapes) && blendshapes.length > 0;
     const scores: { expression: GoofyFaceExpressionType; score: number }[] = [];
 
-    // 1. Surprise pattern: compound expression (jaw open + raised brows or wide eyes)
+    // 1. Surprise pattern: compound observable expression (jaw open + raised brows or wide eyes)
     const surpriseScore = Math.min(
       1,
       (jawOpen + Math.max(browUpAvg, eyeWideAvg)) * 0.75
@@ -202,14 +283,32 @@ export class GoofyFaceClassifier {
       scores.push({ expression: 'FACE_SURPRISE', score: Math.min(1, mar) });
     }
 
-    // 2. Big Smile vs Normal Smile
+    // 1b. Suspicious reaction pattern: observable asymmetric raised brow OR raised brow + narrowed/squinting eyes
+    // Only triggers when genuine model blendshapes support the geometry (never inferred from single weak cues)
+    const suspiciousScore = Math.min(
+      1,
+      Math.max(
+        browAsymmetry >= 0.28 && Math.max(browOuterUpLeft, browOuterUpRight) >= 0.40
+          ? 0.55 + browAsymmetry * 0.65
+          : 0,
+        browUpAvg >= 0.34 && eyeSquintAvg >= 0.36 && jawOpen < 0.22
+          ? (browUpAvg + eyeSquintAvg) * 0.85
+          : 0
+      )
+    );
+    if (hasBlendshapes && suspiciousScore >= 0.58 * actMult) {
+      scores.push({ expression: 'FACE_SUSPICIOUS', score: suspiciousScore });
+    }
+
+    // 2. Big Smile vs Normal Smile (incorporating Duchenne cheek movement validation)
     if (smileAvg >= T_BIG_SMILE || (smileAvg >= 0.50 && jawOpen > 0.25)) {
       scores.push({
         expression: 'FACE_BIG_SMILE',
         score: Math.min(1, smileAvg * 0.8 + jawOpen * 0.2),
       });
     } else if (smileAvg >= T_SMILE) {
-      scores.push({ expression: 'FACE_SMILE', score: smileAvg });
+      const duchenneBoost = cheekRaiseAvg >= 0.25 ? cheekRaiseAvg * 0.12 : 0;
+      scores.push({ expression: 'FACE_SMILE', score: Math.min(1, smileAvg + duchenneBoost) });
     }
 
     // 3. Jaw Open
@@ -266,12 +365,15 @@ export class GoofyFaceClassifier {
       smileAvg,
       jawOpen,
       browUpAvg,
+      browAsymmetry,
       eyeWideAvg,
+      eyeSquintAvg,
       blinkAvg,
       frownScore,
       mouthPucker,
       cheekRaiseAvg,
       surpriseScore,
+      suspiciousScore,
       earAvg,
       mar,
     };

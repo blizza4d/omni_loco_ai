@@ -35,6 +35,17 @@ export interface UnifiedHandResult {
   modelType: HandModelType;
 }
 
+export type PipelineBackend = 'GPU' | 'CPU' | 'SYNTHETIC' | 'UNLOADED';
+
+export interface ModelStatusSnapshot {
+  handLoaded: boolean;
+  faceLoaded: boolean;
+  handModel: HandModelType;
+  handBackend: PipelineBackend;
+  faceBackend: PipelineBackend;
+  activeBackend: string;
+}
+
 export class MediaPipeTaskRunner {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private static visionWasmLoaded: any = null;
@@ -44,11 +55,23 @@ export class MediaPipeTaskRunner {
   private poseLandmarker: PoseLandmarker | null = null;
   private imageClassifier: ImageClassifier | null = null;
 
+  // Independent per-pipeline initialization & execution locks (V9)
+  private isInitializingHand = false;
+  private isInitializingFace = false;
   private isInitializing = false;
+  private isProcessingHand = false;
+  private isProcessingFace = false;
   private isProcessing = false;
   private isDisposed = false;
+
+  // Independent strictly-monotonic timestamps per pipeline (V9)
+  private lastHandTimestampMs = 0;
+  private lastFaceTimestampMs = 0;
   private lastTimestampMs = 0;
+
   private activeBackend: 'GPU' | 'CPU' | 'SYNTHETIC' = 'SYNTHETIC';
+  private handBackend: PipelineBackend = 'UNLOADED';
+  private faceBackend: PipelineBackend = 'UNLOADED';
   private activeHandModel: HandModelType = 'NONE';
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -79,7 +102,7 @@ export class MediaPipeTaskRunner {
     config?: HandPipelineConfig
   ): Promise<boolean> {
     if (this.gestureRecognizer) return true;
-    if (this.isInitializing) return false;
+    if (this.isInitializingHand) return false;
 
     const numHands = config?.numHands ?? 2;
     const minDetect = config?.minHandDetectionConfidence ?? 0.40;
@@ -87,7 +110,7 @@ export class MediaPipeTaskRunner {
     const minTrack = config?.minTrackingConfidence ?? 0.40;
 
     this.isDisposed = false;
-    this.isInitializing = true;
+    this.isInitializingHand = true;
     try {
       const vision = await this.getVisionResolver();
       const { GestureRecognizer } = await import('@mediapipe/tasks-vision');
@@ -107,11 +130,12 @@ export class MediaPipeTaskRunner {
         });
         if (this.isDisposed) {
           try { created.close(); } catch {}
-          this.isInitializing = false;
+          this.isInitializingHand = false;
           return false;
         }
         this.gestureRecognizer = created;
         this.activeBackend = 'GPU';
+        this.handBackend = 'GPU';
         this.activeHandModel = 'GESTURE_RECOGNIZER';
       } catch {
         // Fallback to CPU delegate
@@ -128,18 +152,19 @@ export class MediaPipeTaskRunner {
         });
         if (this.isDisposed) {
           try { created.close(); } catch {}
-          this.isInitializing = false;
+          this.isInitializingHand = false;
           return false;
         }
         this.gestureRecognizer = created;
         this.activeBackend = 'CPU';
+        this.handBackend = 'CPU';
         this.activeHandModel = 'GESTURE_RECOGNIZER';
       }
 
-      this.isInitializing = false;
+      this.isInitializingHand = false;
       return true;
     } catch {
-      this.isInitializing = false;
+      this.isInitializingHand = false;
       return false;
     }
   }
@@ -150,7 +175,7 @@ export class MediaPipeTaskRunner {
     config?: HandPipelineConfig
   ): Promise<boolean> {
     if (this.handLandmarker) return true;
-    if (this.isInitializing) return false;
+    if (this.isInitializingHand) return false;
 
     const numHands = config?.numHands ?? 2;
     const minDetect = config?.minHandDetectionConfidence ?? 0.40;
@@ -158,7 +183,7 @@ export class MediaPipeTaskRunner {
     const minTrack = config?.minTrackingConfidence ?? 0.40;
 
     this.isDisposed = false;
-    this.isInitializing = true;
+    this.isInitializingHand = true;
     try {
       const vision = await this.getVisionResolver();
       const { HandLandmarker } = await import('@mediapipe/tasks-vision');
@@ -178,11 +203,12 @@ export class MediaPipeTaskRunner {
         });
         if (this.isDisposed) {
           try { created.close(); } catch {}
-          this.isInitializing = false;
+          this.isInitializingHand = false;
           return false;
         }
         this.handLandmarker = created;
         this.activeBackend = 'GPU';
+        this.handBackend = 'GPU';
         this.activeHandModel = 'HAND_LANDMARKER';
       } catch {
         // Fallback to CPU delegate
@@ -199,19 +225,21 @@ export class MediaPipeTaskRunner {
         });
         if (this.isDisposed) {
           try { created.close(); } catch {}
-          this.isInitializing = false;
+          this.isInitializingHand = false;
           return false;
         }
         this.handLandmarker = created;
         this.activeBackend = 'CPU';
+        this.handBackend = 'CPU';
         this.activeHandModel = 'HAND_LANDMARKER';
       }
 
-      this.isInitializing = false;
+      this.isInitializingHand = false;
       return true;
     } catch {
-      this.isInitializing = false;
+      this.isInitializingHand = false;
       this.activeBackend = 'SYNTHETIC';
+      this.handBackend = 'SYNTHETIC';
       return false;
     }
   }
@@ -241,20 +269,20 @@ export class MediaPipeTaskRunner {
 
   // Detect hands in video frame (Supports GestureRecognizer and HandLandmarker)
   detectHands(video: HTMLVideoElement, timestamp: number): UnifiedHandResult | null {
-    if ((!this.gestureRecognizer && !this.handLandmarker) || this.isProcessing || video.readyState < 2) {
+    if ((!this.gestureRecognizer && !this.handLandmarker) || this.isProcessingHand || video.readyState < 2) {
       return null;
     }
 
-    // Enforce strictly monotonic timestamps for MediaPipe VIDEO mode
-    const safeTimestamp = Math.max(timestamp, this.lastTimestampMs + 1);
-    this.lastTimestampMs = safeTimestamp;
+    // Enforce strictly monotonic timestamps for MediaPipe Hand VIDEO mode
+    const safeTimestamp = Math.max(timestamp, this.lastHandTimestampMs + 1);
+    this.lastHandTimestampMs = safeTimestamp;
 
     try {
-      this.isProcessing = true;
+      this.isProcessingHand = true;
 
       if (this.gestureRecognizer) {
         const result = this.gestureRecognizer.recognizeForVideo(video, safeTimestamp);
-        this.isProcessing = false;
+        this.isProcessingHand = false;
         if (!result || !result.landmarks || result.landmarks.length === 0) {
           return null;
         }
@@ -271,7 +299,7 @@ export class MediaPipeTaskRunner {
 
       if (this.handLandmarker) {
         const result = this.handLandmarker.detectForVideo(video, safeTimestamp);
-        this.isProcessing = false;
+        this.isProcessingHand = false;
         if (!result || !result.landmarks || result.landmarks.length === 0) {
           return null;
         }
@@ -285,10 +313,10 @@ export class MediaPipeTaskRunner {
         };
       }
 
-      this.isProcessing = false;
+      this.isProcessingHand = false;
       return null;
     } catch {
-      this.isProcessing = false;
+      this.isProcessingHand = false;
       return null;
     }
   }
@@ -300,10 +328,10 @@ export class MediaPipeTaskRunner {
   // 2. Initialize Face Landmarker (with blendshapes and matrix)
   async initFaceLandmarker(modelPath = '/models/face_landmarker.task'): Promise<boolean> {
     if (this.faceLandmarker) return true;
-    if (this.isInitializing) return false;
+    if (this.isInitializingFace) return false;
 
     this.isDisposed = false;
-    this.isInitializing = true;
+    this.isInitializingFace = true;
     try {
       const vision = await this.getVisionResolver();
       const { FaceLandmarker } = await import('@mediapipe/tasks-vision');
@@ -324,11 +352,12 @@ export class MediaPipeTaskRunner {
         });
         if (this.isDisposed) {
           try { created.close(); } catch {}
-          this.isInitializing = false;
+          this.isInitializingFace = false;
           return false;
         }
         this.faceLandmarker = created;
         this.activeBackend = 'GPU';
+        this.faceBackend = 'GPU';
       } catch {
         const created = await FaceLandmarker.createFromOptions(vision, {
           baseOptions: {
@@ -342,37 +371,38 @@ export class MediaPipeTaskRunner {
         });
         if (this.isDisposed) {
           try { created.close(); } catch {}
-          this.isInitializing = false;
+          this.isInitializingFace = false;
           return false;
         }
         this.faceLandmarker = created;
         this.activeBackend = 'CPU';
+        this.faceBackend = 'CPU';
       }
 
-      this.isInitializing = false;
+      this.isInitializingFace = false;
       return true;
     } catch {
-      this.isInitializing = false;
-      this.activeBackend = 'SYNTHETIC';
+      this.isInitializingFace = false;
+      this.faceBackend = 'SYNTHETIC';
       return false;
     }
   }
 
   detectFace(video: HTMLVideoElement, timestamp: number): FaceLandmarkerResult | null {
-    if (!this.faceLandmarker || this.isProcessing || video.readyState < 2) {
+    if (!this.faceLandmarker || this.isProcessingFace || video.readyState < 2) {
       return null;
     }
 
-    const safeTimestamp = Math.max(timestamp, this.lastTimestampMs + 1);
-    this.lastTimestampMs = safeTimestamp;
+    const safeTimestamp = Math.max(timestamp, this.lastFaceTimestampMs + 1);
+    this.lastFaceTimestampMs = safeTimestamp;
 
     try {
-      this.isProcessing = true;
+      this.isProcessingFace = true;
       const result = this.faceLandmarker.detectForVideo(video, safeTimestamp);
-      this.isProcessing = false;
+      this.isProcessingFace = false;
       return result;
     } catch {
-      this.isProcessing = false;
+      this.isProcessingFace = false;
       return null;
     }
   }
@@ -383,6 +413,42 @@ export class MediaPipeTaskRunner {
 
   isHandLoaded(): boolean {
     return !!(this.gestureRecognizer || this.handLandmarker);
+  }
+
+  getModelStatus(): ModelStatusSnapshot {
+    return {
+      handLoaded: this.isHandLoaded(),
+      faceLoaded: this.isFaceLoaded(),
+      handModel: this.activeHandModel,
+      handBackend: this.handBackend,
+      faceBackend: this.faceBackend,
+      activeBackend: this.activeBackend,
+    };
+  }
+
+  disposeFace(): void {
+    if (this.faceLandmarker) {
+      try { this.faceLandmarker.close(); } catch {}
+      this.faceLandmarker = null;
+    }
+    this.faceBackend = 'UNLOADED';
+    this.isProcessingFace = false;
+    this.lastFaceTimestampMs = 0;
+  }
+
+  disposeHands(): void {
+    if (this.gestureRecognizer) {
+      try { this.gestureRecognizer.close(); } catch {}
+      this.gestureRecognizer = null;
+    }
+    if (this.handLandmarker) {
+      try { this.handLandmarker.close(); } catch {}
+      this.handLandmarker = null;
+    }
+    this.activeHandModel = 'NONE';
+    this.handBackend = 'UNLOADED';
+    this.isProcessingHand = false;
+    this.lastHandTimestampMs = 0;
   }
 
   // 3. Initialize Pose Landmarker
@@ -538,25 +604,8 @@ export class MediaPipeTaskRunner {
 
   dispose(): void {
     this.isDisposed = true;
-    if (this.gestureRecognizer) {
-      try {
-        this.gestureRecognizer.close();
-      } catch {}
-      this.gestureRecognizer = null;
-    }
-    if (this.handLandmarker) {
-      try {
-        this.handLandmarker.close();
-      } catch {}
-      this.handLandmarker = null;
-    }
-    this.activeHandModel = 'NONE';
-    if (this.faceLandmarker) {
-      try {
-        this.faceLandmarker.close();
-      } catch {}
-      this.faceLandmarker = null;
-    }
+    this.disposeHands();
+    this.disposeFace();
     if (this.poseLandmarker) {
       try {
         this.poseLandmarker.close();
@@ -570,6 +619,9 @@ export class MediaPipeTaskRunner {
       this.imageClassifier = null;
     }
     this.isProcessing = false;
+    this.isInitializing = false;
+    this.isInitializingHand = false;
+    this.isInitializingFace = false;
     this.lastTimestampMs = 0;
   }
 }

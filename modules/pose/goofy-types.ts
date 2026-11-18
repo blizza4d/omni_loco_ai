@@ -46,7 +46,8 @@ export type GoofyFaceExpressionType =
   | 'FACE_FROWN_PATTERN'
   | 'FACE_LIP_PUCKER'
   | 'FACE_CHEEK_RAISE'
-  | 'FACE_SURPRISE';
+  | 'FACE_SURPRISE'
+  | 'FACE_SUSPICIOUS';
 
 export type GoofyMultimodalComboId =
   | 'POSITIVE_APPROVAL'
@@ -325,6 +326,7 @@ export type PopupAnimationStyle =
   | 'EXPLOSIVE'
   | 'RETRO_ARCADE'
   | 'CINEMATIC'
+  | 'GLITCH'
   | 'CHAOS'
   | 'CLEAN'
   | 'NO_ANIMATION';
@@ -378,11 +380,22 @@ export interface PoseSoundMapping {
   customImageName?: string;
 }
 
+export type GoofyActionSource =
+  | 'BODY'
+  | 'HAND'
+  | 'DUAL_HAND'
+  | 'SEQUENCE'
+  | 'CUSTOM_GESTURE'
+  | 'REACTION_COMBO'
+  | 'FACE'
+  | 'MULTIMODAL'
+  | 'CUSTOM_RULE';
+
 export interface ActiveMemePopup {
   id: string;
   actionId: string;
   actionLabel: string;
-  actionSource: 'BODY' | 'HAND' | 'DUAL_HAND' | 'SEQUENCE' | 'CUSTOM_GESTURE' | 'REACTION_COMBO' | 'FACE' | 'MULTIMODAL';
+  actionSource: GoofyActionSource;
   hand?: 'Left' | 'Right' | 'Both';
   memeId: string;
   memeTitle: string;
@@ -407,7 +420,7 @@ export interface ActiveMemePopup {
 export interface UnifiedMemeEvent {
   id: string;
   timestamp: number;
-  source: 'BODY' | 'HAND' | 'DUAL_HAND' | 'SEQUENCE' | 'CUSTOM_GESTURE' | 'REACTION_COMBO' | 'FACE' | 'MULTIMODAL';
+  source: GoofyActionSource;
   actionId: string;
   actionLabel: string;
   hand?: 'Left' | 'Right' | 'Both';
@@ -422,18 +435,66 @@ export interface UnifiedMemeEvent {
   rarity?: MemeRarity;
 }
 
+// ----------------------------------------------------------------------------
+// V9 CHAOS ENGINE & CUSTOM REACTION RULES TYPES
+// ----------------------------------------------------------------------------
+
+export interface ChaosModeConfig {
+  enabled: boolean;
+  chaosIntensity: number; // 0 to 100 (controls weighted entropy among eligible reactions)
+  reactionVariety: number; // 0 to 100 (expands selection breadth across compatible candidates)
+  repeatAvoidance: boolean; // Penalizes / avoids recently displayed memes
+  rareReactionFrequency: number; // 0.0 to 0.40 (probability of eligible RARE/LEGENDARY drop)
+  comboWindowMs: number; // 800 to 4000ms for back-to-back combo chains
+  maxPopupsPerMinute: number; // Rate cap (e.g. 6 to 60 popups/min)
+}
+
+export const DEFAULT_CHAOS_MODE_CONFIG: ChaosModeConfig = {
+  enabled: false,
+  chaosIntensity: 65,
+  reactionVariety: 75,
+  repeatAvoidance: true,
+  rareReactionFrequency: 0.15,
+  comboWindowMs: 2200,
+  maxPopupsPerMinute: 24,
+};
+
+export type CustomRuleTriggerType = 'FACE' | 'HAND' | 'COMBINED';
+
+export interface CustomReactionRule {
+  id: string;
+  name: string;
+  description?: string;
+  enabled: boolean;
+  triggerType: CustomRuleTriggerType;
+  faceCondition?: GoofyFaceExpressionType;
+  handCondition?: GoofyHandGestureType | GoofyDualHandComboId;
+  combinedCondition?: GoofyMultimodalComboId;
+  memeId: string;
+  soundId: GoofySoundId;
+  caption: string;
+  animationStyle: PopupAnimationStyle;
+  durationMs: number; // 500 to 6000ms
+  priority?: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface GestureSequenceDefinition {
   id: GoofyGestureSequenceId | string;
   label: string;
   description: string;
-  steps: (GoofyHandGestureType | string)[];
+  steps: (GoofyHandGestureType | GoofyFaceExpressionType | string)[];
   stepHands?: ('Left' | 'Right' | 'Any')[];
-  maxWindowMs: number;
+  maxWindowMs: number; // Max time between consecutive steps
+  maxTotalDurationMs?: number; // Max total sequence duration from step 0 to final step
   defaultMemeId: string;
   defaultSoundId: GoofySoundId;
   defaultCaption: string;
   icon: string;
   isCustom?: boolean;
+  isSecret?: boolean;
+  modality?: 'HAND' | 'FACE' | 'MULTIMODAL';
   animationStyle?: PopupAnimationStyle;
   enabled?: boolean;
 }
@@ -656,10 +717,58 @@ export const BUILTIN_GESTURE_SEQUENCES: GestureSequenceDefinition[] = [
     description: 'Transition from OK gesture to Finger Heart within 1.8 seconds.',
     steps: ['OK_GESTURE', 'FINGER_HEART'],
     maxWindowMs: 1800,
+    maxTotalDurationMs: 3600,
     defaultMemeId: 'MEME_KPOP_HEART',
     defaultSoundId: 'SUCTION_POP',
     defaultCaption: 'FROM PERFECTION TO LOVE // 1000% WHOLESOME',
     icon: '👌🫰',
+    modality: 'HAND',
+  },
+  // V9 Built-in Multimodal Secret Sequences (Face + Hand)
+  {
+    id: 'SECRET_SEQ_CHAOS_APPROVAL',
+    label: 'SECRET: CHAOS APPROVAL',
+    description: 'Multimodal Secret: Thumbs Up → Smile → Peace Sign.',
+    steps: ['THUMBS_UP', 'FACE_SMILE', 'PEACE_SIGN'],
+    maxWindowMs: 2200,
+    maxTotalDurationMs: 5500,
+    defaultMemeId: 'REAL_MEME_GIGACHAD',
+    defaultSoundId: 'BRASS_FANFARE',
+    defaultCaption: 'SECRET MULTIMODAL UNLOCK // ULTIMATE APPROVAL',
+    icon: '👍😊✌️',
+    isSecret: true,
+    modality: 'MULTIMODAL',
+    animationStyle: 'CINEMATIC',
+  },
+  {
+    id: 'SECRET_SEQ_SHOCK_REVEAL',
+    label: 'SECRET: PLOT TWIST REVEAL',
+    description: 'Multimodal Secret: Eyes Wide → Open Palm → Pointing.',
+    steps: ['FACE_EYES_WIDE', 'OPEN_PALM', 'POINTING'],
+    maxWindowMs: 2200,
+    maxTotalDurationMs: 5500,
+    defaultMemeId: 'REAL_MEME_MIND_BLOWN_EXPLOSION',
+    defaultSoundId: 'INCEPTION_BRAAAM',
+    defaultCaption: 'SECRET MULTIMODAL UNLOCK // PLOT TWIST EXPOSED',
+    icon: '😳✋👉',
+    isSecret: true,
+    modality: 'MULTIMODAL',
+    animationStyle: 'GLITCH',
+  },
+  {
+    id: 'SECRET_SEQ_AURA_ASCENSION',
+    label: 'SECRET: AURA ASCENSION',
+    description: 'Multimodal Secret: Closed Fist → Jaw Open → Rock Sign.',
+    steps: ['CLOSED_FIST', 'FACE_JAW_OPEN', 'ROCK_SIGN'],
+    maxWindowMs: 2200,
+    maxTotalDurationMs: 5500,
+    defaultMemeId: 'MEME_MAXIMUM_AURA',
+    defaultSoundId: 'ANIME_POWER_UP',
+    defaultCaption: 'SECRET MULTIMODAL UNLOCK // OVER 9000 AURA',
+    icon: '✊😮🤘',
+    isSecret: true,
+    modality: 'MULTIMODAL',
+    animationStyle: 'CHAOS',
   },
 ];
 
@@ -726,6 +835,9 @@ export interface GoofyModeConfig {
   enableFaceExpressions?: boolean;
   enableHandGestures?: boolean;
   enableMultimodalFusion?: boolean;
+  // V9 Chaos Engine & Custom Reaction Studio Additions
+  chaosMode?: ChaosModeConfig;
+  customReactionRules?: CustomReactionRule[];
 }
 
 export interface GoofyTriggerEvent {
@@ -1491,6 +1603,17 @@ export const GOOFY_FACE_METADATA: Record<GoofyFaceExpressionType, GoofyFaceMetad
     defaultSoundId: 'ANIME_POWER_UP',
     defaultMemeId: 'REAL_MEME_MIND_BLOWN_EXPLOSION',
     category: 'SURPRISE_SHOCK',
+  },
+  FACE_SUSPICIOUS: {
+    id: 'FACE_SUSPICIOUS',
+    label: 'SUSPICIOUS PATTERN',
+    defaultCaption: 'EXCUSE ME?! // SUSPICIOUS ACTIVITY DETECTED',
+    icon: '🤨',
+    description: 'Observable pattern: asymmetric/raised brow paired with narrowed or squinting eyes.',
+    blendshapes: ['browOuterUpLeft', 'browOuterUpRight', 'eyeSquintLeft', 'eyeSquintRight'],
+    defaultSoundId: 'DRAMATIC_SUSPENSE',
+    defaultMemeId: 'REAL_MEME_THE_ROCK_EYEBROW',
+    category: 'SUSPICION_JUDGEMENT',
   },
 };
 
@@ -2274,6 +2397,9 @@ export const DEFAULT_GOOFY_CONFIG: GoofyModeConfig = {
   enableFaceExpressions: true,
   enableHandGestures: true,
   enableMultimodalFusion: true,
+  // V9 Chaos Engine Additions
+  chaosMode: { ...DEFAULT_CHAOS_MODE_CONFIG },
+  customReactionRules: [],
 };
 
 export interface MemePresetDefinition {
