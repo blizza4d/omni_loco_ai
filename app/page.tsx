@@ -8,13 +8,17 @@ import { DeskCard } from '@/components/ui/DeskCard';
 import { StampBadge } from '@/components/ui/StampBadge';
 import { Button } from '@/components/ui/Button';
 import { SpatialCursorOverlay } from '@/components/ui/SpatialCursorOverlay';
+import { CommandPalette } from '@/components/ui/CommandPalette';
+import { PerformanceCentreModal } from '@/components/ui/PerformanceCentreModal';
+import { KeyboardShortcutsModal } from '@/components/ui/KeyboardShortcutsModal';
 import {
   MODULE_REGISTRY,
   getCategorySummaries,
   ModuleCategory,
-  ModuleDefinition,
 } from '@/core/modules/registry';
 import { isModelCached, prefetchModel, clearAllLocalCache, REGISTERED_MODELS } from '@/core/cache';
+import { useWorkspaceStore, WorkspaceType } from '@/core/store/workspace-store';
+import { useSystemStore } from '@/core/store';
 import {
   HardDrive,
   HelpCircle,
@@ -25,8 +29,10 @@ import {
   Layers,
   X,
   Filter,
-  CheckCircle2,
   Activity,
+  Pin,
+  Compass,
+  ChevronRight,
 } from 'lucide-react';
 
 export default function DashboardPage() {
@@ -37,10 +43,23 @@ export default function DashboardPage() {
   const [focusedIndex, setFocusedIndex] = useState<number>(0);
   const [cacheDrawerOpen, setCacheDrawerOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [perfCentreOpen, setPerfCentreOpen] = useState(false);
+  const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<'ALL' | ModuleCategory>('ALL');
   const [spatialCursorActive, setSpatialCursorActive] = useState(false);
   const cardRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  // Workspace and Pinned Modules store
+  const {
+    activeWorkspace,
+    setWorkspace,
+    pinnedModuleIds,
+    togglePinModule,
+    recordModuleVisit,
+  } = useWorkspaceStore();
+
+  const { activeBackend } = useSystemStore();
 
   // Category counts calculated directly from single authoritative registry
   const categorySummaries = getCategorySummaries();
@@ -90,10 +109,17 @@ export default function DashboardPage() {
     }
   }, [filteredModules.length, focusedIndex]);
 
-  // Keyboard navigation
+  // Global Keyboard Navigation & Hotkeys (Ctrl+K, Cmd+K, /, Arrows, Enter)
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (onboardingOpen || cacheDrawerOpen) return;
+
+      // Ctrl+K or Cmd+K opens Command Palette
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setCommandPaletteOpen((prev) => !prev);
+        return;
+      }
 
       if (e.key === '/') {
         // Only trigger if not already typing in search input
@@ -104,8 +130,11 @@ export default function DashboardPage() {
         return;
       }
 
-      if (commandPaletteOpen) {
-        if (e.key === 'Escape') setCommandPaletteOpen(false);
+      if (commandPaletteOpen || perfCentreOpen) {
+        if (e.key === 'Escape') {
+          setCommandPaletteOpen(false);
+          setPerfCentreOpen(false);
+        }
         return;
       }
 
@@ -121,6 +150,7 @@ export default function DashboardPage() {
         e.preventDefault();
         const selected = filteredModules[focusedIndex];
         if (selected) {
+          recordModuleVisit(selected.id);
           router.push(selected.route);
         }
       }
@@ -128,7 +158,16 @@ export default function DashboardPage() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [focusedIndex, onboardingOpen, cacheDrawerOpen, commandPaletteOpen, filteredModules, router]);
+  }, [
+    focusedIndex,
+    onboardingOpen,
+    cacheDrawerOpen,
+    commandPaletteOpen,
+    perfCentreOpen,
+    filteredModules,
+    router,
+    recordModuleVisit,
+  ]);
 
   // Handle prefetching on card hover or focus
   const handlePrefetch = (modelUrl: string, id: string) => {
@@ -159,11 +198,15 @@ export default function DashboardPage() {
     setFocusedIndex(0);
   };
 
+  // Find pinned modules from registry
+  const pinnedModules = MODULE_REGISTRY.filter((m) => pinnedModuleIds.includes(m.id));
+
   return (
     <div className="min-h-screen flex flex-col font-mono text-charcoal-soft">
       <GlobalNav
         gestureNavEnabled={spatialCursorActive}
         onToggleGestureNav={setSpatialCursorActive}
+        onTogglePerfHud={() => setPerfCentreOpen(true)}
       />
 
       {/* Real Spatial Hand-Gesture Cursor Overlay */}
@@ -178,20 +221,41 @@ export default function DashboardPage() {
           <div>
             <div className="flex items-center gap-2 mb-1.5 flex-wrap">
               <span className="font-bold text-xs uppercase tracking-technical text-ink-muted">
-                LAB DRAFTING STATION // WORKSPACE 01
+                WORKSPACE // {activeWorkspace.toUpperCase()}
               </span>
-              <StampBadge label="HARDWARE ISOLATED" variant="sage" />
-              <StampBadge label={`${MODULE_REGISTRY.length} SANDBOXES`} variant="charcoal" />
+              <StampBadge label="OMNI 2.0 APEX" variant="sage" />
+              <StampBadge label="100% ON-DEVICE" variant="charcoal" />
+              <StampBadge label={`${MODULE_REGISTRY.length + 3} RIGS ACTIVE`} variant="brick" />
             </div>
             <h1 className="text-xl md:text-2xl font-bold tracking-technical text-charcoal-soft uppercase leading-snug">
-              MULTIMODAL NEURAL EXPERIMENT MODULES
+              MULTIMODAL NEURAL EXPERIMENT PLATFORM
             </h1>
             <p className="text-xs text-ink-muted max-w-2xl mt-1.5 leading-relaxed">
-              {MODULE_REGISTRY.length} sandboxed on-device sensory engines. Zero frames, audio buffers, or biometric vectors are transmitted over any network. Public neural weights are cached locally for zero-latency execution.
+              Unified on-device sensory platform. MediaPipe, ONNX Runtime Web, and Web Audio DSP executing with single-stream hardware coordination. Zero network latency, zero biometric transmission.
             </p>
           </div>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2 shrink-0 flex-wrap">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCommandPaletteOpen(true)}
+              className="gap-1.5"
+            >
+              <kbd className="px-1 py-0.2 bg-paper-dark border border-charcoal-soft/40 rounded text-[9px]">
+                Ctrl+K
+              </kbd>
+              <span>PALETTE</span>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPerfCentreOpen(true)}
+              className="gap-1.5"
+            >
+              <Activity className="w-3.5 h-3.5 text-brick-red" />
+              <span>DIAGNOSTICS</span>
+            </Button>
             <Button
               variant="outline"
               size="sm"
@@ -199,7 +263,7 @@ export default function DashboardPage() {
               className="gap-1.5"
             >
               <HardDrive className="w-3.5 h-3.5" />
-              <span>STORAGE CACHE</span>
+              <span>STORAGE</span>
             </Button>
             <Button
               variant="outline"
@@ -215,6 +279,94 @@ export default function DashboardPage() {
             </Button>
           </div>
         </div>
+
+        {/* Workspace Quick Switcher Strip */}
+        <div className="flex items-center justify-between gap-3 border-b border-charcoal-soft/20 pb-3 overflow-x-auto text-xs">
+          <div className="flex items-center gap-2 shrink-0">
+            <Compass className="w-3.5 h-3.5 text-ink-muted" />
+            <span className="text-[10px] font-bold uppercase tracking-wider text-ink-muted">
+              ACTIVE WORKSPACE:
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 shrink-0">
+            {(
+              [
+                'Default',
+                'Vision Research',
+                'Robotics & Control',
+                'Creative Labs',
+                'Laboratory Studio',
+              ] as WorkspaceType[]
+            ).map((ws) => (
+              <button
+                key={ws}
+                onClick={() => setWorkspace(ws)}
+                className={`px-2 py-0.5 text-[10px] font-mono font-bold uppercase rounded border transition-all ${
+                  activeWorkspace === ws
+                    ? 'border-charcoal-soft bg-charcoal-soft text-paper-cream shadow-tactile-sm'
+                    : 'border-charcoal-soft/30 text-ink-muted hover:border-charcoal-soft hover:text-charcoal-soft bg-paper-dark'
+                }`}
+              >
+                {ws}
+              </button>
+            ))}
+          </div>
+
+          <div className="hidden lg:flex items-center gap-2 text-[10px] text-ink-muted shrink-0">
+            <span className="w-2 h-2 rounded-full bg-sage-green animate-pulse" />
+            <span className="font-bold text-charcoal-soft uppercase">
+              ACCEL: {activeBackend.toUpperCase()}
+            </span>
+          </div>
+        </div>
+
+        {/* Intelligent Quick Launch & Pinned Modules Strip */}
+        {pinnedModules.length > 0 && (
+          <div className="p-3.5 border-2 border-charcoal-soft bg-paper-dark rounded-tactile shadow-tactile-sm space-y-2.5">
+            <div className="flex items-center justify-between border-b border-charcoal-soft/20 pb-1.5">
+              <div className="flex items-center gap-2">
+                <Pin className="w-3.5 h-3.5 text-brick-red" />
+                <span className="font-bold text-xs uppercase tracking-technical text-charcoal-soft">
+                  PINNED WORKSPACE LAUNCHPAD
+                </span>
+                <span className="text-[9px] px-1.5 py-0.2 bg-paper-cream border border-charcoal-soft rounded text-ink-muted">
+                  {pinnedModules.length} PINNED
+                </span>
+              </div>
+              <span className="text-[10px] text-ink-muted hidden sm:inline">
+                Click pin icon on any card to adjust launchpad
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2.5">
+              {pinnedModules.map((m) => {
+                const Icon = m.icon;
+                return (
+                  <Link
+                    key={m.id}
+                    href={m.route}
+                    onClick={() => recordModuleVisit(m.id)}
+                    className="p-2.5 border border-charcoal-soft/60 hover:border-charcoal-soft bg-paper-cream hover:bg-paper-cream-dark/60 rounded flex items-center justify-between transition-all group shadow-tactile-xs"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-7 h-7 border border-charcoal-soft/40 bg-paper-dark rounded flex items-center justify-center shrink-0">
+                        <Icon className="w-3.5 h-3.5 text-charcoal-soft group-hover:scale-110 transition-transform" />
+                      </div>
+                      <div className="min-w-0">
+                        <span className="font-bold text-[11px] block truncate text-charcoal-soft">
+                          {m.shortTitle}
+                        </span>
+                        <span className="text-[9px] text-ink-muted block truncate">{m.figure}</span>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-3.5 h-3.5 text-ink-muted group-hover:text-charcoal-soft group-hover:translate-x-0.5 transition-all shrink-0" />
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Category Filters, Search Box & Telemetry Ticker */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 border-b border-charcoal-soft/20 pb-3">
@@ -378,6 +530,7 @@ export default function DashboardPage() {
               const Icon = module.icon;
               const isCached = cachedMap[module.id];
               const isFocused = focusedIndex === idx;
+              const isPinned = pinnedModuleIds.includes(module.id);
 
               return (
                 <div
@@ -399,6 +552,7 @@ export default function DashboardPage() {
                 >
                   <Link
                     href={module.route}
+                    onClick={() => recordModuleVisit(module.id)}
                     className="h-full flex flex-col flex-1 focus:outline-none group"
                     tabIndex={0}
                   >
@@ -408,7 +562,23 @@ export default function DashboardPage() {
                       highlight={isFocused}
                       className="h-full flex flex-col justify-between cursor-pointer group"
                       headerAction={
-                        <div className="flex items-center gap-1">
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              togglePinModule(module.id);
+                            }}
+                            className={`p-1 rounded border transition-colors ${
+                              isPinned
+                                ? 'border-brick-red bg-brick-red text-white'
+                                : 'border-charcoal-soft/30 hover:border-charcoal-soft text-ink-muted'
+                            }`}
+                            title={isPinned ? 'Unpin module' : 'Pin module to workspace launchpad'}
+                          >
+                            <Pin className="w-3 h-3" />
+                          </button>
                           {module.permissions.map((p) => (
                             <span
                               key={p}
@@ -420,7 +590,7 @@ export default function DashboardPage() {
                         </div>
                       }
                     >
-                      {/* Schematic Icon & Visual Preview Box (Uniform min-height) */}
+                      {/* Schematic Icon & Visual Preview Box */}
                       <div className="my-3 p-3.5 border border-charcoal-soft bg-paper-dark/60 rounded-[2px] flex items-center justify-between min-h-[72px] group-hover:bg-paper-dark transition-colors">
                         <div className="space-y-1 pr-2">
                           <StampBadge label={module.badge} variant="charcoal" />
@@ -433,7 +603,7 @@ export default function DashboardPage() {
                         </div>
                       </div>
 
-                      {/* Description & Feature Pills (Flex-1 stretches uniformly) */}
+                      {/* Description & Feature Pills */}
                       <div className="flex-1 flex flex-col justify-between mb-4">
                         <p className="text-xs text-ink-muted leading-relaxed">
                           {module.description}
@@ -450,7 +620,7 @@ export default function DashboardPage() {
                         </div>
                       </div>
 
-                      {/* Footer Strip (Anchored consistently at bottom baseline across entire row) */}
+                      {/* Footer Strip */}
                       <div className="pt-2.5 mt-auto border-t border-charcoal-soft/20 flex items-center justify-between text-[11px]">
                         <div className="flex items-center gap-1.5">
                           <span
@@ -499,7 +669,7 @@ export default function DashboardPage() {
               <span className="font-bold text-xs uppercase tracking-technical text-charcoal-soft">
                 SPECIALIZED AI MODELS & EXPERIMENTAL WORKSPACES
               </span>
-              <StampBadge label="NEW MODEL ACTIVE" variant="brick" />
+              <StampBadge label="CHAOS ENGINE V9" variant="brick" />
             </div>
             <span className="text-[11px] font-mono text-ink-muted">MODEL RECOGNITION PIPELINES</span>
           </div>
@@ -509,7 +679,7 @@ export default function DashboardPage() {
             <div className="md:col-span-2">
               <DeskCard
                 figure="EXP. 04"
-                title="GOOFY MODEL V7"
+                title="GOOFY MODEL V9 CHAOS ENGINE"
                 highlight={false}
                 className="h-full flex flex-col justify-between"
                 headerAction={
@@ -518,7 +688,7 @@ export default function DashboardPage() {
                       CAM
                     </span>
                     <span className="font-mono text-[9px] font-bold px-1.5 py-0.5 border border-emerald-600 bg-emerald-500/10 text-emerald-600">
-                      HANDS ONLY
+                      HANDS + FACE
                     </span>
                     <span className="font-mono text-[9px] font-bold px-1.5 py-0.5 border border-amber-600 bg-amber-500/10 text-amber-600">
                       AUDIO SYNTH
@@ -528,17 +698,17 @@ export default function DashboardPage() {
               >
                 <div className="my-2">
                   <span className="font-mono text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 block mb-1">
-                    INTELLIGENT HAND GESTURE RECOGNITION &amp; MEME REACTION ENGINE
+                    MULTIMODAL FACE + HAND RECOGNITION &amp; MEME CHAOS ENGINE
                   </span>
                   <p className="text-xs text-ink-muted leading-relaxed">
-                    Strictly hand-only 21-point dual-hand tracking with 17 recognized hand gestures, 15 dual combos, Custom Gesture Studio (real KNN invariant features), temporal sequence creator &amp; 110+ visual meme popup engine.
+                    Multimodal Face and Hand perception with 17 static gestures, dynamic motion tracking, 15 dual combos, Custom Gesture Studio, gesture sequences, custom reaction rules, and 110+ visual meme reactions.
                   </p>
                 </div>
 
                 <div className="my-2 p-2.5 border border-charcoal-soft bg-paper-dark/60 rounded-[2px] flex items-center justify-between">
                   <div className="space-y-1">
-                    <StampBadge label="HAND-ONLY V7 / WEBGPU" variant="charcoal" />
-                    <span className="block text-[10px] text-ink-muted">MODEL ID: hand_landmarker &bull; EST. SIZE: 7.8 MB</span>
+                    <StampBadge label="MULTIMODAL V9 / WEBGPU" variant="charcoal" />
+                    <span className="block text-[10px] text-ink-muted">MODELS: hand_landmarker &bull; face_landmarker</span>
                   </div>
                   <div className="flex items-center gap-1.5 text-[11px]">
                     <span className="w-2 h-2 rounded-full bg-sage-green animate-pulse" />
@@ -552,10 +722,10 @@ export default function DashboardPage() {
                     'Peace Sign',
                     'Rock Sign',
                     'OK Gesture',
-                    'Finger Heart',
-                    'Double Peace',
-                    'Secret Combos',
-                    'Custom Gestures',
+                    'Face Reactions',
+                    'Dynamic Swipes',
+                    'Chaos Combos',
+                    'Custom Studio',
                   ].map((action) => (
                     <span
                       key={action}
@@ -568,7 +738,7 @@ export default function DashboardPage() {
 
                 <div className="pt-3 mt-3 border-t border-charcoal-soft/20 flex flex-wrap items-center justify-between gap-2">
                   <span className="text-[10px] font-mono text-ink-muted">
-                    17 GESTURES &bull; 15 COMBOS &bull; CUSTOM STUDIO &bull; 110+ MEMES
+                    17 GESTURES &bull; DYNAMIC MOTION &bull; CUSTOM STUDIO &bull; 110+ MEMES
                   </span>
                   <div className="flex items-center gap-2">
                     <Link href="/laboratory">
@@ -644,21 +814,21 @@ export default function DashboardPage() {
             </span>
             <span className="flex items-center gap-1">
               <kbd className="px-1.5 py-0.5 border border-charcoal-soft bg-paper-cream rounded-[2px] font-bold text-[10px]">
-                /
+                Ctrl+K
               </kbd>{' '}
               COMMAND PALETTE
+            </span>
+            <span className="flex items-center gap-1">
+              <kbd className="px-1.5 py-0.5 border border-charcoal-soft bg-paper-cream rounded-[2px] font-bold text-[10px]">
+                H
+              </kbd>{' '}
+              DIAGNOSTICS HUD
             </span>
             <span className="flex items-center gap-1">
               <kbd className="px-1.5 py-0.5 border border-charcoal-soft bg-paper-cream rounded-[2px] font-bold text-[10px]">
                 ?
               </kbd>{' '}
               SHORTCUTS
-            </span>
-            <span className="flex items-center gap-1">
-              <kbd className="px-1.5 py-0.5 border border-charcoal-soft bg-paper-cream rounded-[2px] font-bold text-[10px]">
-                ESC
-              </kbd>{' '}
-              HUB
             </span>
           </div>
 
@@ -668,6 +838,26 @@ export default function DashboardPage() {
           </div>
         </div>
       </main>
+
+      {/* Global Command Palette (Triggered with Ctrl+K, Cmd+K, or '/') */}
+      <CommandPalette
+        isOpen={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        onOpenPerfCentre={() => setPerfCentreOpen(true)}
+        onOpenShortcuts={() => setShortcutsModalOpen(true)}
+      />
+
+      {/* Performance & Hardware Diagnostics Centre Modal */}
+      <PerformanceCentreModal
+        isOpen={perfCentreOpen}
+        onClose={() => setPerfCentreOpen(false)}
+      />
+
+      {/* Keyboard Shortcuts Modal */}
+      <KeyboardShortcutsModal
+        isOpen={shortcutsModalOpen}
+        onClose={() => setShortcutsModalOpen(false)}
+      />
 
       {/* Cache Storage Management Drawer */}
       {cacheDrawerOpen && (
@@ -738,60 +928,6 @@ export default function DashboardPage() {
               >
                 CLOSE
               </Button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Tactical Fuzzy Command Palette (Triggered with '/') */}
-      {commandPaletteOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-label="Tactical Command Palette"
-          className="fixed inset-0 z-50 flex items-start justify-center pt-24 p-4 bg-charcoal-soft/60 backdrop-blur-[2px]"
-        >
-          <div className="relative w-full max-w-xl bg-paper-cream border-2 border-charcoal-soft rounded-tactile shadow-tactile-lg p-4 font-mono space-y-3">
-            <div className="flex items-center gap-2 border-2 border-charcoal-soft px-3 py-2 bg-paper-cream">
-              <Search className="w-4 h-4 text-charcoal-soft shrink-0" />
-              <input
-                type="text"
-                autoFocus
-                placeholder="TYPE A MODULE NAME OR COMMAND..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-transparent font-mono text-xs uppercase font-bold tracking-technical focus:outline-none text-charcoal-soft"
-              />
-              <kbd className="px-1.5 py-0.5 border border-charcoal-soft bg-paper-dark text-[9px]">
-                ESC
-              </kbd>
-            </div>
-
-            <div className="max-h-64 overflow-y-auto space-y-1 text-xs">
-              {filteredModules.map((m) => (
-                <button
-                  key={m.id}
-                  onClick={() => {
-                    setCommandPaletteOpen(false);
-                    router.push(m.route);
-                  }}
-                  className="w-full text-left p-2.5 border border-transparent hover:border-charcoal-soft hover:bg-paper-dark rounded-tactile flex items-center justify-between transition-colors"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold uppercase text-[10px] text-ink-muted">
-                      {m.figure}
-                    </span>
-                    <span className="font-bold text-charcoal-soft uppercase">{m.title}</span>
-                  </div>
-                  <span className="text-[10px] text-ink-muted">&rarr; ENTER</span>
-                </button>
-              ))}
-
-              {filteredModules.length === 0 && (
-                <div className="p-4 text-center text-ink-muted text-xs">
-                  NO MATCHING MODULES FOUND
-                </div>
-              )}
             </div>
           </div>
         </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { SharedCameraManager } from './shared-camera-manager';
 
 export interface CameraDevice {
   deviceId: string;
@@ -11,6 +12,7 @@ export interface UseCameraOptions {
   preferredFacingMode?: 'user' | 'environment';
   preferredResolution?: { width: number; height: number };
   autoStart?: boolean;
+  consumerId?: string;
 }
 
 export function useCamera(options: UseCameraOptions = {}) {
@@ -18,14 +20,18 @@ export function useCamera(options: UseCameraOptions = {}) {
     preferredFacingMode = 'user',
     preferredResolution,
     autoStart = false,
+    consumerId: explicitConsumerId,
   } = options;
 
-  // Extract primitive numbers so reference stability is preserved across renders
+  // Stable consumer identifier for ref-counted stream manager
+  const consumerIdRef = useRef<string>(
+    explicitConsumerId || `cam-consumer-${Math.random().toString(36).substring(2, 9)}`
+  );
+
   const idealWidth = preferredResolution?.width ?? 640;
   const idealHeight = preferredResolution?.height ?? 480;
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
   const isStartingRef = useRef<boolean>(false);
 
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -38,155 +44,95 @@ export function useCamera(options: UseCameraOptions = {}) {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSyntheticMode, setIsSyntheticMode] = useState<boolean>(false);
 
+  const manager = typeof window !== 'undefined' ? SharedCameraManager.getInstance() : null;
+
   // Enumerate attached video input devices
   const updateDeviceList = useCallback(async () => {
-    if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) return;
-    try {
-      const allDevices = await navigator.mediaDevices.enumerateDevices();
-      const videoInputs = allDevices
-        .filter((d) => d.kind === 'videoinput')
-        .map((d, index) => ({
-          deviceId: d.deviceId,
-          label: d.label || `Camera ${index + 1}`,
-        }));
-      setDevices(videoInputs);
-    } catch {
-      // Ignore enumeration failure
-    }
-  }, []);
+    if (!manager) return;
+    const list = await manager.enumerateDevices();
+    setDevices(list);
+  }, [manager]);
 
-  // Stop camera tracks cleanly
+  // Stop camera tracks cleanly via shared manager
   const stopCamera = useCallback(() => {
     isStartingRef.current = false;
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => {
-        try {
-          track.stop();
-        } catch {
-          // ignore error on stop
-        }
-      });
-      streamRef.current = null;
+    if (manager) {
+      manager.releaseStream(consumerIdRef.current);
     }
     if (videoRef.current) {
       videoRef.current.srcObject = null;
     }
     setStream(null);
     setIsStreaming(false);
-  }, []);
+  }, [manager]);
 
-  // Start camera stream
+  // Start camera stream via shared manager
   const startCamera = useCallback(
     async (deviceId?: string, mode?: 'user' | 'environment') => {
-      if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
-        setErrorMessage('Webcam media devices API is not supported in this browser environment.');
+      if (!manager) {
+        setErrorMessage('Camera manager unavailable in non-browser environment.');
         setPermissionState('error');
         return;
       }
 
-      // If synthetic mode is active, simulate active stream
-      if (isSyntheticMode) {
-        setIsStreaming(true);
-        setPermissionState('granted');
-        return;
-      }
-
-      // Prevent concurrent startCamera invocations
-      if (isStartingRef.current) {
-        return;
-      }
+      if (isStartingRef.current) return;
       isStartingRef.current = true;
-
-      // If an existing stream with active tracks already exists and no specific device switch requested, verify it
-      if (streamRef.current && !deviceId && !mode) {
-        const activeTracks = streamRef.current.getVideoTracks().filter((t) => t.readyState === 'live');
-        if (activeTracks.length > 0) {
-          if (videoRef.current && videoRef.current.srcObject !== streamRef.current) {
-            videoRef.current.srcObject = streamRef.current;
-            videoRef.current.play().catch(() => {});
-          }
-          setIsStreaming(true);
-          isStartingRef.current = false;
-          return;
-        }
-      }
-
-      // Stop previous tracks if switching devices
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
-      }
-
       setErrorMessage(null);
+
       const targetFacing = mode || facingMode;
-      const constraints: MediaStreamConstraints = {
-        audio: false,
-        video: {
-          width: { ideal: idealWidth },
-          height: { ideal: idealHeight },
-          ...(deviceId
-            ? { deviceId: { exact: deviceId } }
-            : { facingMode: targetFacing }),
-        },
-      };
 
       try {
-        const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+        const acquiredStream = await manager.acquireStream(consumerIdRef.current, {
+          preferredFacingMode: targetFacing,
+          preferredResolution: { width: idealWidth, height: idealHeight },
+          deviceId,
+          isSyntheticMode,
+        });
+
         if (!isStartingRef.current) {
-          // Component unmounted or camera stopped while getUserMedia was resolving
-          newStream.getTracks().forEach((track) => {
-            try {
-              track.stop();
-            } catch {
-              // ignore
-            }
-          });
+          // Unmounted or stopped during acquisition
+          manager.releaseStream(consumerIdRef.current);
           return;
         }
-        streamRef.current = newStream;
-        setStream(newStream);
-        setIsStreaming(true);
-        setPermissionState('granted');
-        isStartingRef.current = false;
 
-        const videoTrack = newStream.getVideoTracks()[0];
-        if (videoTrack) {
-          const settings = videoTrack.getSettings();
-          if (settings.deviceId) setCurrentDeviceId(settings.deviceId);
-        }
+        if (acquiredStream) {
+          setStream(acquiredStream);
+          setIsStreaming(true);
+          setPermissionState('granted');
 
-        // Attach directly if video element is already present
-        if (videoRef.current) {
-          videoRef.current.srcObject = newStream;
-          videoRef.current.play().catch((err) => {
-            console.warn('video.play() caught:', err);
-          });
+          const track = acquiredStream.getVideoTracks()[0];
+          if (track) {
+            const settings = track.getSettings();
+            if (settings.deviceId) setCurrentDeviceId(settings.deviceId);
+          }
+
+          if (videoRef.current) {
+            videoRef.current.srcObject = acquiredStream;
+            videoRef.current.play().catch((err) => {
+              console.warn('[useCamera] video.play() error:', err);
+            });
+          }
+        } else {
+          const telemetry = manager.getTelemetry();
+          setIsStreaming(false);
+          setPermissionState(telemetry.permissionState);
+          setErrorMessage(telemetry.errorMessage || 'Failed to acquire video stream.');
         }
 
         await updateDeviceList();
       } catch (err: unknown) {
-        isStartingRef.current = false;
-        setIsStreaming(false);
         const error = err as Error;
-        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-          setPermissionState('denied');
-          setErrorMessage('Camera access was denied by user or browser policy.');
-        } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-          setPermissionState('error');
-          setErrorMessage('No physical video input device was detected.');
-        } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
-          setPermissionState('error');
-          setErrorMessage('Webcam is currently locked by another application or process.');
-        } else {
-          setPermissionState('error');
-          setErrorMessage(error.message || 'Failed to capture webcam stream.');
-        }
+        setIsStreaming(false);
+        setPermissionState('error');
+        setErrorMessage(error.message || 'Camera acquisition error.');
+      } finally {
+        isStartingRef.current = false;
       }
     },
-    [facingMode, idealWidth, idealHeight, isSyntheticMode, updateDeviceList]
+    [manager, facingMode, idealWidth, idealHeight, isSyntheticMode, updateDeviceList]
   );
 
-  // Synchronize stream directly to video element whenever stream changes or on mount
+  // Synchronize stream directly to video element whenever stream changes
   useEffect(() => {
     const video = videoRef.current;
     if (video && stream) {
@@ -194,7 +140,7 @@ export function useCamera(options: UseCameraOptions = {}) {
         video.srcObject = stream;
       }
       video.play().catch((err) => {
-        console.warn('Camera video.play() error:', err);
+        console.warn('[useCamera] Camera video.play() error:', err);
       });
     }
   }, [stream]);
@@ -221,21 +167,26 @@ export function useCamera(options: UseCameraOptions = {}) {
     if (autoStart) {
       startCamera();
     }
+    const currentId = consumerIdRef.current;
     return () => {
-      stopCamera();
+      if (manager) {
+        manager.releaseStream(currentId);
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoStart]);
 
-  // Listen to device changes
+  // Listen to telemetry changes from SharedCameraManager
   useEffect(() => {
-    if (typeof navigator !== 'undefined' && navigator.mediaDevices) {
-      navigator.mediaDevices.addEventListener('devicechange', updateDeviceList);
-      return () => {
-        navigator.mediaDevices.removeEventListener('devicechange', updateDeviceList);
-      };
-    }
-  }, [updateDeviceList]);
+    if (!manager) return;
+    const unsubscribe = manager.subscribe((telemetry) => {
+      if (telemetry.errorMessage && !isStreaming) {
+        setErrorMessage(telemetry.errorMessage);
+        setPermissionState(telemetry.permissionState);
+      }
+    });
+    return unsubscribe;
+  }, [manager, isStreaming]);
 
   return {
     videoRef,

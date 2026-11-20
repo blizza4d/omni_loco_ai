@@ -21,7 +21,9 @@ import {
   Terminal,
   FlaskConical,
   Workflow,
+  Command,
 } from 'lucide-react';
+import { CommandPalette } from './CommandPalette';
 import { detectCapabilities } from '@/core/capabilities';
 import { useSettingsStore, useSystemStore } from '@/core/store';
 import { AchievementToast } from '@/components/easter-eggs/AchievementToast';
@@ -70,6 +72,7 @@ export function GlobalNav({
   const [specimenModalOpen, setSpecimenModalOpen] = useState(false);
   const [terminalModalOpen, setTerminalModalOpen] = useState(false);
   const [achievementsModalOpen, setAchievementsModalOpen] = useState(false);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [activeBackend, setActiveBackend] = useState<string>('DETECTING');
   const [mounted, setMounted] = useState(false);
 
@@ -131,6 +134,13 @@ export function GlobalNav({
         konamiIndexRef.current = 0;
       }
 
+      // Global Command Palette via Ctrl+K or Cmd+K
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        setCommandPaletteOpen((prev) => !prev);
+        return;
+      }
+
       // Secret Terminal toggle via backquote
       if (e.key === '`' || e.key === '~') {
         e.preventDefault();
@@ -148,7 +158,9 @@ export function GlobalNav({
         e.preventDefault();
         handleToggleHud();
       } else if (e.key === 'Escape') {
-        if (terminalModalOpen) {
+        if (commandPaletteOpen) {
+          setCommandPaletteOpen(false);
+        } else if (terminalModalOpen) {
           setTerminalModalOpen(false);
         } else if (konamiModalOpen) {
           setKonamiModalOpen(false);
@@ -175,6 +187,7 @@ export function GlobalNav({
     networkModalOpen,
     systemModalOpen,
     terminalModalOpen,
+    commandPaletteOpen,
     konamiModalOpen,
     specimenModalOpen,
     achievementsModalOpen,
@@ -349,6 +362,17 @@ export function GlobalNav({
               <span className="hidden xl:inline">CLI [`]</span>
             </button>
 
+            {/* Global Command Palette Trigger Button */}
+            <button
+              onClick={() => setCommandPaletteOpen(true)}
+              className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-mono font-bold uppercase border-2 border-charcoal-soft text-charcoal-soft hover:bg-paper-dark rounded-tactile transition-all"
+              title="Open Global Command Palette [Ctrl+K]"
+              aria-label="Open Command Palette"
+            >
+              <Command className="w-3 h-3 text-brick-red" />
+              <span className="hidden lg:inline">PALETTE</span>
+            </button>
+
             {/* Performance HUD Toggle */}
             <button
               onClick={handleToggleHud}
@@ -437,6 +461,13 @@ export function GlobalNav({
       <AchievementsModal
         isOpen={achievementsModalOpen}
         onClose={() => setAchievementsModalOpen(false)}
+      />
+
+      {/* Global Command Palette */}
+      <CommandPalette
+        isOpen={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+        onOpenShortcuts={() => setShortcutsModalOpen(true)}
       />
     </>
   );

@@ -16,6 +16,7 @@ interface ShortcutItem {
 }
 
 const SHORTCUTS: ShortcutItem[] = [
+  { keys: ['Ctrl+K'], action: 'Open Global Command Palette (Search Models, Modules, Workspaces)', scope: 'GLOBAL' },
   { keys: ['ESC'], action: 'Return to Hub / Dismiss Active Modal', scope: 'GLOBAL' },
   { keys: ['/'], action: 'Open Tactical Command Palette & Fast Search', scope: 'HUB' },
   { keys: ['\u2190', '\u2192', '\u2191', '\u2193'], action: 'Navigate Sandboxed Module Grid', scope: 'HUB' },
