@@ -40,7 +40,7 @@ export class SharedCameraManager {
 
   private physicalStream: MediaStream | null = null;
   private consumers: Set<string> = new Set();
-  private isAcquiring = false;
+  private acquisitionPromise: Promise<MediaStream | null> | null = null;
   private permissionState: CameraPermissionStatus = 'prompt';
   private errorMessage: string | null = null;
   private devices: CameraDeviceInfo[] = [];
@@ -98,10 +98,13 @@ export class SharedCameraManager {
       return null;
     }
 
-    // If an existing stream with live tracks exists, reuse it immediately
-    if (this.physicalStream && !deviceId && !this.isAcquiring) {
+    // If an existing stream with live tracks exists, check profile compatibility
+    if (this.physicalStream && !this.acquisitionPromise) {
       const liveTracks = this.physicalStream.getVideoTracks().filter((t) => t.readyState === 'live');
-      if (liveTracks.length > 0) {
+      const isDeviceMatch = !deviceId || deviceId === this.currentDeviceId;
+      const isFacingMatch = !options.preferredFacingMode || preferredFacingMode === this.currentFacingMode;
+
+      if (liveTracks.length > 0 && isDeviceMatch && isFacingMatch) {
         this.consumers.add(consumerId);
         this.permissionState = 'granted';
         this.notifyListeners();
@@ -109,20 +112,18 @@ export class SharedCameraManager {
       }
     }
 
-    // Wait if an acquisition is already in flight to prevent concurrent getUserMedia locks
-    while (this.isAcquiring) {
-      await new Promise((resolve) => setTimeout(resolve, 50));
-      if (this.physicalStream) {
-        const liveTracks = this.physicalStream.getVideoTracks().filter((t) => t.readyState === 'live');
-        if (liveTracks.length > 0) {
-          this.consumers.add(consumerId);
-          this.notifyListeners();
-          return this.physicalStream;
-        }
+    // If an acquisition is already in flight, share that promise flight
+    if (this.acquisitionPromise) {
+      const stream = await this.acquisitionPromise;
+      if (stream) {
+        this.consumers.add(consumerId);
+        this.permissionState = 'granted';
+        this.notifyListeners();
+        return stream;
       }
+      return null;
     }
 
-    this.isAcquiring = true;
     this.errorMessage = null;
 
     const constraints: MediaStreamConstraints = {
@@ -136,50 +137,54 @@ export class SharedCameraManager {
       },
     };
 
-    try {
-      // If switching devices, close existing physical tracks first
-      if (this.physicalStream && deviceId && deviceId !== this.currentDeviceId) {
-        this.stopPhysicalTracks();
-      }
-
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-      this.physicalStream = stream;
-      this.consumers.add(consumerId);
-      this.permissionState = 'granted';
-      this.currentFacingMode = preferredFacingMode;
-
-      const track = stream.getVideoTracks()[0];
-      if (track) {
-        const settings = track.getSettings();
-        if (settings.deviceId) this.currentDeviceId = settings.deviceId;
-        if (settings.width && settings.height) {
-          this.currentResolution = { width: settings.width, height: settings.height };
+    this.acquisitionPromise = (async () => {
+      try {
+        // If switching profile or hardware device, cleanly stop previous tracks
+        if (this.physicalStream) {
+          this.stopPhysicalTracks();
         }
-      }
 
-      await this.enumerateDevices();
-      this.isAcquiring = false;
-      this.notifyListeners();
-      return stream;
-    } catch (err: unknown) {
-      this.isAcquiring = false;
-      const error = err as Error;
-      if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-        this.permissionState = 'denied';
-        this.errorMessage = 'Camera access was denied by user permission policy.';
-      } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
-        this.permissionState = 'error';
-        this.errorMessage = 'No video capture hardware was detected.';
-      } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
-        this.permissionState = 'error';
-        this.errorMessage = 'Webcam is locked by another process or application.';
-      } else {
-        this.permissionState = 'error';
-        this.errorMessage = error.message || 'Failed to acquire camera stream.';
+        const stream = await navigator.mediaDevices.getUserMedia(constraints);
+        this.physicalStream = stream;
+        this.consumers.add(consumerId);
+        this.permissionState = 'granted';
+        this.currentFacingMode = preferredFacingMode;
+
+        const track = stream.getVideoTracks()[0];
+        if (track) {
+          const settings = track.getSettings();
+          if (settings.deviceId) this.currentDeviceId = settings.deviceId;
+          if (settings.width && settings.height) {
+            this.currentResolution = { width: settings.width, height: settings.height };
+          }
+        }
+
+        await this.enumerateDevices();
+        this.notifyListeners();
+        return stream;
+      } catch (err: unknown) {
+        const error = err as Error;
+        if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+          this.permissionState = 'denied';
+          this.errorMessage = 'Camera access was denied by user permission policy.';
+        } else if (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError') {
+          this.permissionState = 'error';
+          this.errorMessage = 'No video capture hardware was detected.';
+        } else if (error.name === 'NotReadableError' || error.name === 'TrackStartError') {
+          this.permissionState = 'error';
+          this.errorMessage = 'Webcam is locked by another process or application.';
+        } else {
+          this.permissionState = 'error';
+          this.errorMessage = error.message || 'Failed to acquire camera stream.';
+        }
+        this.notifyListeners();
+        return null;
       }
-      this.notifyListeners();
-      return null;
-    }
+    })().finally(() => {
+      this.acquisitionPromise = null;
+    });
+
+    return await this.acquisitionPromise;
   }
 
   /**
@@ -224,6 +229,22 @@ export class SharedCameraManager {
       return await this.acquireStream(activeConsumers[0], {
         deviceId,
         preferredFacingMode: this.currentFacingMode,
+      });
+    }
+    return null;
+  }
+
+  /**
+   * Coordinated switch of camera facing mode ('user' vs 'environment')
+   */
+  public async switchFacingMode(facingMode: 'user' | 'environment'): Promise<MediaStream | null> {
+    this.currentFacingMode = facingMode;
+    this.currentDeviceId = null;
+    const activeConsumers = Array.from(this.consumers);
+    this.stopPhysicalTracks();
+    if (activeConsumers.length > 0) {
+      return await this.acquireStream(activeConsumers[0], {
+        preferredFacingMode: facingMode,
       });
     }
     return null;

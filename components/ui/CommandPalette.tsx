@@ -20,6 +20,7 @@ import {
   Command,
   X,
   Compass,
+  Database,
 } from 'lucide-react';
 
 export interface CommandPaletteProps {
@@ -27,6 +28,7 @@ export interface CommandPaletteProps {
   onClose: () => void;
   onOpenPerfCentre?: () => void;
   onOpenShortcuts?: () => void;
+  onOpenModelVault?: () => void;
 }
 
 interface CommandItem {
@@ -45,6 +47,7 @@ export function CommandPalette({
   onClose,
   onOpenPerfCentre,
   onOpenShortcuts,
+  onOpenModelVault,
 }: CommandPaletteProps) {
   const router = useRouter();
   const [query, setQuery] = useState('');
@@ -194,6 +197,22 @@ export function CommandPalette({
       },
     });
 
+    if (onOpenModelVault) {
+      list.push({
+        id: 'act-model-vault',
+        category: 'ACTION',
+        categoryLabel: 'DIAGNOSTICS & CONTROLS',
+        title: 'Central Model Vault & Weight Verifier',
+        description: 'Inspect verified model weight manifest, storage quota, and initialization state',
+        shortcut: 'M',
+        icon: Database,
+        action: () => {
+          onClose();
+          onOpenModelVault();
+        },
+      });
+    }
+
     list.push({
       id: 'act-shortcuts',
       category: 'ACTION',
@@ -209,7 +228,7 @@ export function CommandPalette({
     });
 
     return list;
-  }, [router, recordModuleVisit, onClose, setWorkspace, onOpenPerfCentre, togglePerfHud, theme, toggleTheme, onOpenShortcuts]);
+  }, [router, recordModuleVisit, onClose, setWorkspace, onOpenPerfCentre, togglePerfHud, theme, toggleTheme, onOpenShortcuts, onOpenModelVault]);
 
   // Filter commands by search query
   const filteredCommands = useMemo(() => {

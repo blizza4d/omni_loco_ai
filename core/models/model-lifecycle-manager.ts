@@ -6,6 +6,7 @@
  */
 
 import { isModelCached } from '@/core/cache';
+import { MODEL_MANIFEST, ModelManifestEntry } from '@/core/models/manifest';
 
 export type ModelLifecycleState =
   | 'UNLOADED'
@@ -23,6 +24,30 @@ export type ModelRuntime =
   | 'TensorFlow.js'
   | 'Web Audio'
   | 'Custom Feature Engine';
+
+/**
+ * Detect real execution backends supported by the current client environment
+ */
+export function detectSupportedBackends(): ExecutionBackend[] {
+  const backends: ExecutionBackend[] = ['CPU'];
+  if (typeof WebAssembly !== 'undefined') {
+    backends.push('WASM');
+  }
+  if (typeof window !== 'undefined') {
+    const hasWebGPU = typeof navigator !== 'undefined' && 'gpu' in navigator && !!navigator.gpu;
+    let hasWebGL = false;
+    try {
+      const canvas = document.createElement('canvas');
+      hasWebGL = !!(canvas.getContext('webgl2') || canvas.getContext('webgl'));
+    } catch {
+      hasWebGL = false;
+    }
+    if (hasWebGPU || hasWebGL) {
+      backends.push('GPU');
+    }
+  }
+  return backends;
+}
 
 export interface ModelRegistrationOptions {
   id: string;
@@ -61,6 +86,7 @@ export class ModelLifecycleManager {
   private registry: Map<string, ModelRegistrationOptions> = new Map();
   private states: Map<string, ModelStatusRecord> = new Map();
   private loadedInstances: Map<string, unknown> = new Map();
+  private loadingPromises: Map<string, Promise<boolean>> = new Map();
   private listeners: Set<(models: ModelStatusRecord[]) => void> = new Set();
 
   private constructor() {
@@ -129,7 +155,7 @@ export class ModelLifecycleManager {
         displayName: 'YOLOv8 Small Object Detector',
         version: '1.4.0',
         assetPath: '/wasm/ort-wasm-simd-threaded.wasm',
-        assetSize: '14.2 MB',
+        assetSize: '1.2 MB',
         runtime: 'ONNX Runtime',
         preferredBackend: 'WASM',
       },
@@ -138,7 +164,7 @@ export class ModelLifecycleManager {
         displayName: 'MiDaS Relative Depth Estimator',
         version: '1.2.0',
         assetPath: '/wasm/ort-wasm-simd-threaded.wasm',
-        assetSize: '9.6 MB',
+        assetSize: '1.2 MB',
         runtime: 'ONNX Runtime',
         preferredBackend: 'WASM',
       },
@@ -147,7 +173,7 @@ export class ModelLifecycleManager {
         displayName: 'AudioWorklet DSP & VAD',
         version: '1.1.0',
         assetPath: '/wasm/acoustic_dsp.wasm',
-        assetSize: '1.8 MB',
+        assetSize: '0 MB (DSP)',
         runtime: 'Web Audio',
         preferredBackend: 'WASM',
       },
@@ -201,6 +227,7 @@ export class ModelLifecycleManager {
 
   /**
    * Load model into memory with state transitions UNLOADED → LOADING → READY / ERROR.
+   * Concurrent requests for the same model are deduplicated into a single promise flight.
    */
   public async loadModel(
     modelId: string,
@@ -220,63 +247,73 @@ export class ModelLifecycleManager {
 
     // Reuse existing instance if ready and not forceReload
     if (rec.state === 'READY' && this.loadedInstances.has(modelId) && !options.forceReload) {
-      rec.refCount++;
       this.notifyListeners();
       return true;
     }
 
-    rec.state = 'LOADING';
-    rec.error = null;
-    this.notifyListeners();
+    // Deduplicate concurrent load requests for the same model
+    if (this.loadingPromises.has(modelId)) {
+      return this.loadingPromises.get(modelId)!;
+    }
 
-    const startTime = performance.now();
-    const targetBackend = options.preferredBackend || meta.preferredBackend || 'GPU';
+    const loadPromise = (async () => {
+      rec.state = 'LOADING';
+      rec.error = null;
+      this.notifyListeners();
 
-    try {
-      let instance: unknown = null;
-      const factory = options.customFactory || meta.factory;
+      const startTime = performance.now();
+      const targetBackend = options.preferredBackend || meta.preferredBackend || 'GPU';
 
-      if (factory) {
-        try {
-          instance = await factory(targetBackend);
-          rec.activeBackend = targetBackend;
-        } catch (firstErr) {
-          // If GPU failed, attempt CPU fallback
-          if (targetBackend === 'GPU') {
-            console.warn(`[ModelLifecycleManager] GPU initialization failed for ${modelId}, falling back to CPU:`, firstErr);
-            instance = await factory('CPU');
-            rec.activeBackend = 'CPU';
-          } else {
-            throw firstErr;
+      try {
+        let instance: unknown = null;
+        const factory = options.customFactory || meta.factory;
+
+        if (factory) {
+          try {
+            instance = await factory(targetBackend);
+            rec.activeBackend = targetBackend;
+          } catch (firstErr) {
+            // If GPU failed, attempt CPU fallback
+            if (targetBackend === 'GPU') {
+              console.warn(`[ModelLifecycleManager] GPU initialization failed for ${modelId}, falling back to CPU:`, firstErr);
+              instance = await factory('CPU');
+              rec.activeBackend = 'CPU';
+            } else {
+              throw firstErr;
+            }
           }
+        } else {
+          // Default models where factory is managed by task runner
+          rec.activeBackend = targetBackend;
         }
-      } else {
-        // Fallback for default models where factory is managed by task runner
-        rec.activeBackend = targetBackend;
+
+        const elapsed = Math.round(performance.now() - startTime);
+        rec.loadTimeMs = elapsed;
+        rec.state = 'READY';
+        rec.inMemory = true;
+        if (instance) {
+          this.loadedInstances.set(modelId, instance);
+        }
+
+        // Also check caching status asynchronously
+        this.checkAssetCached(modelId).catch(() => {});
+
+        this.notifyListeners();
+        return true;
+      } catch (err: unknown) {
+        const error = err as Error;
+        rec.state = 'ERROR';
+        rec.inMemory = false;
+        rec.error = error.message || 'Model initialization failed';
+        this.notifyListeners();
+        return false;
       }
+    })().finally(() => {
+      this.loadingPromises.delete(modelId);
+    });
 
-      const elapsed = Math.round(performance.now() - startTime);
-      rec.loadTimeMs = elapsed;
-      rec.state = 'READY';
-      rec.inMemory = true;
-      rec.refCount++;
-      if (instance) {
-        this.loadedInstances.set(modelId, instance);
-      }
-
-      // Also check caching status
-      this.checkAssetCached(modelId).catch(() => {});
-
-      this.notifyListeners();
-      return true;
-    } catch (err: unknown) {
-      const error = err as Error;
-      rec.state = 'ERROR';
-      rec.inMemory = false;
-      rec.error = error.message || 'Model initialization failed';
-      this.notifyListeners();
-      return false;
-    }
+    this.loadingPromises.set(modelId, loadPromise);
+    return loadPromise;
   }
 
   /**
@@ -289,9 +326,9 @@ export class ModelLifecycleManager {
     if (rec.state !== 'READY') {
       const success = await this.loadModel(modelId);
       if (!success) return null;
-    } else {
-      rec.refCount++;
     }
+    rec.refCount++;
+    this.notifyListeners();
 
     return (this.loadedInstances.get(modelId) as T) ?? null;
   }
@@ -334,11 +371,18 @@ export class ModelLifecycleManager {
   }
 
   /**
-   * Dispose model instance and free memory
+   * Dispose model instance and free memory.
+   * Ref-counted guard prevents disposing models while consumers hold active references,
+   * unless force is explicitly set to true.
    */
-  public async disposeModel(modelId: string): Promise<void> {
+  public async disposeModel(modelId: string, force = false): Promise<boolean> {
     const rec = this.states.get(modelId);
-    if (!rec || rec.state === 'UNLOADED') return;
+    if (!rec || rec.state === 'UNLOADED') return true;
+
+    if (rec.refCount > 0 && !force) {
+      console.warn(`[ModelLifecycleManager] Cannot dispose model ${modelId}: active refCount is ${rec.refCount}. Pass force=true to override.`);
+      return false;
+    }
 
     rec.state = 'DISPOSING';
     this.notifyListeners();
@@ -359,6 +403,7 @@ export class ModelLifecycleManager {
     rec.activeBackend = 'UNLOADED';
     rec.refCount = 0;
     this.notifyListeners();
+    return true;
   }
 
   /**

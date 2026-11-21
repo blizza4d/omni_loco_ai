@@ -2,12 +2,9 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { usePathname, useRouter } from 'next/navigation';
 import { StampBadge } from './StampBadge';
-import { Button } from './Button';
-import { NetworkTransparencyModal } from './NetworkTransparencyModal';
-import { SystemStatusModal } from './SystemStatusModal';
-import { KeyboardShortcutsModal } from './KeyboardShortcutsModal';
 import {
   ShieldCheck,
   Cpu,
@@ -22,17 +19,51 @@ import {
   FlaskConical,
   Workflow,
   Command,
+  Database,
 } from 'lucide-react';
-import { CommandPalette } from './CommandPalette';
 import { detectCapabilities } from '@/core/capabilities';
 import { useSettingsStore, useSystemStore } from '@/core/store';
 import { AchievementToast } from '@/components/easter-eggs/AchievementToast';
-import { AchievementsModal } from '@/components/easter-eggs/AchievementsModal';
-import { KonamiOverrideModal } from '@/components/easter-eggs/KonamiOverrideModal';
-import { ClassifiedExperimentModal } from '@/components/easter-eggs/ClassifiedExperimentModal';
-import { SecretTerminalModal } from '@/components/easter-eggs/SecretTerminalModal';
 import { unlockAchievement, trackVisitedModule } from '@/modules/easter-eggs/achievements';
 import { initTabWatcherAndConsoleEasterEgg } from '@/modules/easter-eggs/tab-watcher';
+
+// Dynamic imports for heavy modals to ensure instantaneous navigation load
+const NetworkTransparencyModal = dynamic(
+  () => import('./NetworkTransparencyModal').then((m) => m.NetworkTransparencyModal),
+  { ssr: false }
+);
+const ModelVaultModal = dynamic(
+  () => import('./ModelVaultModal').then((m) => m.ModelVaultModal),
+  { ssr: false }
+);
+const SystemStatusModal = dynamic(
+  () => import('./SystemStatusModal').then((m) => m.SystemStatusModal),
+  { ssr: false }
+);
+const KeyboardShortcutsModal = dynamic(
+  () => import('./KeyboardShortcutsModal').then((m) => m.KeyboardShortcutsModal),
+  { ssr: false }
+);
+const KonamiOverrideModal = dynamic(
+  () => import('@/components/easter-eggs/KonamiOverrideModal').then((m) => m.KonamiOverrideModal),
+  { ssr: false }
+);
+const ClassifiedExperimentModal = dynamic(
+  () => import('@/components/easter-eggs/ClassifiedExperimentModal').then((m) => m.ClassifiedExperimentModal),
+  { ssr: false }
+);
+const SecretTerminalModal = dynamic(
+  () => import('@/components/easter-eggs/SecretTerminalModal').then((m) => m.SecretTerminalModal),
+  { ssr: false }
+);
+const AchievementsModal = dynamic(
+  () => import('@/components/easter-eggs/AchievementsModal').then((m) => m.AchievementsModal),
+  { ssr: false }
+);
+const CommandPalette = dynamic(
+  () => import('./CommandPalette').then((m) => m.CommandPalette),
+  { ssr: false }
+);
 
 export interface GlobalNavProps {
   gestureNavEnabled?: boolean;
@@ -66,6 +97,7 @@ export function GlobalNav({
   const isHub = pathname === '/';
 
   const [networkModalOpen, setNetworkModalOpen] = useState(false);
+  const [modelVaultOpen, setModelVaultOpen] = useState(false);
   const [systemModalOpen, setSystemModalOpen] = useState(false);
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
   const [konamiModalOpen, setKonamiModalOpen] = useState(false);
@@ -154,12 +186,17 @@ export function GlobalNav({
       } else if (e.key === 't' || e.key === 'T') {
         e.preventDefault();
         toggleTheme();
+      } else if (e.key === 'm' || e.key === 'M') {
+        e.preventDefault();
+        setModelVaultOpen((prev) => !prev);
       } else if (e.key === 'h' || e.key === 'H') {
         e.preventDefault();
         handleToggleHud();
       } else if (e.key === 'Escape') {
         if (commandPaletteOpen) {
           setCommandPaletteOpen(false);
+        } else if (modelVaultOpen) {
+          setModelVaultOpen(false);
         } else if (terminalModalOpen) {
           setTerminalModalOpen(false);
         } else if (konamiModalOpen) {
@@ -184,6 +221,7 @@ export function GlobalNav({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
     shortcutsModalOpen,
+    modelVaultOpen,
     networkModalOpen,
     systemModalOpen,
     terminalModalOpen,
@@ -221,12 +259,13 @@ export function GlobalNav({
           {/* Left branding & return button */}
           <div className="flex items-center gap-3">
             {!isHub && (
-              <Link href="/">
-                <Button variant="outline" size="sm" className="gap-1.5">
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">HUB</span>
-                  <span className="text-[9px] text-ink-muted hidden md:inline">[ESC]</span>
-                </Button>
+              <Link
+                href="/"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-mono font-bold uppercase border-2 border-charcoal-soft rounded-tactile bg-paper-cream hover:bg-paper-dark text-charcoal-soft shadow-tactile transition-all"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">HUB</span>
+                <span className="text-[9px] text-ink-muted hidden md:inline">[ESC]</span>
               </Link>
             )}
 
@@ -258,55 +297,64 @@ export function GlobalNav({
               />
             </button>
 
+            {/* Central Model Vault Navigation Button */}
+            <button
+              onClick={() => setModelVaultOpen(true)}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-mono font-bold uppercase border-2 border-charcoal-soft text-charcoal-soft hover:bg-paper-dark hover:border-sage-green hover:text-sage-green rounded-tactile transition-all"
+              title="Open Central Model Vault & Asset Inspector [M]"
+              aria-label="Open Central Model Vault"
+            >
+              <Database className="w-3.5 h-3.5 text-sage-green" />
+              <span className="hidden sm:inline">VAULT</span>
+              <span className="sm:hidden">VAULT</span>
+            </button>
+
             {/* Laboratory Navigation Button */}
-            <Link href="/laboratory">
-              <button
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-mono font-bold uppercase border-2 rounded-tactile transition-all ${
-                  pathname === '/laboratory'
-                    ? 'border-cyan-500 bg-cyan-500/20 text-cyan-700 dark:text-cyan-400 shadow-tactile-sm'
-                    : 'border-charcoal-soft text-charcoal-soft hover:bg-paper-dark hover:border-cyan-500 hover:text-cyan-600'
-                }`}
-                title="Open Omni Loco Experimental AI Laboratory Workspace"
-                aria-label="Open Laboratory Workspace"
-              >
-                <FlaskConical className="w-3.5 h-3.5 text-cyan-500" />
-                <span className="hidden sm:inline">LABORATORY</span>
-                <span className="sm:hidden">LAB</span>
-              </button>
+            <Link
+              href="/laboratory"
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-mono font-bold uppercase border-2 rounded-tactile transition-all ${
+                pathname === '/laboratory'
+                  ? 'border-cyan-500 bg-cyan-500/20 text-cyan-700 dark:text-cyan-400 shadow-tactile-sm'
+                  : 'border-charcoal-soft text-charcoal-soft hover:bg-paper-dark hover:border-cyan-500 hover:text-cyan-600'
+              }`}
+              title="Open Omni Loco Experimental AI Laboratory Workspace"
+              aria-label="Open Laboratory Workspace"
+            >
+              <FlaskConical className="w-3.5 h-3.5 text-cyan-500" />
+              <span className="hidden sm:inline">LABORATORY</span>
+              <span className="sm:hidden">LAB</span>
             </Link>
 
             {/* Goofy Mode Navigation Button */}
-            <Link href="/goofy">
-              <button
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-mono font-bold uppercase border-2 rounded-tactile transition-all ${
-                  pathname === '/goofy'
-                    ? 'border-amber-500 bg-amber-500/20 text-amber-700 dark:text-amber-400 shadow-tactile-sm'
-                    : 'border-charcoal-soft text-charcoal-soft hover:bg-paper-dark hover:border-amber-500 hover:text-amber-600'
-                }`}
-                title="Launch Goofy Model V7 Hand Gesture & Meme Reaction Engine"
-                aria-label="Launch Goofy Model V7"
-              >
-                <span className="text-xs">🤪</span>
-                <span className="hidden sm:inline">GOOFY</span>
-                <span className="sm:hidden">GOOFY</span>
-              </button>
+            <Link
+              href="/goofy"
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-mono font-bold uppercase border-2 rounded-tactile transition-all ${
+                pathname === '/goofy'
+                  ? 'border-amber-500 bg-amber-500/20 text-amber-700 dark:text-amber-400 shadow-tactile-sm'
+                  : 'border-charcoal-soft text-charcoal-soft hover:bg-paper-dark hover:border-amber-500 hover:text-amber-600'
+              }`}
+              title="Launch Goofy Model Multimodal Engine"
+              aria-label="Launch Goofy Model"
+            >
+              <span className="text-xs">🤪</span>
+              <span className="hidden sm:inline">GOOFY</span>
+              <span className="sm:hidden">GOOFY</span>
             </Link>
 
             {/* Protocol Forge Navigation Button */}
-            <Link href="/forge">
-              <button
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-mono font-bold uppercase border-2 rounded-tactile transition-all ${
-                  pathname === '/forge' || pathname === '/protocols'
-                    ? 'border-brick-red bg-brick-red/20 text-brick-red shadow-tactile-sm'
-                    : 'border-charcoal-soft text-charcoal-soft hover:bg-paper-dark hover:border-brick-red hover:text-brick-red'
-                }`}
-                title="Open Omni Protocol Forge Multimodal Workflow Engine"
-                aria-label="Open Protocol Forge"
-              >
-                <Workflow className="w-3.5 h-3.5 text-brick-red" />
-                <span className="hidden sm:inline">FORGE</span>
-                <span className="sm:hidden">FORGE</span>
-              </button>
+            <Link
+              href="/forge"
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-mono font-bold uppercase border-2 rounded-tactile transition-all ${
+                pathname === '/forge' || pathname === '/protocols'
+                  ? 'border-brick-red bg-brick-red/20 text-brick-red shadow-tactile-sm'
+                  : 'border-charcoal-soft text-charcoal-soft hover:bg-paper-dark hover:border-brick-red hover:text-brick-red'
+              }`}
+              title="Open Omni Protocol Forge Multimodal Workflow Engine"
+              aria-label="Open Protocol Forge"
+            >
+              <Workflow className="w-3.5 h-3.5 text-brick-red" />
+              <span className="hidden sm:inline">FORGE</span>
+              <span className="sm:hidden">FORGE</span>
             </Link>
 
             {/* Backend Status Badge */}
@@ -428,6 +476,11 @@ export function GlobalNav({
         onClose={() => setNetworkModalOpen(false)}
       />
 
+      <ModelVaultModal
+        isOpen={modelVaultOpen}
+        onClose={() => setModelVaultOpen(false)}
+      />
+
       <SystemStatusModal
         isOpen={systemModalOpen}
         onClose={() => setSystemModalOpen(false)}
@@ -468,6 +521,7 @@ export function GlobalNav({
         isOpen={commandPaletteOpen}
         onClose={() => setCommandPaletteOpen(false)}
         onOpenShortcuts={() => setShortcutsModalOpen(true)}
+        onOpenModelVault={() => setModelVaultOpen(true)}
       />
     </>
   );

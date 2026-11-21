@@ -22,6 +22,7 @@ const SHORTCUTS: ShortcutItem[] = [
   { keys: ['\u2190', '\u2192', '\u2191', '\u2193'], action: 'Navigate Sandboxed Module Grid', scope: 'HUB' },
   { keys: ['ENTER'], action: 'Launch Selected Neural Sandbox', scope: 'HUB' },
   { keys: ['?'], action: 'Open Tactical Keyboard Shortcuts', scope: 'GLOBAL' },
+  { keys: ['M'], action: 'Open Central Model Vault & Asset Manifest', scope: 'GLOBAL' },
   { keys: ['T'], action: 'Toggle Telemetry Dark / Analog Light Theme', scope: 'GLOBAL' },
   { keys: ['H'], action: 'Toggle Real-Time Diagnostics & Performance HUD', scope: 'GLOBAL' },
   { keys: ['SPACE'], action: 'Pause / Resume Live Sensor Stream', scope: 'WORKSPACES' },

@@ -2,21 +2,19 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { GlobalNav } from '@/components/ui/GlobalNav';
 import { DeskCard } from '@/components/ui/DeskCard';
 import { StampBadge } from '@/components/ui/StampBadge';
 import { Button } from '@/components/ui/Button';
 import { SpatialCursorOverlay } from '@/components/ui/SpatialCursorOverlay';
-import { CommandPalette } from '@/components/ui/CommandPalette';
-import { PerformanceCentreModal } from '@/components/ui/PerformanceCentreModal';
-import { KeyboardShortcutsModal } from '@/components/ui/KeyboardShortcutsModal';
 import {
   MODULE_REGISTRY,
   getCategorySummaries,
   ModuleCategory,
 } from '@/core/modules/registry';
-import { isModelCached, prefetchModel, clearAllLocalCache, REGISTERED_MODELS } from '@/core/cache';
+import { isModelCached, prefetchModel, clearModelAssetCache, REGISTERED_MODELS } from '@/core/cache';
 import { useWorkspaceStore, WorkspaceType } from '@/core/store/workspace-store';
 import { useSystemStore } from '@/core/store';
 import {
@@ -33,7 +31,26 @@ import {
   Pin,
   Compass,
   ChevronRight,
+  Database,
 } from 'lucide-react';
+
+// Dynamic imports for heavy modals to minimize initial client payload
+const CommandPalette = dynamic(
+  () => import('@/components/ui/CommandPalette').then((m) => m.CommandPalette),
+  { ssr: false }
+);
+const PerformanceCentreModal = dynamic(
+  () => import('@/components/ui/PerformanceCentreModal').then((m) => m.PerformanceCentreModal),
+  { ssr: false }
+);
+const KeyboardShortcutsModal = dynamic(
+  () => import('@/components/ui/KeyboardShortcutsModal').then((m) => m.KeyboardShortcutsModal),
+  { ssr: false }
+);
+const ModelVaultModal = dynamic(
+  () => import('@/components/ui/ModelVaultModal').then((m) => m.ModelVaultModal),
+  { ssr: false }
+);
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -45,6 +62,7 @@ export default function DashboardPage() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [perfCentreOpen, setPerfCentreOpen] = useState(false);
   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
+  const [vaultOpen, setVaultOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<'ALL' | ModuleCategory>('ALL');
   const [spatialCursorActive, setSpatialCursorActive] = useState(false);
@@ -114,6 +132,13 @@ export default function DashboardPage() {
     function handleKeyDown(e: KeyboardEvent) {
       if (onboardingOpen || cacheDrawerOpen) return;
 
+      const target = e.target as HTMLElement;
+      const isInput =
+        target &&
+        (target.tagName === 'INPUT' ||
+          target.tagName === 'TEXTAREA' ||
+          target.isContentEditable);
+
       // Ctrl+K or Cmd+K opens Command Palette
       if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K')) {
         e.preventDefault();
@@ -121,20 +146,27 @@ export default function DashboardPage() {
         return;
       }
 
+      if (commandPaletteOpen || perfCentreOpen || vaultOpen) {
+        if (e.key === 'Escape') {
+          setCommandPaletteOpen(false);
+          setPerfCentreOpen(false);
+          setVaultOpen(false);
+        }
+        return;
+      }
+
+      // If user is actively typing in a search box, do not trigger single-key or navigation hotkeys
+      if (isInput) return;
+
       if (e.key === '/') {
-        // Only trigger if not already typing in search input
-        const target = e.target as HTMLElement;
-        if (target && target.tagName === 'INPUT') return;
         e.preventDefault();
         setCommandPaletteOpen((prev) => !prev);
         return;
       }
 
-      if (commandPaletteOpen || perfCentreOpen) {
-        if (e.key === 'Escape') {
-          setCommandPaletteOpen(false);
-          setPerfCentreOpen(false);
-        }
+      if (e.key === 'm' || e.key === 'M') {
+        e.preventDefault();
+        setVaultOpen((prev) => !prev);
         return;
       }
 
@@ -164,6 +196,7 @@ export default function DashboardPage() {
     cacheDrawerOpen,
     commandPaletteOpen,
     perfCentreOpen,
+    vaultOpen,
     filteredModules,
     router,
     recordModuleVisit,
@@ -187,7 +220,7 @@ export default function DashboardPage() {
   };
 
   const handleClearCache = async () => {
-    await clearAllLocalCache();
+    await clearModelAssetCache();
     setCachedMap({});
     setCacheDrawerOpen(false);
   };
@@ -550,45 +583,45 @@ export default function DashboardPage() {
                     isFocused ? '-translate-y-1' : ''
                   }`}
                 >
-                  <Link
-                    href={module.route}
-                    onClick={() => recordModuleVisit(module.id)}
-                    className="h-full flex flex-col flex-1 focus:outline-none group"
-                    tabIndex={0}
-                  >
-                    <DeskCard
-                      figure={module.figure}
-                      title={module.title}
-                      highlight={isFocused}
-                      className="h-full flex flex-col justify-between cursor-pointer group"
-                      headerAction={
-                        <div className="flex items-center gap-1.5">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              togglePinModule(module.id);
-                            }}
-                            className={`p-1 rounded border transition-colors ${
-                              isPinned
-                                ? 'border-brick-red bg-brick-red text-white'
-                                : 'border-charcoal-soft/30 hover:border-charcoal-soft text-ink-muted'
-                            }`}
-                            title={isPinned ? 'Unpin module' : 'Pin module to workspace launchpad'}
+                  <DeskCard
+                    figure={module.figure}
+                    title={module.title}
+                    highlight={isFocused}
+                    className="h-full flex flex-col justify-between group"
+                    headerAction={
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            togglePinModule(module.id);
+                          }}
+                          className={`p-1 rounded border transition-colors ${
+                            isPinned
+                              ? 'border-brick-red bg-brick-red text-white'
+                              : 'border-charcoal-soft/30 hover:border-charcoal-soft text-ink-muted'
+                          }`}
+                          title={isPinned ? 'Unpin module' : 'Pin module to workspace launchpad'}
+                        >
+                          <Pin className="w-3 h-3" />
+                        </button>
+                        {module.permissions.map((p) => (
+                          <span
+                            key={p}
+                            className="font-mono text-[9px] font-bold px-1.5 py-0.5 border border-charcoal-soft bg-paper-dark text-charcoal-soft"
                           >
-                            <Pin className="w-3 h-3" />
-                          </button>
-                          {module.permissions.map((p) => (
-                            <span
-                              key={p}
-                              className="font-mono text-[9px] font-bold px-1.5 py-0.5 border border-charcoal-soft bg-paper-dark text-charcoal-soft"
-                            >
-                              {p}
-                            </span>
-                          ))}
-                        </div>
-                      }
+                            {p}
+                          </span>
+                        ))}
+                      </div>
+                    }
+                  >
+                    <Link
+                      href={module.route}
+                      onClick={() => recordModuleVisit(module.id)}
+                      className="flex-1 flex flex-col justify-between focus:outline-none cursor-pointer"
+                      tabIndex={0}
                     >
                       {/* Schematic Icon & Visual Preview Box */}
                       <div className="my-3 p-3.5 border border-charcoal-soft bg-paper-dark/60 rounded-[2px] flex items-center justify-between min-h-[72px] group-hover:bg-paper-dark transition-colors">
@@ -637,8 +670,8 @@ export default function DashboardPage() {
                           LAUNCH &rarr;
                         </span>
                       </div>
-                    </DeskCard>
-                  </Link>
+                    </Link>
+                  </DeskCard>
                 </div>
               );
             })}
@@ -741,15 +774,17 @@ export default function DashboardPage() {
                     17 GESTURES &bull; DYNAMIC MOTION &bull; CUSTOM STUDIO &bull; 110+ MEMES
                   </span>
                   <div className="flex items-center gap-2">
-                    <Link href="/laboratory">
-                      <Button variant="outline" size="sm" className="text-xs h-7">
-                        EDIT IN LAB
-                      </Button>
+                    <Link
+                      href="/laboratory"
+                      className="inline-flex items-center justify-center font-mono uppercase font-bold text-xs tracking-technical border-2 border-charcoal-soft rounded-tactile px-2.5 py-1 text-[11px] bg-transparent text-charcoal-soft shadow-tactile hover:bg-paper-dark h-7 transition-colors"
+                    >
+                      EDIT IN LAB
                     </Link>
-                    <Link href="/goofy">
-                      <Button variant="default" size="sm" className="text-xs h-7 bg-amber-600 hover:bg-amber-700 text-white font-bold">
-                        LAUNCH GOOFY WORKSPACE &rarr;
-                      </Button>
+                    <Link
+                      href="/goofy"
+                      className="inline-flex items-center justify-center font-mono uppercase font-bold text-xs tracking-technical border-2 border-charcoal-soft rounded-tactile px-2.5 py-1 text-[11px] bg-amber-600 hover:bg-amber-700 text-white shadow-tactile h-7 transition-colors"
+                    >
+                      LAUNCH GOOFY WORKSPACE &rarr;
                     </Link>
                   </div>
                 </div>
@@ -768,10 +803,11 @@ export default function DashboardPage() {
                   </p>
                 </div>
                 <div className="pt-2 border-t border-charcoal-soft/20 mt-2">
-                  <Link href="/laboratory">
-                    <Button variant="outline" size="sm" className="w-full text-xs h-7">
-                      ENTER LABORATORY &rarr;
-                    </Button>
+                  <Link
+                    href="/laboratory"
+                    className="w-full inline-flex items-center justify-center font-mono uppercase font-bold text-xs tracking-technical border-2 border-charcoal-soft rounded-tactile px-2.5 py-1 text-[11px] bg-transparent text-charcoal-soft shadow-tactile hover:bg-paper-dark h-7 transition-colors"
+                  >
+                    ENTER LABORATORY &rarr;
                   </Link>
                 </div>
               </DeskCard>
@@ -786,10 +822,11 @@ export default function DashboardPage() {
                   </p>
                 </div>
                 <div className="pt-2 border-t border-charcoal-soft/20 mt-2">
-                  <Link href="/forge">
-                    <Button variant="outline" size="sm" className="w-full text-xs h-7">
-                      OPEN PROTOCOL FORGE &rarr;
-                    </Button>
+                  <Link
+                    href="/forge"
+                    className="w-full inline-flex items-center justify-center font-mono uppercase font-bold text-xs tracking-technical border-2 border-charcoal-soft rounded-tactile px-2.5 py-1 text-[11px] bg-transparent text-charcoal-soft shadow-tactile hover:bg-paper-dark h-7 transition-colors"
+                  >
+                    OPEN PROTOCOL FORGE &rarr;
                   </Link>
                 </div>
               </DeskCard>
@@ -820,6 +857,12 @@ export default function DashboardPage() {
             </span>
             <span className="flex items-center gap-1">
               <kbd className="px-1.5 py-0.5 border border-charcoal-soft bg-paper-cream rounded-[2px] font-bold text-[10px]">
+                M
+              </kbd>{' '}
+              MODEL VAULT
+            </span>
+            <span className="flex items-center gap-1">
+              <kbd className="px-1.5 py-0.5 border border-charcoal-soft bg-paper-cream rounded-[2px] font-bold text-[10px]">
                 H
               </kbd>{' '}
               DIAGNOSTICS HUD
@@ -845,6 +888,13 @@ export default function DashboardPage() {
         onClose={() => setCommandPaletteOpen(false)}
         onOpenPerfCentre={() => setPerfCentreOpen(true)}
         onOpenShortcuts={() => setShortcutsModalOpen(true)}
+        onOpenModelVault={() => setVaultOpen(true)}
+      />
+
+      {/* Central Model Vault Modal */}
+      <ModelVaultModal
+        isOpen={vaultOpen}
+        onClose={() => setVaultOpen(false)}
       />
 
       {/* Performance & Hardware Diagnostics Centre Modal */}

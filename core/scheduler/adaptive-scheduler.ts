@@ -1,21 +1,28 @@
 /**
- * Adaptive Inference Frame Scheduler
+ * OMNI LOCO AI 3.0 — ADAPTIVE INFERENCE FRAME SCHEDULER
  * Ensures UI thread stays at 60fps by dropping incoming camera frames
  * if inference latency exceeds the frame budget. Zero queue backlog.
+ * Features strict ImageBitmap leak prevention, lifetime frame accounting,
+ * dual video/render FPS telemetry, and generation token cancellation.
  */
 
 export interface LatencyStats {
   p50Ms: number;
   p95Ms: number;
-  fps: number;
-  droppedFrames: number;
-  processedFrames: number;
+  fps: number; // Backward-compatible alias for renderFps
+  renderFps: number;
+  videoFps: number;
+  attemptedFrames: number;
+  processedFrames: number; // Lifetime cumulative
+  droppedFrames: number; // Lifetime cumulative
+  inferenceDurationMs: number;
   isBusy: boolean;
 }
 
 export class AdaptiveFrameScheduler {
   private isBusy = false;
   private isRunning = false;
+  private runGeneration = 0;
   private videoElement: HTMLVideoElement | null = null;
   private onFrameCallback: ((bitmap: ImageBitmap, timestamp: number) => Promise<void>) | null = null;
   private frameId: number | null = null;
@@ -24,10 +31,14 @@ export class AdaptiveFrameScheduler {
   // Latency & frame statistics
   private latencies: number[] = [];
   private maxLatencyHistory = 60;
-  private lastFrameTime = performance.now();
-  private frameCount = 0;
+  private attemptedCount = 0;
+  private processedCount = 0;
   private droppedCount = 0;
-  private currentFps = 0;
+  private videoTickCount = 0;
+  private renderTickCount = 0;
+  private currentRenderFps = 0;
+  private currentVideoFps = 0;
+  private lastInferenceMs = 0;
   private lastFpsCalcTime = performance.now();
 
   constructor(
@@ -43,6 +54,7 @@ export class AdaptiveFrameScheduler {
     this.onFrameCallback = onFrame;
     this.isRunning = true;
     this.isBusy = false;
+    this.runGeneration++;
 
     // Listen to tab visibility
     if (typeof document !== 'undefined') {
@@ -55,6 +67,7 @@ export class AdaptiveFrameScheduler {
   stop(): void {
     this.isRunning = false;
     this.isBusy = false;
+    this.runGeneration++;
 
     if (this.rvfcHandle !== null && this.videoElement && 'cancelVideoFrameCallback' in this.videoElement) {
       (this.videoElement as unknown as { cancelVideoFrameCallback: (handle: number) => void }).cancelVideoFrameCallback(this.rvfcHandle);
@@ -62,7 +75,9 @@ export class AdaptiveFrameScheduler {
     }
 
     if (this.frameId !== null) {
-      cancelAnimationFrame(this.frameId);
+      if (typeof cancelAnimationFrame !== 'undefined') {
+        cancelAnimationFrame(this.frameId);
+      }
       this.frameId = null;
     }
 
@@ -75,7 +90,9 @@ export class AdaptiveFrameScheduler {
     if (document.visibilityState === 'hidden') {
       // Pause processing
       this.isBusy = false;
+      this.runGeneration++;
     } else if (this.isRunning) {
+      this.runGeneration++;
       this.scheduleNextFrame();
     }
   };
@@ -92,7 +109,7 @@ export class AdaptiveFrameScheduler {
       }).requestVideoFrameCallback((now) => {
         this.processFrame(now);
       });
-    } else {
+    } else if (typeof requestAnimationFrame !== 'undefined') {
       this.frameId = requestAnimationFrame((now) => {
         this.processFrame(now);
       });
@@ -100,14 +117,20 @@ export class AdaptiveFrameScheduler {
   }
 
   private async processFrame(timestamp: number): Promise<void> {
+    const generation = this.runGeneration;
     if (!this.isRunning) return;
 
+    this.attemptedCount++;
+    this.videoTickCount++;
+
     // Measure FPS
-    this.frameCount++;
     const now = performance.now();
     if (now - this.lastFpsCalcTime >= 1000) {
-      this.currentFps = (this.frameCount * 1000) / (now - this.lastFpsCalcTime);
-      this.frameCount = 0;
+      const elapsed = (now - this.lastFpsCalcTime) / 1000;
+      this.currentRenderFps = Math.round(this.renderTickCount / elapsed);
+      this.currentVideoFps = Math.round(this.videoTickCount / elapsed);
+      this.renderTickCount = 0;
+      this.videoTickCount = 0;
       this.lastFpsCalcTime = now;
       this.emitStats();
     }
@@ -119,46 +142,48 @@ export class AdaptiveFrameScheduler {
       return;
     }
 
+    let bitmap: ImageBitmap | null = null;
     try {
       this.isBusy = true;
       const start = performance.now();
 
       // Convert video frame to ImageBitmap transferrable
-      const bitmap = await createImageBitmap(this.videoElement);
+      bitmap = await createImageBitmap(this.videoElement);
 
-      if (this.onFrameCallback) {
+      if (this.isRunning && generation === this.runGeneration && this.onFrameCallback) {
         await this.onFrameCallback(bitmap, timestamp);
-      }
 
-      const duration = performance.now() - start;
-      this.latencies.push(duration);
-      if (this.latencies.length > this.maxLatencyHistory) {
-        this.latencies.shift();
+        const duration = performance.now() - start;
+        this.lastInferenceMs = Math.round(duration * 10) / 10;
+        this.latencies.push(duration);
+        if (this.latencies.length > this.maxLatencyHistory) {
+          this.latencies.shift();
+        }
+        this.processedCount++;
+        this.renderTickCount++;
       }
     } catch {
       // Frame conversion or worker error
       this.droppedCount++;
     } finally {
+      // Crucial: Explicitly close bitmap to prevent GPU texture memory leaks
+      if (bitmap) {
+        try {
+          bitmap.close();
+        } catch {
+          // Ignore if transferred to worker or already closed
+        }
+      }
       this.isBusy = false;
-      this.scheduleNextFrame();
+      if (this.isRunning && generation === this.runGeneration) {
+        this.scheduleNextFrame();
+      }
     }
   }
 
   private emitStats(): void {
     if (!this.onStatsUpdate) return;
-
-    const sorted = [...this.latencies].sort((a, b) => a - b);
-    const p50 = sorted[Math.floor(sorted.length * 0.5)] || 0;
-    const p95 = sorted[Math.floor(sorted.length * 0.95)] || p50;
-
-    this.onStatsUpdate({
-      p50Ms: Math.round(p50 * 10) / 10,
-      p95Ms: Math.round(p95 * 10) / 10,
-      fps: Math.round(this.currentFps),
-      droppedFrames: this.droppedCount,
-      processedFrames: this.latencies.length,
-      isBusy: this.isBusy,
-    });
+    this.onStatsUpdate(this.getStats());
   }
 
   getStats(): LatencyStats {
@@ -169,9 +194,13 @@ export class AdaptiveFrameScheduler {
     return {
       p50Ms: Math.round(p50 * 10) / 10,
       p95Ms: Math.round(p95 * 10) / 10,
-      fps: Math.round(this.currentFps),
+      fps: this.currentRenderFps,
+      renderFps: this.currentRenderFps,
+      videoFps: this.currentVideoFps,
+      attemptedFrames: this.attemptedCount,
       droppedFrames: this.droppedCount,
-      processedFrames: this.latencies.length,
+      processedFrames: this.processedCount,
+      inferenceDurationMs: this.lastInferenceMs,
       isBusy: this.isBusy,
     };
   }

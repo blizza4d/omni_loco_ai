@@ -1,10 +1,15 @@
 /**
- * Local Model Cache Manager
- * Uses browser Cache Storage API (versioned keys) with progress tracking
- * to ensure offline resilience and fast module cold starts.
+ * OMNI LOCO AI — APEX 3.0
+ * SAFE LOCAL MODEL CACHE & STORAGE MANAGER
+ * Manages Cache Storage API, storage quota discovery, and granular cache clearing.
+ * Strict data preservation: NEVER wipes user custom models, datasets, or preferences
+ * without explicit individual confirmation.
  */
 
 export const MODEL_CACHE_NAME = 'omni-loco-models-v1';
+export const TEMP_CACHE_NAME = 'omni-loco-temp-v1';
+
+export type ModelAssetType = 'NEURAL_WEIGHT' | 'WASM_RUNTIME' | 'NATIVE_DSP_CORE';
 
 export interface CachedModelMeta {
   id: string;
@@ -13,120 +18,135 @@ export interface CachedModelMeta {
   sizeEstimateBytes: number;
   isCached: boolean;
   module: string;
+  assetType: ModelAssetType;
 }
 
 export const REGISTERED_MODELS: CachedModelMeta[] = [
   {
     id: 'hand-landmarks',
-    name: 'Hand Landmarker & Gesture Pack',
+    name: 'MediaPipe Hand Landmarker (21 3D Points)',
     url: '/models/hand_landmarker.task',
     sizeEstimateBytes: 7.8 * 1024 * 1024,
     isCached: false,
     module: 'hand',
+    assetType: 'NEURAL_WEIGHT',
   },
   {
     id: 'face-landmarks',
-    name: 'Face Mesh & 52 Blendshapes',
+    name: 'MediaPipe Face Mesh (478 Points & 52 Blendshapes)',
     url: '/models/face_landmarker.task',
     sizeEstimateBytes: 3.7 * 1024 * 1024,
     isCached: false,
     module: 'face',
+    assetType: 'NEURAL_WEIGHT',
   },
   {
     id: 'pose-landmarks',
-    name: 'Pose Landmarker (Full)',
+    name: 'MediaPipe Pose Landmarker Full (33 Joints)',
     url: '/models/pose_landmarker_full.task',
     sizeEstimateBytes: 9.4 * 1024 * 1024,
     isCached: false,
     module: 'pose',
-  },
-  {
-    id: 'drive-sim',
-    name: 'Steering Gesture Controller',
-    url: '/models/hand_landmarker.task',
-    sizeEstimateBytes: 7.8 * 1024 * 1024,
-    isCached: false,
-    module: 'drive',
-  },
-  {
-    id: 'speech-acoustic',
-    name: 'Acoustic Feature DSP Core',
-    url: '/wasm/acoustic_dsp.wasm',
-    sizeEstimateBytes: 1.8 * 1024 * 1024,
-    isCached: false,
-    module: 'speech',
+    assetType: 'NEURAL_WEIGHT',
   },
   {
     id: 'waste-classifier',
-    name: 'Waste Classifier & Specimen Scanner',
+    name: 'Waste Classifier & Specimen Scanner (TFLite)',
     url: '/models/classifier.tflite',
     sizeEstimateBytes: 18.5 * 1024 * 1024,
     isCached: false,
     module: 'waste',
+    assetType: 'NEURAL_WEIGHT',
+  },
+  {
+    id: 'drive-sim',
+    name: 'Steering Gesture Controller (Hand)',
+    url: '/models/hand_landmarker.task',
+    sizeEstimateBytes: 7.8 * 1024 * 1024,
+    isCached: false,
+    module: 'drive',
+    assetType: 'NEURAL_WEIGHT',
   },
   {
     id: 'gaze-heatmap',
-    name: 'Iris Gaze Estimator & Calibrator',
+    name: 'Iris Gaze Estimator & Calibrator (Face)',
     url: '/models/face_landmarker.task',
     sizeEstimateBytes: 3.7 * 1024 * 1024,
     isCached: false,
     module: 'gaze',
+    assetType: 'NEURAL_WEIGHT',
   },
   {
     id: 'eye-tracking',
-    name: 'Bilateral Eye & Iris Tracker',
+    name: 'Bilateral Eye & Iris Tracker (Face)',
     url: '/models/face_landmarker.task',
     sizeEstimateBytes: 3.7 * 1024 * 1024,
     isCached: false,
     module: 'eye',
-  },
-  {
-    id: 'objects-yolo',
-    name: 'YOLO Multi-Object Detector & Tracker',
-    url: '/wasm/ort-wasm-simd-threaded.wasm',
-    sizeEstimateBytes: 14.2 * 1024 * 1024,
-    isCached: false,
-    module: 'objects',
-  },
-  {
-    id: 'segment-sam',
-    name: 'Promptable Feature Mask Decoder',
-    url: '/wasm/ort-wasm-simd-threaded.wasm',
-    sizeEstimateBytes: 12.5 * 1024 * 1024,
-    isCached: false,
-    module: 'segment',
-  },
-  {
-    id: 'depth-estimator',
-    name: 'Monocular Depth & Scene Geometry',
-    url: '/wasm/ort-wasm-simd-threaded.wasm',
-    sizeEstimateBytes: 9.6 * 1024 * 1024,
-    isCached: false,
-    module: 'depth',
+    assetType: 'NEURAL_WEIGHT',
   },
   {
     id: 'fingers-classifier',
-    name: 'Finger State Classifier & Gesture Pack',
+    name: 'Finger State Kinematics Pack (Hand)',
     url: '/models/hand_landmarker.task',
     sizeEstimateBytes: 7.8 * 1024 * 1024,
     isCached: false,
     module: 'fingers',
+    assetType: 'NEURAL_WEIGHT',
+  },
+  {
+    id: 'objects-yolo',
+    name: 'ONNX Runtime Web WASM SIMD Kernel',
+    url: '/wasm/ort-wasm-simd-threaded.wasm',
+    sizeEstimateBytes: 1.2 * 1024 * 1024,
+    isCached: false,
+    module: 'objects',
+    assetType: 'WASM_RUNTIME',
+  },
+  {
+    id: 'segment-sam',
+    name: 'Feature Mask Decoder Runtime WASM',
+    url: '/wasm/ort-wasm-simd-threaded.wasm',
+    sizeEstimateBytes: 1.2 * 1024 * 1024,
+    isCached: false,
+    module: 'segment',
+    assetType: 'WASM_RUNTIME',
+  },
+  {
+    id: 'depth-estimator',
+    name: 'Scene Geometry Estimator Runtime WASM',
+    url: '/wasm/ort-wasm-simd-threaded.wasm',
+    sizeEstimateBytes: 1.2 * 1024 * 1024,
+    isCached: false,
+    module: 'depth',
+    assetType: 'WASM_RUNTIME',
+  },
+  {
+    id: 'speech-acoustic',
+    name: 'Web Audio Native DSP Engine (Built-in AudioContext)',
+    url: 'native://web-audio-dsp',
+    sizeEstimateBytes: 0,
+    isCached: true,
+    module: 'speech',
+    assetType: 'NATIVE_DSP_CORE',
   },
 ];
 
 export const GOOFY_MODEL_CACHE_ENTRY: CachedModelMeta = {
   id: 'goofy-action-recognition',
-  name: 'GOOFY MODEL Action Recognition Core',
-  url: '/models/pose_landmarker_full.task',
-  sizeEstimateBytes: 9.4 * 1024 * 1024,
+  name: 'Goofy Model Multimodal Hand & Face Core',
+  url: '/models/hand_landmarker.task',
+  sizeEstimateBytes: 7.8 * 1024 * 1024,
   isCached: false,
   module: 'goofy',
+  assetType: 'NEURAL_WEIGHT',
 };
 
 /**
  * Checks if a specific model URL is already stored in Cache Storage
  */
 export async function isModelCached(url: string): Promise<boolean> {
+  if (url.startsWith('native://')) return true;
   if (typeof caches === 'undefined') return false;
   try {
     const cache = await caches.open(MODEL_CACHE_NAME);
@@ -144,6 +164,10 @@ export async function prefetchModel(
   url: string,
   onProgress?: (progress0to1: number) => void
 ): Promise<boolean> {
+  if (url.startsWith('native://')) {
+    if (onProgress) onProgress(1.0);
+    return true;
+  }
   if (typeof caches === 'undefined') return false;
   try {
     const cache = await caches.open(MODEL_CACHE_NAME);
@@ -155,7 +179,6 @@ export async function prefetchModel(
 
     const response = await fetch(url);
     if (!response.ok) {
-      // If file doesn't exist yet in static assets, we register mock cached state
       return false;
     }
 
@@ -224,25 +247,103 @@ export async function calculateCacheSize(): Promise<number> {
 }
 
 /**
- * Clears the entire model cache and resets IndexedDB session records
+ * Get device storage quota and usage information via NavigatorStorage API
  */
-export async function clearAllLocalCache(): Promise<void> {
-  if (typeof caches !== 'undefined') {
+export async function getStorageQuota(): Promise<{
+  usageBytes: number;
+  quotaBytes: number;
+  usagePercentage: number;
+  isSupported: boolean;
+}> {
+  if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.estimate) {
     try {
-      await caches.delete(MODEL_CACHE_NAME);
+      const estimate = await navigator.storage.estimate();
+      const usage = estimate.usage || 0;
+      const quota = estimate.quota || 0;
+      const percentage = quota > 0 ? (usage / quota) * 100 : 0;
+      return {
+        usageBytes: usage,
+        quotaBytes: quota,
+        usagePercentage: Math.round(percentage * 10) / 10,
+        isSupported: true,
+      };
     } catch {
-      // Ignore
+      // Fallback
     }
   }
+  return {
+    usageBytes: 0,
+    quotaBytes: 0,
+    usagePercentage: 0,
+    isSupported: false,
+  };
+}
+
+/**
+ * Granular operation: Clear ONLY cached model assets from Cache Storage.
+ * User data, custom memes, and Laboratory models are strictly PRESERVED.
+ */
+export async function clearModelAssetCache(): Promise<boolean> {
+  if (typeof caches === 'undefined') return false;
+  try {
+    await caches.delete(MODEL_CACHE_NAME);
+    return true;
+  } catch (err) {
+    console.warn('[Storage] Error deleting model cache:', err);
+    return false;
+  }
+}
+
+/**
+ * Granular operation: Clear temporary rendering/intermediate caches.
+ */
+export async function clearTemporaryCaches(): Promise<boolean> {
+  if (typeof caches === 'undefined') return false;
+  try {
+    await caches.delete(TEMP_CACHE_NAME);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Granular operation: Purge user custom gesture models with explicit confirmation.
+ */
+export async function purgeUserCustomModels(confirmed: boolean): Promise<boolean> {
+  if (!confirmed) return false;
   if (typeof indexedDB !== 'undefined') {
     try {
-      indexedDB.deleteDatabase('keyval-store');
-      indexedDB.deleteDatabase('omni-loco-db');
+      indexedDB.deleteDatabase('omni-loco-custom-gestures-v7');
+      return true;
     } catch {
-      // Ignore
+      return false;
     }
   }
-  if (typeof localStorage !== 'undefined') {
-    localStorage.clear();
+  return false;
+}
+
+/**
+ * Granular operation: Purge Laboratory training datasets with explicit confirmation.
+ */
+export async function purgeUserDatasets(confirmed: boolean): Promise<boolean> {
+  if (!confirmed) return false;
+  if (typeof indexedDB !== 'undefined') {
+    try {
+      indexedDB.deleteDatabase('omni-loco-laboratory-v2');
+      return true;
+    } catch {
+      return false;
+    }
   }
+  return false;
+}
+
+/**
+ * Safe clear: Purges ONLY model binary Cache Storage.
+ * Retains custom memes, user gesture libraries, Laboratory datasets, calibration, and preferences.
+ */
+export async function clearAllLocalCache(): Promise<void> {
+  await clearModelAssetCache();
+  await clearTemporaryCaches();
 }
